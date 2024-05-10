@@ -2,7 +2,7 @@ import { LoaderFunctionArgs, json } from "@remix-run/cloudflare";
 import { Form, useFetcher, useLoaderData } from "@remix-run/react";
 import { Container, Group, Select, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
-import { Route } from "~/lib/dbTypes";
+import { Route } from 'kysely-codegen';
 
 // Loader to fetch initial data if needed, like user authentication status
 export const loader = async ({ params, }: LoaderFunctionArgs) => {
