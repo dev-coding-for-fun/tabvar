@@ -3,7 +3,7 @@
 DROP TABLE IF EXISTS "crag";
 CREATE TABLE "crag" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    "name" TEXT NOT null,
+    "name" TEXT NOT NULL,
     "has_sectors" BOOLEAN NOT NULL DEFAULT 1,
     "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     "data_source" TEXT,
@@ -13,7 +13,7 @@ CREATE TABLE "crag" (
 DROP TABLE IF EXISTS "sector";
 CREATE TABLE "sector" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    "name" TEXT NOT null,
+    "name" TEXT NOT NULL,
     "crag_id" INTEGER,
     "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     "data_source" TEXT,
@@ -26,7 +26,7 @@ CREATE TABLE "sector" (
 DROP TABLE IF EXISTS "route";
 CREATE TABLE "route" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    "name" TEXT NOT null,
+    "name" TEXT NOT NULL,
     "sector_id" INTEGER,
     "crag_id" INTEGER,
     "grade_yds" TEXT,

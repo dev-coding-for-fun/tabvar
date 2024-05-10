@@ -1,11 +1,12 @@
 import type { MetaFunction } from "@remix-run/cloudflare";
+import { Link } from "@remix-run/react";
 
 export const meta: MetaFunction = () => {
   return [
     { title: "New Remix App" },
     {
       name: "description",
-      content: "Welcome to Remix! Using Vite and Cloudflare!",
+      content: "Welcome to Remix!",
     },
   ];
 };
@@ -16,13 +17,8 @@ export default function Index() {
       <h1>Welcome to Remix (with Vite and Cloudflare)</h1>
       <ul>
         <li>
-          <a
-            target="_blank"
-            href="https://developers.cloudflare.com/pages/framework-guides/deploy-a-remix-site/"
-            rel="noreferrer"
-          >
+          <Link to={`/createissue`}>Create Issue</Link>
             Cloudflare Pages Docs - Remix guide
-          </a>
         </li>
         <li>
           <a target="_blank" href="https://remix.run/docs" rel="noreferrer">
