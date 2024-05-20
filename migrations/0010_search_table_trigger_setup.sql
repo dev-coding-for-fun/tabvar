@@ -1,4 +1,4 @@
--- Migration number: 0008 	 2024-05-10T05:47:03.634Z
+-- Migration number: 0010 	 2024-05-10T05:47:03.634Z
 DROP TABLE IF EXISTS "route_search";
 
 CREATE VIRTUAL TABLE "route_search" USING fts5(
