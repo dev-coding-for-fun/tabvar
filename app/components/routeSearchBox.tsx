@@ -1,16 +1,8 @@
 import { Form, useFetcher } from "@remix-run/react";
 import { SelectProps, Container, Group, Select, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
-import { RouteSearch } from "kysely-codegen/dist/db";
+import { RouteSearchResults } from "~/routes/api.search";
 
-
-export interface RouteSearchResults extends RouteSearch {
-  id: number;
-}
-
-export interface SearchRoutesResponse {
-    routes: RouteSearchResults[];
-  }
 
 interface RouteSearchBoxProps {
     label: string;
@@ -25,7 +17,7 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
   required = false,
   onChange,
 }) => {
-    const fetcher = useFetcher<SearchRoutesResponse>();
+    const fetcher = useFetcher<RouteSearchResults[]>();
     const [query, setQuery] = useState('');
     const [value, setValue] = useState<string | null>(null);
     const [items, setItems] = useState<RouteSearchResults[]>([]);
@@ -55,8 +47,8 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
     }, [query, fetcher]);
   
     useEffect(() => {
-      if (fetcher.data && fetcher.data.routes) {
-        setItems(fetcher.data.routes as RouteSearchResults[]);
+      if (fetcher.data) {
+        setItems(fetcher.data as RouteSearchResults[]);
       }
     }, [fetcher.data]);
   
