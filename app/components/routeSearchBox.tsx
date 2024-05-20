@@ -29,6 +29,7 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
                 <Text size="sm">{route ? route.name : 'Unknown Route'}</Text>
                 <Text size="xs" opacity={0.7}>{route ? route.sector_name : ''}</Text>
                 <Text size="xs" opacity={0.7}>{route ? route.crag_name : ''}</Text>
+                <Text size="xs" opacity={0.7}>{route ? route.grade_yds : ''}</Text>
             </Group>
         );
     };
@@ -63,7 +64,7 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
         onChange(value);
       }
     };
-  
+
     return (
       <Container size="md" p="md">
         <Form id="issue-create-form" method="post">
@@ -73,6 +74,7 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
             data={items.map(item => ({ value: item.id.toString(), label: item.name ?? '' }))}
             searchable
             onSearchChange={handleSearchChange}
+            filter={({ options }) => { return options }}
             placeholder="Type to search..."
             nothingFoundMessage="No routes found"
             clearable
