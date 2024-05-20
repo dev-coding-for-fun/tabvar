@@ -5,14 +5,19 @@
     "**/.server/**/*.ts",
     "**/.server/**/*.tsx",
     "**/.client/**/*.ts",
-    "**/.client/**/*.tsx"
-, "data/load.js"  ],
+    "**/.client/**/*.tsx",
+    "data/load.js"
+  ],
   "compilerOptions": {
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2022"
+    ],
     "types": [
-        "@remix-run/cloudflare",
-        "vite/client",
-        "@cloudflare/workers-types/2023-07-01"
+      "@remix-run/cloudflare-workers/dist",
+      "vite/client",
+      "@cloudflare/workers-types"
     ],
     "isolatedModules": true,
     "esModuleInterop": true,
@@ -28,10 +33,10 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./app/*"]
+      "~/*": [
+        "./app/*"
+      ]
     },
-
-    // Vite takes care of building everything, not tsc.
     "noEmit": true
   }
 }

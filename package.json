@@ -19,7 +19,9 @@
     "@mantine/hooks": "^7.9.0",
     "@remix-run/cloudflare": "^2.8.1",
     "@remix-run/cloudflare-pages": "^2.8.1",
+    "@remix-run/cloudflare-workers": "^2.9.2",
     "@remix-run/react": "^2.8.1",
+    "@tabler/icons-react": "^3.4.0",
     "better-sqlite3": "^9.6.0",
     "dotenv": "^16.4.5",
     "isbot": "^4.1.0",
@@ -52,7 +54,7 @@
     "typescript": "^5.1.6",
     "vite": "^5.1.0",
     "vite-tsconfig-paths": "^4.2.1",
-    "wrangler": "^3.48.0"
+    "wrangler": "^3.57.0"
   },
   "engines": {
     "node": ">=18.0.0"
