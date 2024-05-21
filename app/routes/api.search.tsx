@@ -1,8 +1,7 @@
 import { LoaderFunction, json } from '@remix-run/cloudflare'; // assuming Remix is being used
-import { Kysely, sql } from 'kysely';
-import { D1Dialect } from 'kysely-d1';
-import { Env } from '~/lib/db';
-import { DB, RouteSearch } from 'kysely-codegen';
+import { sql } from 'kysely';
+import { getDB } from '~/lib/db';
+import { RouteSearch } from 'kysely-codegen';
 
 export interface RouteSearchResults extends RouteSearch {
     id: number;
@@ -11,8 +10,6 @@ export interface RouteSearchResults extends RouteSearch {
 export const loader: LoaderFunction = async ({ request, context }) => {
     const url = new URL(request.url);
     const query = url.searchParams.get('query') + '*';
-    const env = context.cloudflare.env as unknown as Env;
-    const { DB } = env;
 
     if (!query) {
         return new Response(JSON.stringify({ routes: [] }), {
@@ -21,9 +18,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         });
     }
 
-    const db = new Kysely<DB>({
-        dialect: new D1Dialect({ database: DB }),
-    });
+    const db = getDB(context);
 
     const routes = await db.selectFrom('route_search')
         .where(sql`route_search`, 'match', query)
