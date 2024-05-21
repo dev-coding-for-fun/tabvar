@@ -2,6 +2,7 @@ node_modules
 sloperdata
 
 /.cache
+/.vscode
 /build
 .env
 
