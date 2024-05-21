@@ -1,4 +1,4 @@
-import { Form, useFetcher } from "@remix-run/react";
+import { useFetcher } from "@remix-run/react";
 import { SelectProps, Container, Group, Select, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { RouteSearchResults } from "~/routes/api.search";
@@ -9,17 +9,18 @@ interface RouteSearchBoxProps {
     name: string;
     required?: boolean;
     onChange?: (value: string | null) => void;
+    value: string | null;
 }
 
 const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
   label,
   name,
   required = false,
-  onChange,
+  value,
+  onChange = () => {},
 }) => {
-    const fetcher = useFetcher<RouteSearchResults[]>();
+    const {load, ...fetcher} = useFetcher<RouteSearchResults[]>();
     const [query, setQuery] = useState('');
-    const [value, setValue] = useState<string | null>(null);
     const [items, setItems] = useState<RouteSearchResults[]>([]);
   
     const renderSelectOption: SelectProps['renderOption'] = ({ option }) => {
@@ -38,14 +39,14 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
       const debounceTime = query.length < 2 ? 1000 : 300;
       const handler = setTimeout(() => {
         if (query.trim().length > 1) {
-          fetcher.load(`/api/search?query=${encodeURIComponent(query)}`);
+          load(`/api/search?query=${encodeURIComponent(query)}`);
         }
       }, debounceTime);
   
       return () => {
         clearTimeout(handler);
       };
-    }, [query, fetcher]);
+    }, [query, load]);
   
     useEffect(() => {
       if (fetcher.data) {
@@ -55,19 +56,15 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
   
     const handleSearchChange = (q: string) => {
       setQuery(q);
-      if (!q) setValue(null);
+      if (!q) onChange(null);
     };
 
     const handleChange = (value: string | null) => {
-      setValue(value);
-      if (onChange) {
         onChange(value);
-      }
     };
 
     return (
       <Container size="md" p="md">
-        <Form id="issue-create-form" method="post">
           <Select
             label={label}
             name={name}
@@ -81,8 +78,8 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
             renderOption={renderSelectOption}
             required={required}
             onChange={handleChange}
+            value={value}
           />
-        </Form>
       </Container>
     )
   };
