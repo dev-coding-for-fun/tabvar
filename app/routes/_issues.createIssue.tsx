@@ -1,6 +1,6 @@
 import { Button, Container, FileInput, Group, MultiSelect, Radio, Stack, Text, Textarea, rem } from "@mantine/core";
 import { ActionFunction, json } from "@remix-run/cloudflare";
-import { Form, useFetcher } from "@remix-run/react";
+import { Form } from "@remix-run/react";
 import { IconPhotoUp } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import RouteSearchBox from "~/components/routeSearchBox";
