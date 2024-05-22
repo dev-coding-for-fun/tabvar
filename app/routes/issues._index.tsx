@@ -1,16 +1,18 @@
-import { Container } from "@mantine/core";
+import { ActionIcon, Badge, Center, Container, Group, Text } from "@mantine/core";
 import { LoaderFunction, json } from "@remix-run/cloudflare";
 import { useLoaderData } from "@remix-run/react";
 import { Issue } from "kysely-codegen";
-import { DataTable } from "mantine-datatable";
+import { DataTable, DataTableColumn } from "mantine-datatable";
 import { getDB } from "~/lib/db";
-import { issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
 import { authenticator } from "~/lib/auth.server";
+import { IconClick, IconRubberStamp } from "@tabler/icons-react";
 
 const PAGE_SIZE = 15;
 
 export interface IssueWithRoute extends Issue {
-    name: string;
+    route_name: string;
+    sector_name: string;
+    crag_name: string;
 }
 
 export const loader: LoaderFunction = async ({ request, context }) => {
@@ -22,7 +24,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         .innerJoin('route', 'route.id', 'issue.route_id')
         .select([
             'issue.id',
-            'route.name',
+            'route.name as route_name',
             'route.sector_name',
             'route.crag_name',
             'issue_type',
@@ -37,7 +39,23 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 }
 
 export default function IssuesIndex() {
-    let records = useLoaderData<IssueWithRoute[]>();
+    const records = useLoaderData<IssueWithRoute[]>();
+
+    const renderActions: DataTableColumn<IssueWithRoute>['render'] = (record) => (
+        <Group gap={4} justify="right" wrap="nowrap">
+            <ActionIcon
+                size="sm"
+                variant="transparent"
+                color="green"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    console.log("clicked stamp");
+                }}
+            >
+                <IconRubberStamp size={16} />
+            </ActionIcon>
+        </Group>
+    );
 
     return (
         <Container size="xl" p="md">
@@ -54,15 +72,33 @@ export default function IssuesIndex() {
                         textAlign: "right",
                     },
                     {
-                        accessor: "name"
+                        accessor: "route_name",
+                        render: (record) =>
+                            <Group>
+                                <Text>{record.route_name}</Text>
+                                <Badge size="xs" color="sector-color">{record.sector_name}</Badge>
+                                <Badge size="xs" color="crag-color">{record.crag_name}</Badge>
+                            </Group>,
                     },
                     {
-                        accessor: "issue_type"
+                        accessor: "issue_type",
                     },
                     {
-                        accessor: "sub_issue_type"
+                        accessor: "sub_issue_type",
+                    },
+                    {
+                        accessor: "status",
+                        render: (record) =>
+                            <Badge size="md" color={`status-${record.status}`}>{record.status}</Badge>,
+                    },
+                    {
+                        accessor: "actions",
+                        title: (<Center><IconClick size={16} /></Center>),
+                        width: '0%',
+                        render: renderActions,
                     },
                 ]}
+
             />
         </Container>
     );
