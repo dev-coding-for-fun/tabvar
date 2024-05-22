@@ -23,13 +23,6 @@ pages_build_output_dir = "./build/client"
 # [ai]
 # binding = "AI"
 
-# Bind a D1 database. D1 is Cloudflare’s native serverless SQL database.
-# Docs: https://developers.cloudflare.com/pages/functions/bindings/#d1-databases
-[[d1_databases]]
-binding = "DB"
-database_name = "tabvar_dev"
-database_id = "c4568107-db66-41ed-b673-7c9726126316"
-
 # Bind a Durable Object. Durable objects are a scale-to-zero compute primitive based on the actor model.
 # Durable Objects can live for as long as needed. Use these when you need a long-running "server", such as in realtime apps.
 # Docs: https://developers.cloudflare.com/workers/runtime-apis/durable-objects
@@ -66,14 +59,15 @@ database_id = "c4568107-db66-41ed-b673-7c9726126316"
 # When using environment-specific overrides for bindings, ALL bindings must be specified on a per-environment basis.
 # Docs: https://developers.cloudflare.com/pages/functions/wrangler-configuration#environment-specific-overrides
 
-######## PREVIEW environment config ########
+[env.preview.vars]
 
-# [env.preview.vars]
-# API_KEY = "xyz789"
+route = "dev.tabvar.org/*"
 
-# [[env.preview.kv_namespaces]]
-# binding = "MY_KV_NAMESPACE"
-# id = "<PREVIEW_NAMESPACE_ID>"
+[[d1_databases]]
+binding = "DB"
+database_name = "tabvar_dev"
+database_id = "c4568107-db66-41ed-b673-7c9726126316"
+
 
 ######## PRODUCTION environment config ########
 
