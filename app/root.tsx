@@ -8,7 +8,19 @@ import {
 import '@mantine/core/styles.layer.css';
 import 'mantine-datatable/styles.layer.css';
 
-import { ColorSchemeScript, MantineProvider } from '@mantine/core';
+import { ColorSchemeScript, DEFAULT_THEME, MantineProvider, createTheme } from '@mantine/core';
+
+const theme = createTheme({
+  primaryColor: 'blue',
+  colors: {
+    'route-color': DEFAULT_THEME.colors.blue,
+    'sector-color': DEFAULT_THEME.colors.grape,
+    'crag-color': DEFAULT_THEME.colors.violet,
+    'status-submitted': DEFAULT_THEME.colors.pink,
+    'status-active': DEFAULT_THEME.colors.indigo,
+    'status-fixed': DEFAULT_THEME.colors.green,
+  }
+})
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,7 +33,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <ColorSchemeScript />
       </head>
       <body>
-        <MantineProvider defaultColorScheme="light">
+        <MantineProvider 
+          theme={theme}
+          defaultColorScheme="light"
+        >
           {children}
         </MantineProvider>
         <ScrollRestoration />
