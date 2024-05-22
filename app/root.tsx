@@ -5,7 +5,9 @@ import {
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
-import '@mantine/core/styles.css';
+import '@mantine/core/styles.layer.css';
+import 'mantine-datatable/styles.layer.css';
+
 import { ColorSchemeScript, MantineProvider } from '@mantine/core';
 
 export function Layout({ children }: { children: React.ReactNode }) {
