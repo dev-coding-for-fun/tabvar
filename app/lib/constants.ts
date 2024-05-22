@@ -1,9 +1,14 @@
 export const issueTypes = [
-    { value: 'bolts', label: 'Bolts (#)' },
-    { value: 'allBolts', label: 'All Bolts' },
-    { value: 'anchor', label: 'Anchor' },
-    { value: 'rock', label: 'Rock' },
+    { value: 'Bolts', label: 'Bolts (#)' },
+    { value: 'All Bolts', label: 'All Bolts' },
+    { value: 'Anchor', label: 'Anchor' },
+    { value: 'Rock', label: 'Rock' },
 ];
+
+export function getLabelFromValue<T extends { value: string, label: string }[]>(items: T, valueToFind: string): string {
+    const foundItem = items.find(item => item.value === valueToFind);
+    return foundItem ? foundItem.label : valueToFind;
+}
 
 export const subIssues = [
     { value: 'Loose nut', label: 'Loose nut' },
@@ -20,8 +25,8 @@ export const subIssues = [
 ];
 
 export const subIssuesByType = {
-    bolts: ['Loose nut', 'Loose bolt', 'Loose Glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
-    allBolts: ['Loose nut', 'Loose bolt', 'Loose Glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
-    anchor: ['Loose nut', 'Loose bolt', 'Loose Glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
-    rock: ['Loose block', 'Loose flake', 'Other'],
+    Bolts: ['Loose nut', 'Loose bolt', 'Loose Glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
+    'All Bolts': ['Loose nut', 'Loose bolt', 'Loose Glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
+    Anchor: ['Loose nut', 'Loose bolt', 'Loose Glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
+    Rock: ['Loose block', 'Loose flake', 'Other'],
 }
