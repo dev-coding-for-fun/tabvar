@@ -7,4 +7,16 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [remixCloudflareDevProxy(), remix(), tsconfigPaths()],
+  resolve: {
+    alias: {
+      // Alias Node.js core modules to their prefixed versions
+      'util': 'node:util',
+      'buffer': 'node:buffer',
+      'path': 'node:path',
+      'stream': 'node:stream',
+      'events': 'node:events',
+      'crypto': 'node:crypto',
+      // Add other necessary aliases here
+    }
+  }
 });
