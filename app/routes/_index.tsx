@@ -3,10 +3,10 @@ import { Link } from "@remix-run/react";
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "New Remix App" },
+    { title: "Tabvar App" },
     {
       name: "description",
-      content: "Welcome to Remix!",
+      content: "Welcome to TABVAR!",
     },
   ];
 };
@@ -14,16 +14,10 @@ export const meta: MetaFunction = () => {
 export default function Index() {
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.8" }}>
-      <h1>Welcome to Remix (with Vite and Cloudflare)</h1>
+      <h1>Welcome</h1>
       <ul>
         <li>
-          <Link to={`/createissue`}>Create Issue</Link>
-            Cloudflare Pages Docs - Remix guide
-        </li>
-        <li>
-          <a target="_blank" href="https://remix.run/docs" rel="noreferrer">
-            Remix Docs
-          </a>
+          <Link to={`/issue/create`}>Create Issue</Link>
         </li>
       </ul>
     </div>
