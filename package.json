@@ -12,8 +12,7 @@
     "typecheck": "tsc",
     "typegen": "wrangler types",
     "preview": "npm run build && wrangler pages dev",
-    "cf-typegen": "wrangler types",
-    "postinstall": "patch-package"
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "@mantine/core": "^7.9.0",
