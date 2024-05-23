@@ -104,7 +104,7 @@ export default function CreateIssue() {
                 <Radio key={issue.value} value={issue.value} label={issue.label} />
               ))}
             </Group></Radio.Group>
-          {selectedIssueType === 'bolts' && (
+          {selectedIssueType === 'Bolts' && (
             <MultiSelect
               name="boltNumbers"
               data={boltOptions}

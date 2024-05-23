@@ -18,7 +18,7 @@ export interface IssueWithRoute extends Issue {
 export const loader: LoaderFunction = async ({ request, context }) => {
     const user = await authenticator.isAuthenticated(request, {
         failureRedirect: "/login",
-    });
+    }); 
     const db = getDB(context);
     const result = await db.selectFrom('issue')
         .innerJoin('route', 'route.id', 'issue.route_id')
@@ -31,7 +31,6 @@ export const loader: LoaderFunction = async ({ request, context }) => {
             'sub_issue_type',
             'issue.status',
             'description',
-            'issue.created_at',
             'bolts_affected',
         ])
         .execute();

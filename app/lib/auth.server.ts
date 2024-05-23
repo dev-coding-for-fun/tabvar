@@ -8,11 +8,12 @@ import { sessionStorage } from './session.server';
 export const authenticator = new Authenticator(sessionStorage);
 
 function getGoogleStrategy(context: AppLoadContext) {
+    const env = context.cloudflare.env as Env
     return new GoogleStrategy(
         {
-            clientID: process.env.GOOGLE_CLIENT_ID ?? '',
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-            callbackURL: process.env.BASE_URL + '/auth/google/callback',
+            clientID: env.GOOGLE_CLIENT_ID ?? '',
+            clientSecret: env.GOOGLE_CLIENT_SECRET ?? '',
+            callbackURL: env.BASE_URL + '/auth/google/callback',
         },
         async ({ profile }) => {
             const db = getDB(context);

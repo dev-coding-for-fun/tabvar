@@ -4,10 +4,6 @@ import { D1Dialect } from 'kysely-d1'
 import { DB } from 'kysely-codegen'
 import { AppLoadContext } from '@remix-run/cloudflare';
 
-export interface Env {
-  DB: D1Database;
-}
-
 export function getDB(context: AppLoadContext) {
   const env = context.cloudflare.env as unknown as Env;
   return new Kysely<DB>({

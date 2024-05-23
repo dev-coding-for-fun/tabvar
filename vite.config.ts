@@ -22,6 +22,4 @@ const config = defineConfig({
   }
 });
 
-console.log(config);
-
 export default config;
