@@ -71,7 +71,7 @@ database_id = "c4568107-db66-41ed-b673-7c9726126316"
 
 ######## PRODUCTION environment config ########
 
-# [env.production.vars]
+[env.production.vars]
 GOOGLE_CLIENT_ID="884028273348-ilc88jsfip9a3e5mldahlgd6vdc6ivp9.apps.googleusercontent.com"
 
 # [[env.production.kv_namespaces]]
