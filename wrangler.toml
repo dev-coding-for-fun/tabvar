@@ -74,6 +74,11 @@ database_id = "c4568107-db66-41ed-b673-7c9726126316"
 [env.production.vars]
 GOOGLE_CLIENT_ID="884028273348-ilc88jsfip9a3e5mldahlgd6vdc6ivp9.apps.googleusercontent.com"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "tabvar_dev"
+database_id = "c4568107-db66-41ed-b673-7c9726126316"
+
 # [[env.production.kv_namespaces]]
 # binding = "MY_KV_NAMESPACE"
 # id = "<PRODUCTION_NAMESPACE_ID>"
