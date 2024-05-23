@@ -73,7 +73,7 @@ database_id = "c4568107-db66-41ed-b673-7c9726126316"
 
 [env.production.vars]
 GOOGLE_CLIENT_ID="884028273348-ilc88jsfip9a3e5mldahlgd6vdc6ivp9.apps.googleusercontent.com"
-BASE_URL=https://a5957210.tabvar.pages.dev
+BASE_URL="https://a5957210.tabvar.pages.dev"
 
 [[env.production.d1_databases]]
 binding = "DB"
