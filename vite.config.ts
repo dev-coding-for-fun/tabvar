@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig({
+const config = defineConfig({
   plugins: [remixCloudflareDevProxy(), remix(), react(), tsconfigPaths()],
   resolve: {
     alias: {
@@ -21,3 +21,7 @@ export default defineConfig({
     }
   }
 });
+
+console.log(config);
+
+export default config;
