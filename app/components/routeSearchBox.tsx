@@ -8,7 +8,7 @@ interface RouteSearchBoxProps {
     label: string;
     name: string;
     required?: boolean;
-    onChange?: (value: string | null) => void;
+    onChange?: (selected: { value: string | null; boltCount: number | null }) => void;
     value: string | null;
 }
 
@@ -70,7 +70,8 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
     };
 
     const handleChange = (value: string | null) => {
-      onChange(value);
+      const boltCount: number = +(items.find(item => item.id.toString() === value)?.bolt_count ?? '');
+      onChange({ value, boltCount });
       isSelectedRef.current = true;
     };
     

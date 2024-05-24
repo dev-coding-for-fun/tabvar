@@ -65,9 +65,11 @@ export default function CreateIssue() {
   const [selectedIssueType, setSelectedIssueType] = useState<IssueType | null>(null);
   const [selectedSubIssue, setSelectedSubIssue] = useState<string | null>(null);
   const [selectedBolts, setSelectedBolts] = useState<string[]>([]);
+  const [boltCount, setBoltCount] = useState<number | null>(null);
   const navigation = useNavigation();
   const [overlayVisible, { open, close }] = useDisclosure(false);
   const formRef = useRef<HTMLFormElement>(null);
+
   const actionData = useActionData<{ [key: string]: string }>();
 
   const isSubmitting = navigation.state === 'loading' || navigation.state === 'submitting';
@@ -79,7 +81,7 @@ export default function CreateIssue() {
 
   const icon = <IconPhotoUp style={{ width: rem(18), height: rem(18) }} stroke={1.5} />;
 
-  const boltOptions = Array.from({ length: 10 }, (_, i) => ({ value: `${i + 1}`, label: `Bolt ${i + 1}` }));
+  const boltOptions = Array.from({ length: boltCount ?? 10 }, (_, i) => ({ value: `${i + 1}`, label: `Bolt ${i + 1}` }));
   boltOptions.push({ value: "Anchor", label: "Anchor" });
 
   useEffect(() => {
@@ -127,6 +129,11 @@ export default function CreateIssue() {
     }
   }, [actionData]);
 
+  const handleRouteChange = (selected: { value: string | null; boltCount: number | null }) => {
+    setSelectedRoute(selected.value);
+    setBoltCount(selected.boltCount);
+  }
+
   return (
     <Container size="md" p="md">
       <Form method="post" ref={formRef} encType="multipart/form-data">
@@ -136,7 +143,7 @@ export default function CreateIssue() {
           label="Route"
           name="route"
           required={true}
-          onChange={setSelectedRoute}
+          onChange={handleRouteChange}
           value={selectedRoute}
         />
         <Stack>
