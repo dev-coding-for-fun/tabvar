@@ -40,7 +40,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 export default function IssuesIndex() {
     const records = useLoaderData<IssueWithRoute[]>();
 
-    const renderActions: DataTableColumn<IssueWithRoute>['render'] = (record) => (
+    const renderActions: DataTableColumn['render'] = (record) => (
         <Group gap={4} justify="right" wrap="nowrap">
             <ActionIcon
                 size="sm"
@@ -48,11 +48,12 @@ export default function IssuesIndex() {
                 color="green"
                 onClick={(e) => {
                     e.stopPropagation();
-                    console.log("clicked stamp");
+                    console.log(`clicked stamp on ${record.id}`);
                 }}
             >
                 <IconRubberStamp size={16} />
             </ActionIcon>
+            
         </Group>
     );
 
@@ -84,6 +85,9 @@ export default function IssuesIndex() {
                     },
                     {
                         accessor: "sub_issue_type",
+                    },
+                    {
+                        accessor: "description",
                     },
                     {
                         accessor: "status",
