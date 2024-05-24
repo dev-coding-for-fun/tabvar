@@ -9,25 +9,23 @@ export interface RouteSearchResults extends RouteSearch {
 
 export const loader: LoaderFunction = async ({ request, context }) => {
     const url = new URL(request.url);
-    const query = url.searchParams.get('query') + '*';
-
+    const query = url.searchParams.get('query')?.replace(/[^a-zA-Z0-9\s]/g, '') || null;
     if (!query) {
         return new Response(JSON.stringify({ routes: [] }), {
             headers: { 'Content-Type': 'application/json' },
             status: 400
         });
     }
-
+    console.log(query);
     const db = getDB(context);
-
     const routes = await db.selectFrom('route_search')
-        .where(sql`route_search`, 'match', query)
-        .select([sql<number>`rowid`.as('id'), 
-            'name', 
-            'sector_name', 
-            'crag_name', 
-            'grade_yds', 
-            'bolt_count', 
+        .where(sql`route_search`, 'match', `"${query}" *`)
+        .select([sql<number>`rowid`.as('id'),
+            'name',
+            'sector_name',
+            'crag_name',
+            'grade_yds',
+            'bolt_count',
             'pitch_count'
         ])
         .limit(10)
