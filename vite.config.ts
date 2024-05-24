@@ -4,10 +4,9 @@ import {
 } from "@remix-run/dev";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
-import react from "@vitejs/plugin-react";
 
 const config = defineConfig({
-  plugins: [remixCloudflareDevProxy(), remix(), react(), tsconfigPaths()],
+  plugins: [remixCloudflareDevProxy(), remix(), tsconfigPaths()],
   resolve: {
     alias: {
       // Alias Node.js core modules to their prefixed versions
