@@ -1,6 +1,6 @@
 import { useFetcher } from "@remix-run/react";
 import { SelectProps, Container, Group, Select, Text } from "@mantine/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RouteSearchResults } from "~/routes/api.search";
 
 
@@ -16,12 +16,14 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
   label,
   name,
   required = false,
-  value,
   onChange = () => {},
 }) => {
     const {load, ...fetcher} = useFetcher<RouteSearchResults[]>();
     const [query, setQuery] = useState('');
     const [items, setItems] = useState<RouteSearchResults[]>([]);
+    const isSelectedRef = useRef(false);
+    const selectedLabelRef = useRef('');
+
   
     const renderSelectOption: SelectProps['renderOption'] = ({ option }) => {
         const route = items.find(item => item.id.toString() === option.value);  // Find the route by id
@@ -36,6 +38,7 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
     };
 
     useEffect(() => {
+      if (selectedLabelRef.current) return;
       const debounceTime = query.length < 2 ? 1000 : 300;
       const handler = setTimeout(() => {
         if (query.trim().length > 1) {
@@ -56,13 +59,21 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
   
     const handleSearchChange = (q: string) => {
       setQuery(q);
-      if (!q) onChange(null);
+      if (isSelectedRef.current) {
+          selectedLabelRef.current = q;
+          isSelectedRef.current = false;
+      }
+      else if (q != selectedLabelRef.current) {
+        isSelectedRef.current = false;
+        selectedLabelRef.current = '';
+      }
     };
 
     const handleChange = (value: string | null) => {
-        onChange(value);
+      onChange(value);
+      isSelectedRef.current = true;
     };
-
+    
     return (
       <Container size="md" p="md">
           <Select
@@ -70,6 +81,7 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
             name={name}
             data={items.map(item => ({ value: item.id.toString(), label: item.name ?? '' }))}
             searchable
+            searchValue={query}
             onSearchChange={handleSearchChange}
             filter={({ options }) => { return options }}
             placeholder="Type to search..."
@@ -78,7 +90,6 @@ const RouteSearchBox: React.FC<RouteSearchBoxProps> = ({
             renderOption={renderSelectOption}
             required={required}
             onChange={handleChange}
-            value={value}
           />
       </Container>
     )
