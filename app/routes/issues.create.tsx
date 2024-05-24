@@ -1,8 +1,10 @@
-import { Button, Container, FileInput, Group, MultiSelect, Radio, Stack, Text, Textarea, rem } from "@mantine/core";
+import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Stack, Text, Textarea, rem } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { showNotification } from "@mantine/notifications";
 import { ActionFunction, json } from "@remix-run/cloudflare";
-import { Form } from "@remix-run/react";
-import { IconPhotoUp } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { Form, useActionData, useNavigation } from "@remix-run/react";
+import { IconCheck, IconPhotoUp, IconX } from "@tabler/icons-react";
+import { useEffect, useRef, useState } from "react";
 import RouteSearchBox from "~/components/routeSearchBox";
 import { issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
 import { getDB } from "~/lib/db";
@@ -51,8 +53,11 @@ export const action: ActionFunction = async ({ request, context }) => {
     status: "submitted",
   })
   .executeTakeFirst();
-  console.log(result.insertId);
-  return 1;
+  if (result.insertId) {
+    return json({ success: true, message: 'Issue submitted successfully' });
+  } else {
+    return json({ success: false, message: 'Failed to submit issue' }, { status: 500 });
+  }
 }
 
 export default function CreateIssue() {
@@ -60,8 +65,12 @@ export default function CreateIssue() {
   const [selectedIssueType, setSelectedIssueType] = useState<IssueType | null>(null);
   const [selectedSubIssue, setSelectedSubIssue] = useState<string | null>(null);
   const [selectedBolts, setSelectedBolts] = useState<string[]>([]);
-  const [notes, setNotes] = useState<string>('');
-  const [files, setFiles] = useState<File[]>([]);
+  const navigation = useNavigation();
+  const [overlayVisible, { open, close }] = useDisclosure(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const actionData = useActionData<{ [key: string]: string }>();
+
+  const isSubmitting = navigation.state === 'loading' || navigation.state === 'submitting';
 
   const isSubIssueDisabled = (subIssue: string) => {
     if (!selectedIssueType) return true;
@@ -74,6 +83,21 @@ export default function CreateIssue() {
   boltOptions.push({ value: "Anchor", label: "Anchor" });
 
   useEffect(() => {
+    if (isSubmitting) {
+      open();
+      formRef.current?.reset();
+      setSelectedSubIssue(null);
+      setSelectedIssueType(null);
+      setSelectedRoute(null);
+
+      if (formRef.current) console.log(formRef.current.enctype);
+    }
+    else {
+      close();
+    }
+  }, [isSubmitting, open, close]);
+
+  useEffect(() => {
     if (selectedIssueType && selectedSubIssue) {
       if (!subIssuesByType[selectedIssueType].includes(selectedSubIssue)) {
         setSelectedSubIssue(null);
@@ -81,9 +105,32 @@ export default function CreateIssue() {
     }
   }, [selectedIssueType, selectedSubIssue]);
 
+  useEffect(() => {
+    if (actionData) {
+      if (actionData.success) {
+        showNotification({
+          title: 'Success',
+          message: actionData.message,
+          color: 'green',
+          icon: <IconCheck />,
+          autoClose: 5000,
+        });
+      } else {
+        showNotification({
+          title: 'Error',
+          message: actionData.message,
+          color: 'red',
+          icon: <IconX />,
+          autoClose: 5000,
+        });
+      }
+    }
+  }, [actionData]);
+
   return (
     <Container size="md" p="md">
-      <Form method="post" encType="multipart/form-data">
+      <Form method="post" ref={formRef} encType="multipart/form-data">
+        <LoadingOverlay visible={overlayVisible} zIndex={1000} overlayProps={{ radius: "sm", blur: 2}} /> 
         <Text>Submit an issue</Text>
         <RouteSearchBox
           label="Route"
@@ -133,8 +180,6 @@ export default function CreateIssue() {
           <Textarea
             name="notes"
             placeholder="Add any additional notes"
-            value={notes}
-            onChange={(event) => setNotes(event.currentTarget.value)}
             autosize
             minRows={3}
           />
@@ -143,8 +188,6 @@ export default function CreateIssue() {
             placeholder="Upload photos"
             leftSection={icon}
             multiple
-            value={files}
-            onChange={setFiles}
             accept="image/png,image/jpeg,image/gif,image/webp,video/mpeg,video/mp4,video/x-mp4,video/webm,video/3gpp,video/3ggp2"
           />
           <Group p="md" mt="xl">

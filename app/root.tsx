@@ -7,8 +7,10 @@ import {
 } from "@remix-run/react";
 import '@mantine/core/styles.layer.css';
 import 'mantine-datatable/styles.layer.css';
+import '@mantine/notifications/styles.css';
 
 import { ColorSchemeScript, DEFAULT_THEME, MantineProvider, createTheme } from '@mantine/core';
+import { Notifications } from "@mantine/notifications";
 
 const theme = createTheme({
   primaryColor: 'blue',
@@ -37,6 +39,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           theme={theme}
           defaultColorScheme="light"
         >
+          <Notifications position="top-center"/>
           {children}
         </MantineProvider>
         <ScrollRestoration />
