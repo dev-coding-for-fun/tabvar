@@ -1,4 +1,4 @@
-import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Stack, Text, Textarea, rem } from "@mantine/core";
+import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Stack, Textarea, Title, rem } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
 import { ActionFunction, json } from "@remix-run/cloudflare";
@@ -185,7 +185,7 @@ export default function CreateIssue() {
     <Container size="md" p="md">
       <Form method="post" ref={formRef} encType="multipart/form-data">
         <LoadingOverlay visible={overlayVisible} zIndex={1000} overlayProps={{ radius: "sm", blur: 2 }} />
-        <Text>Submit an issue</Text>
+        <Title order={1}>Submit an issue</Title>
         <RouteSearchBox
           label="Route"
           name="route"
