@@ -17,7 +17,9 @@ export default function Index() {
       <h1>Welcome</h1>
       <ul>
         <li>
-          <Link to={`/issue/create`}>Create Issue</Link>
+          <Link to={`/issues/create`}>Create Issue</Link>
+          <Link to={`/issues/`}>View Issues</Link>
+          <Link to={`/issues/manage`}>Manage Issues</Link>
         </li>
       </ul>
     </div>
