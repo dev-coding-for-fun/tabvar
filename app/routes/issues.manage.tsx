@@ -1,11 +1,11 @@
-import { Badge, Center, Container, Group, Select, Text } from "@mantine/core";
+import { ActionIcon, Badge, Center, Container, Group, Text } from "@mantine/core";
 import { LoaderFunction, json } from "@remix-run/cloudflare";
-import { useFetcher, useLoaderData } from "@remix-run/react";
-import { Crag, Issue } from "kysely-codegen";
-import { DataTable } from "mantine-datatable";
+import { useLoaderData } from "@remix-run/react";
+import { Issue } from "kysely-codegen";
+import { DataTable, DataTableColumn } from "mantine-datatable";
 import { getDB } from "~/lib/db";
-import { IconClick } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { authenticator } from "~/lib/auth.server";
+import { IconClick, IconRubberStamp } from "@tabler/icons-react";
 
 const PAGE_SIZE = 15;
 
@@ -15,48 +15,57 @@ export interface IssueWithRoute extends Issue {
     crag_name: string;
 }
 
-export const loader: LoaderFunction = async ({ context }) => {
+export const loader: LoaderFunction = async ({ request, context }) => {
+    const user = await authenticator.isAuthenticated(request, {
+        failureRedirect: "/login",
+    }); 
     const db = getDB(context);
-    const result = await db.selectFrom('crag')
+    const result = await db.selectFrom('issue')
+        .innerJoin('route', 'route.id', 'issue.route_id')
         .select([
-            'crag.id',
-            'crag.name',
+            'issue.id',
+            'route.name as route_name',
+            'route.sector_name',
+            'route.crag_name',
+            'issue_type',
+            'sub_issue_type',
+            'issue.status',
+            'description',
+            'bolts_affected',
         ])
         .execute();
     return json(result);
 }
 
-
 export default function IssuesIndex() {
-    const crags = useLoaderData<Crag[]>();
-    const fetcher = useFetcher();
-    const [issues, setIssues] = useState<IssueWithRoute[]>([]);
+    const records = useLoaderData<IssueWithRoute[]>();
 
-    useEffect(() => {
-        if (fetcher.data) {
-            setIssues(fetcher.data as IssueWithRoute[]);
-        }
-    }, [fetcher.data]);
+    const renderActions: DataTableColumn['render'] = (record) => (
+        <Group gap={4} justify="right" wrap="nowrap">
+            <ActionIcon
+                size="sm"
+                variant="transparent"
+                color="green"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    console.log(`clicked stamp on ${record.id}`);
+                }}
+            >
+                <IconRubberStamp size={16} />
+            </ActionIcon>
+            
+        </Group>
+    );
 
     return (
         <Container size="xl" p="md">
-            <Select
-                label="Pick a crag"
-                placeholder="Pick one"
-                searchable
-                maxDropdownHeight={600}
-                data={ crags.map((crag) => ({ value: crag.id.toString(), label: crag.name ?? '' }))}
-                onChange={(value) => {
-                    fetcher.load(`/api/issues?cragid=${value}`);
-                }}
-            />
             <DataTable
                 withTableBorder
                 borderRadius="sm"
                 withColumnBorders
                 striped
                 highlightOnHover
-                records={issues}
+                records={records}
                 columns={[
                     {
                         accessor: "id",
@@ -89,6 +98,7 @@ export default function IssuesIndex() {
                         accessor: "actions",
                         title: (<Center><IconClick size={16} /></Center>),
                         width: '0%',
+                        render: renderActions,
                     },
                 ]}
 
