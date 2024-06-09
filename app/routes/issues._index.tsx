@@ -1,13 +1,12 @@
 import { Badge, Center, Container, Group, Select, Stack, Text, Title } from "@mantine/core";
 import { LoaderFunction, json } from "@remix-run/cloudflare";
-import { Link, useFetcher, useLoaderData } from "@remix-run/react";
+import { Link, useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
 import { Crag, Issue } from "kysely-codegen";
 import { DataTable } from "mantine-datatable";
 import { getDB } from "~/lib/db";
-import { IconClick } from "@tabler/icons-react";
+import { IconCheck, IconClick } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-
-const PAGE_SIZE = 15;
+import { showNotification } from "@mantine/notifications";
 
 export interface IssueWithRoute extends Issue {
     route_name: string;
@@ -28,6 +27,7 @@ export const loader: LoaderFunction = async ({ context }) => {
 
 
 export default function IssuesIndex() {
+    const [searchParams] = useSearchParams();
     const crags = useLoaderData<Crag[]>();
     const fetcher = useFetcher();
     const [issues, setIssues] = useState<IssueWithRoute[]>([]);
@@ -40,12 +40,26 @@ export default function IssuesIndex() {
         }
     }, [fetcher.data]);
 
+    useEffect(() => {
+        if (searchParams.get('success') === 'true') {
+            showNotification({
+                title: 'Success',
+                message: 'Issue submitted successfully',
+                color: 'green',
+                icon: <IconCheck />,
+                autoClose: 3000,
+            });
+            searchParams.delete('success');
+            window.history.replaceState({}, '', `${window.location.pathname}?${searchParams.toString()}`);      
+        }
+    }, [searchParams]);
+
     return (
         <Container size="xl" p="md">
 
             <Stack>
                 <Title order={1}>Route Issues</Title>
-                <Link to={`/issues/create`}>Submit new issue</Link>
+                <Link to={`/issues/create`}>➕ Submit new issue</Link>
                 <Select
                     label="Pick a crag"
                     placeholder="Pick one"
@@ -69,7 +83,7 @@ export default function IssuesIndex() {
                     striped
                     highlightOnHover
                     minHeight={150}
-                    noRecordsText={ selectedCrag.id ? `No issues found at ${selectedCrag.name}.` : "Select a crag to search for issues." }
+                    noRecordsText={selectedCrag.id ? `No issues found at ${selectedCrag.name}.` : "Select a crag to search for issues."}
                     records={issues}
                     columns={[
                         {

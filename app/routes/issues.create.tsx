@@ -1,8 +1,8 @@
 import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Stack, Textarea, Title, rem } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
-import { ActionFunction, json } from "@remix-run/cloudflare";
-import { Form, useActionData, useNavigation } from "@remix-run/react";
+import { ActionFunction, json, redirect } from "@remix-run/cloudflare";
+import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
 import { IconCheck, IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
@@ -35,8 +35,7 @@ export const action: ActionFunction = async ({ request, context }) => {
   const issueType = formData.get("issueType")?.toString() ?? '';
   const subIssueType = formData.get("subIssueType")?.toString() ?? '';
   const notes = formData.get("notes")?.toString() ?? '';
-  const files = formData.getAll("photos") as File[];
-
+  const files = (formData.getAll("photos") as File[]).filter(file => file && file.size > 0);
   const errors = {
     routeId: validateRoute(routeId),
     issueType: validateIssueType(issueType),
@@ -80,7 +79,8 @@ export const action: ActionFunction = async ({ request, context }) => {
       })
       .execute()
   ));
-  return json({ success: true, message: 'Issue submitted successfully' });
+  //return json({ success: true, message: 'Issue submitted successfully' });
+  return redirect('/issues/?success=true');
 }
 
 export default function CreateIssue() {
@@ -137,15 +137,7 @@ export default function CreateIssue() {
 
   useEffect(() => {
     if (actionData) {
-      if (actionData.success) {
-        showNotification({
-          title: 'Success',
-          message: actionData.message,
-          color: 'green',
-          icon: <IconCheck />,
-          autoClose: 3000,
-        });
-      } else {
+      if (!actionData.success) {
         showNotification({
           title: 'Error',
           message: actionData.message,
@@ -183,9 +175,12 @@ export default function CreateIssue() {
 
   return (
     <Container size="md" p="md">
+      <Stack>
+      <Title order={1}>Submit an issue</Title>
+      <Link to={`/issues/`}>👁‍🗨 View Issues</Link>
+      </Stack>
       <Form method="post" ref={formRef} encType="multipart/form-data">
         <LoadingOverlay visible={overlayVisible} zIndex={1000} overlayProps={{ radius: "sm", blur: 2 }} />
-        <Title order={1}>Submit an issue</Title>
         <RouteSearchBox
           label="Route"
           name="route"
