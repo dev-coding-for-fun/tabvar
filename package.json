@@ -15,6 +15,7 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@alwaysmeticulous/recorder-loader": "^2.132.0",
     "@aws-sdk/client-s3": "^3.583.0",
     "@mantine/core": "^7.9.0",
     "@mantine/hooks": "^7.9.0",
@@ -26,11 +27,15 @@
     "@tabler/icons-react": "^3.4.0",
     "better-sqlite3": "^9.6.0",
     "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "date-fns-tz": "^3.1.3",
+    "he": "^1.2.0",
     "isbot": "^4.1.0",
     "kysely": "^0.27.3",
     "kysely-d1": "^0.3.0",
     "mantine-datatable": "^7.9.1",
     "miniflare": "^3.20240404.0",
+    "nanoid": "^5.0.7",
     "postcss": "^8.4.38",
     "postcss-preset-mantine": "^1.15.0",
     "postcss-simple-vars": "^7.0.1",
@@ -43,6 +48,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240502.0",
     "@remix-run/dev": "^2.9.2",
+    "@types/he": "^1.2.3",
     "@types/react": "^18.2.20",
     "@types/react-dom": "^18.2.7",
     "@typescript-eslint/eslint-plugin": "^6.7.4",

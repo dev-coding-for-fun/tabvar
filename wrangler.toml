@@ -60,7 +60,7 @@ pages_build_output_dir = "./build/client"
 # Docs: https://developers.cloudflare.com/pages/functions/wrangler-configuration#environment-specific-overrides
 
 [env.preview.vars]
-
+ENVIRONMENT = "preview"
 route = "dev.tabvar.org/*"
 
 [[d1_databases]]
@@ -75,8 +75,10 @@ bucket_name = "tabvar-issues-uploads"
 ######## PRODUCTION environment config ########
 
 [env.production.vars]
+ENVIRONMENT = "production"
 GOOGLE_CLIENT_ID="884028273348-ilc88jsfip9a3e5mldahlgd6vdc6ivp9.apps.googleusercontent.com"
 BASE_URL="https://tabvar.pages.dev"
+SLOPER_URL="https://www.sloperclimbing.com"
 
 [[env.production.d1_databases]]
 binding = "DB"

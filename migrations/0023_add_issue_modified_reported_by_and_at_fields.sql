@@ -1,0 +1,4 @@
+-- Migration number: 0023 	 2024-06-18T04:06:03.766Z
+ALTER TABLE issue ADD COLUMN reported_at TIMESTAMP;
+ALTER TABLE issue ADD COLUMN reported_by TEXT;
+ALTER TABLE issue ADD COLUMN last_modified TIMESTAMP;

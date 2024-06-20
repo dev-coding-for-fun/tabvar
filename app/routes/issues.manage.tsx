@@ -53,7 +53,7 @@ export default function IssuesIndex() {
             >
                 <IconRubberStamp size={16} />
             </ActionIcon>
-            
+
         </Group>
     );
 
@@ -88,6 +88,8 @@ export default function IssuesIndex() {
                     },
                     {
                         accessor: "description",
+                        render: ({ description }) =>
+                            description?.split("\n").map((line, index) => <p key={index}>{line}</p>) || null,
                     },
                     {
                         accessor: "status",

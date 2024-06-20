@@ -107,6 +107,8 @@ export default function IssuesIndex() {
                         },
                         {
                             accessor: "description",
+                            render: ({ description }) =>
+                                description?.split("\n").map((line, index) => <p key={index}>{line}</p>) || null,
                         },
                         {
                             accessor: "status",
