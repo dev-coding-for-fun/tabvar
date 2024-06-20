@@ -4,12 +4,13 @@ import { Authenticator } from 'remix-auth';
 import { GoogleStrategy } from 'remix-auth-google'
 import { getDB } from './db';
 import { sessionStorage } from './session.server';
+import { Generated, User } from 'kysely-codegen';
 
-export const authenticator = new Authenticator(sessionStorage);
+export const authenticator = new Authenticator<User>(sessionStorage);
 
-function getGoogleStrategy(context: AppLoadContext) {
+function getGoogleStrategy(context: AppLoadContext): GoogleStrategy<User> {
     const env = context.cloudflare.env as Env
-    return new GoogleStrategy(
+    return new GoogleStrategy<User>(
         {
             clientID: env.GOOGLE_CLIENT_ID ?? '',
             clientSecret: env.GOOGLE_CLIENT_SECRET ?? '',
@@ -34,15 +35,19 @@ function getGoogleStrategy(context: AppLoadContext) {
                         email_verified: 1,
                         provider_id: 'google',
                         avatar_url: avatarUrl,
+                        role: "anonymous",
                     })
-                    .returningAll().executeTakeFirst();
+                    .returningAll().executeTakeFirstOrThrow();
             }
             await db.insertInto('signin_event')
                 .values({
                     uid: id,
                 })
                 .returningAll().executeTakeFirst();
-            return user;
+            return {
+                ...user,
+                created_at: user.created_at as unknown as Generated<string | null>
+            };
         }
     );
 }

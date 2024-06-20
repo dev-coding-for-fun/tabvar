@@ -7,12 +7,26 @@
 import { RemixBrowser } from "@remix-run/react";
 import { startTransition, StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
+import { tryLoadAndStartRecorder } from '@alwaysmeticulous/recorder-loader'
 
-startTransition(() => {
-  hydrateRoot(
-    document,
-    <StrictMode>
-      <RemixBrowser />
-    </StrictMode>
-  );
-});
+function isProduction() {
+  return window.location.hostname.indexOf("tabvar.pages.dev") > -1;
+}
+
+(async () => {
+  if (!isProduction()) {
+    await tryLoadAndStartRecorder({
+      projectId: 'RkWghRBFYGTJoUm0HxHmIGxDv5fCNry68n4FiFw1',
+      isProduction: false,
+    });
+  }
+
+  startTransition(() => {
+    hydrateRoot(
+      document,
+      <StrictMode>
+        <RemixBrowser />
+      </StrictMode>
+    );
+  });
+})();

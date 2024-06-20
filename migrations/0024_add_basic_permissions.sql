@@ -1,0 +1,2 @@
+-- Migration number: 0024 	 2024-06-18T23:05:36.823Z
+ALTER TABLE USER ADD COLUMN role TEXT;

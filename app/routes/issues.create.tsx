@@ -3,7 +3,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
 import { ActionFunction, json, redirect } from "@remix-run/cloudflare";
 import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
-import { IconCheck, IconPhotoUp, IconX } from "@tabler/icons-react";
+import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
 import { issueTypes, subIssues, subIssuesByType } from "~/lib/constants";

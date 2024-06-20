@@ -1,3 +1,4 @@
+
 export const issueTypes = [
     { value: 'Bolts', label: 'Bolts (#)' },
     { value: 'All Bolts', label: 'All Bolts' },
@@ -13,7 +14,7 @@ export function getLabelFromValue<T extends { value: string, label: string }[]>(
 export const subIssues = [
     { value: 'Loose nut', label: 'Loose nut' },
     { value: 'Loose bolt', label: 'Loose bolt' },
-    { value: 'Loose Glue-in', label: 'Loose Glue-in' },
+    { value: 'Loose glue-in', label: 'Loose glue-in' },
     { value: 'Rusted', label: 'Rusted' },
     { value: 'Outdated', label: 'Outdated' },
     { value: 'Worn', label: 'Worn' },
@@ -30,3 +31,8 @@ export const subIssuesByType = {
     Anchor: ['Loose nut', 'Loose bolt', 'Loose Glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
     Rock: ['Loose block', 'Loose flake', 'Other'],
 }
+
+export const userRoles = [
+    { value: 'admin', label: 'Admin' },
+    { value: 'member', label: 'Member' },
+];
