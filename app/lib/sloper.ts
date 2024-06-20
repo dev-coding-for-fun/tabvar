@@ -87,7 +87,7 @@ function convertSloperToTabvarTypes(sloperCatId: number, sloperTypeId: number, s
 }
 
 export function importSloperIssueMetadata(sloperIssue: SloperIssue): Partial<Issue> {
-    const issue: Partial<Issue> = { 
+    const issue: Partial<Issue> = {
         description: "",
     };
     if (sloperIssue.comments)
@@ -569,22 +569,20 @@ async function cleanupEmpties(context: AppLoadContext) {
     console.log(`Deleted ${result.numDeletedRows} empty Crags`);
 }
 
-export async function syncSloperData(context: AppLoadContext) : Promise<string[]> {
-    clearLogMessages();    
+export async function syncSloperData(context: AppLoadContext, bookNum: number): Promise<string[]> {
+    clearLogMessages();
     try {
-        for (const id of SLOPER_GUIDEBOOKS) {
-            const cragResponse = await getSloperData<any>(context, SLOPER_CRAGS_PATH + `&guidebookId=${id}`);
-            const [insertedCrags, updatedCrags, dupeCrags] = await updateCrags(context, cragResponse.data);
-            console.log(`Sloper: ${updatedCrags} crags updated. ${insertedCrags} crags added. Found ${dupeCrags} duplicates`);
+        const id = SLOPER_GUIDEBOOKS[bookNum - 1];
+        const cragResponse = await getSloperData<any>(context, SLOPER_CRAGS_PATH + `&guidebookId=${id}`);
+        const [insertedCrags, updatedCrags, dupeCrags] = await updateCrags(context, cragResponse.data);
+        console.log(`Sloper: ${updatedCrags} crags updated. ${insertedCrags} crags added. Found ${dupeCrags} duplicates`);
 
-            //need to fix authz for sectors, until then, we'll get the basics from the crag data
-            const [insertedSectors, updatedSectors, dupeSectors] = await updateSectorsTemp(context, cragResponse.data);
-            console.log(`Sloper: ${updatedSectors} sectors updated. ${insertedSectors} sectors added. Found ${dupeSectors} duplicates`);
+        //need to fix authz for sectors, until then, we'll get the basics from the crag data
+        const [insertedSectors, updatedSectors, dupeSectors] = await updateSectorsTemp(context, cragResponse.data);
+        console.log(`Sloper: ${updatedSectors} sectors updated. ${insertedSectors} sectors added. Found ${dupeSectors} duplicates`);
 
-            const [insertedRoutes, updatedRoutes, dupeRoutes] = await updateRoutes(context, cragResponse.data);
-            console.log(`Sloper: ${updatedRoutes} routes updated. ${insertedRoutes} routes added. Found ${dupeRoutes} duplicates`);
-
-        }
+        const [insertedRoutes, updatedRoutes, dupeRoutes] = await updateRoutes(context, cragResponse.data);
+        console.log(`Sloper: ${updatedRoutes} routes updated. ${insertedRoutes} routes added. Found ${dupeRoutes} duplicates`);
         cleanupEmpties(context);
     }
     catch (error) {
@@ -593,7 +591,7 @@ export async function syncSloperData(context: AppLoadContext) : Promise<string[]
     return getLogMessages();
 }
 
-export async function syncSloperIssues(context: AppLoadContext) : Promise<string[]> {
+export async function syncSloperIssues(context: AppLoadContext): Promise<string[]> {
     clearLogMessages();
     let insertCount = 0, updateCount = 0;
     try {
@@ -636,7 +634,7 @@ export async function syncSloperIssues(context: AppLoadContext) : Promise<string
                             last_modified: localIssue.last_modified,
                         }).
                         where("issue.id", "=", issueRef.local_id).executeTakeFirstOrThrow();
-                        updateCount++;
+                    updateCount++;
                 }
                 catch (error: any) {
                     console.error(`Update failed syncing sloper issue (${issue.issue_id}) to existing local issue (${localIssue.id}) with error: ${error.message}`);
@@ -646,24 +644,24 @@ export async function syncSloperIssues(context: AppLoadContext) : Promise<string
             else {
                 try {
                     const insertResponse = await db.insertInto("issue")
-                    .values({
-                        route_id: routeRef.local_id,
-                        issue_type: localIssue.issue_type ?? "",
-                        sub_issue_type: localIssue.sub_issue_type,
-                        status: localIssue.status ?? "",
-                        description: localIssue.description,
-                        bolts_affected: localIssue.bolts_affected,
-                        reported_by: localIssue.reported_by,
-                        reported_at: localIssue.reported_at,
-                        last_modified: localIssue.last_modified,
-                    }).executeTakeFirstOrThrow();
+                        .values({
+                            route_id: routeRef.local_id,
+                            issue_type: localIssue.issue_type ?? "",
+                            sub_issue_type: localIssue.sub_issue_type,
+                            status: localIssue.status ?? "",
+                            description: localIssue.description,
+                            bolts_affected: localIssue.bolts_affected,
+                            reported_by: localIssue.reported_by,
+                            reported_at: localIssue.reported_at,
+                            last_modified: localIssue.last_modified,
+                        }).executeTakeFirstOrThrow();
                     await db.insertInto("external_issue_ref")
-                    .values({
-                        local_id: Number(insertResponse.insertId),
-                        external_id: issue.issue_id,
-                        external_route_id: issue.route_id,
-                        source: "sloper",
-                    }).executeTakeFirstOrThrow();
+                        .values({
+                            local_id: Number(insertResponse.insertId),
+                            external_id: issue.issue_id,
+                            external_route_id: issue.route_id,
+                            source: "sloper",
+                        }).executeTakeFirstOrThrow();
                     insertCount++;
                 }
                 catch (error: any) {

@@ -34,8 +34,11 @@ export const action: ActionFunction = async({ request, context }) => {
     const formData = await request.formData();
     const action = formData.get("action");
     let resultLog: string[] = [];
-    if (action == "sloper-datasync") {
-        resultLog = await syncSloperData(context);
+    if (action == "sloper-datasync-book1") {
+        resultLog = await syncSloperData(context, 1);
+    }
+    else if (action == "sloper-datasync-book2") {
+        resultLog = await syncSloperData(context, 2);
     }
     else if (action == "sloper-issuesync") {
         resultLog = await syncSloperIssues(context);
@@ -59,7 +62,8 @@ export default function ManageRoutes() {
             <Title order={1}>Manage Routes</Title>
             <fetcher.Form method="post">
                 <Group>
-                    <Button name="action" value="sloper-datasync" type="submit">Sync Route Data</Button>
+                    <Button name="action" value="sloper-datasync-book1" type="submit">Sync Sloper - Banff Rock</Button>
+                    <Button name="action" value="sloper-datasync-book2" type="submit">Sync Sloper - Other</Button>
                     <Button name="action" value="sloper-issuesync" type="submit">Sync Issues</Button>
                 </Group>
             </fetcher.Form>
