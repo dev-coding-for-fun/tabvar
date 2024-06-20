@@ -1,14 +1,14 @@
 import { ActionIcon, Badge, Button, Center, Container, Group, Modal, Popover, Select, Stack, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { hideNotification, showNotification } from "@mantine/notifications";
 import { ActionFunction, LoaderFunction, json, redirect } from "@remix-run/cloudflare";
 import { Form, useLoaderData, useSubmit } from "@remix-run/react";
 import { IconClick, IconSquareKey, IconUserMinus, IconX } from "@tabler/icons-react";
 import { User } from "kysely-codegen";
 import { DataTable, DataTableColumn } from "mantine-datatable";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useErrorNotification } from "~/components/useErrorNotification";
 import { authenticator } from "~/lib/auth.server";
-import { userRoles } from "~/lib/constants";
+import { PERMISSION_ERROR, userRoles } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 
 export const loader: LoaderFunction = async ({ request, context }) => {
@@ -16,7 +16,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {
-        return json({ users: [], error: "You do not have the required permissions to access this page." }, { status: 403 });
+        return json({ users: [], error: PERMISSION_ERROR }, { status: 403 });
     }
     const db = getDB(context);
     const result = await db.selectFrom('user')
@@ -61,6 +61,7 @@ export default function UsersIndex() {
     const submit = useSubmit();
     const [isOpen, { close, toggle }] = useDisclosure(false);
     const [selectedRole, setSelectedRole] = useState<string | null>("");
+    useErrorNotification(data.error);
 
     const handleRoleSave = (uid: string | undefined) => {
         const formData = new FormData();
@@ -70,21 +71,6 @@ export default function UsersIndex() {
         submit(formData, { method: 'post' });
         close();
     };
-
-    useEffect(() => {
-        if (data.error) {
-            showNotification({
-              title: 'Error',
-              id: 'errorNotice',
-              message: data.error,
-              color: 'red',
-              icon: <IconX />,
-            });
-        }
-        return () => {
-            hideNotification('errorNotice');
-        }
-      }, [data.error]);
 
     const renderActions: DataTableColumn['render'] = (record: Partial<User>) => (
         <Group gap={4} wrap="nowrap">

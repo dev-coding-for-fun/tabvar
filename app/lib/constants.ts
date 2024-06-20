@@ -1,3 +1,5 @@
+export const PERMISSION_ERROR = "You do not have the required permissions to access this page.";
+
 
 export const issueTypes = [
     { value: 'Bolts', label: 'Bolts (#)' },
