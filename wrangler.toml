@@ -68,11 +68,10 @@ binding = "DB"
 database_name = "tabvar_dev"
 database_id = "c4568107-db66-41ed-b673-7c9726126316"
 
-[[r2_buckets]]
+######## PRODUCTION environment config ########
+[[env.production.r2_buckets]]
 binding = "TABVAR_ISSUES_UPLOADS"
 bucket_name = "tabvar-issues-uploads"
-
-######## PRODUCTION environment config ########
 
 [env.production.vars]
 ENVIRONMENT = "production"
