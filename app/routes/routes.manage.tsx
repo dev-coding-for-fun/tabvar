@@ -1,14 +1,11 @@
-import { Button, Container, Title } from "@mantine/core";
-import { ActionFunction, LoaderFunction, json, redirect } from "@remix-run/cloudflare";
-import { Form, useLoaderData } from "@remix-run/react";
-import { Issue } from "kysely-codegen";
+import { Accordion, Button, Code, Container, Group, Stack, Text, Title } from "@mantine/core";
+import { ActionFunction, LoaderFunction, json } from "@remix-run/cloudflare";
+import { useFetcher } from "@remix-run/react";
+import { Issue, User } from "kysely-codegen";
+import { useEffect, useState } from "react";
 import { authenticator } from "~/lib/auth.server";
+import { PERMISSION_ERROR } from "~/lib/constants";
 import { syncSloperData, syncSloperIssues } from "~/lib/sloper";
-
-interface LoaderData {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    syncResult?: any;
-}
 
 export interface IssueWithRoute extends Issue {
     route_name: string;
@@ -17,9 +14,12 @@ export interface IssueWithRoute extends Issue {
 }
 
 export const loader: LoaderFunction = async ({ request }) => {  
-    const user = await authenticator.isAuthenticated(request, {
+    const user: User = await authenticator.isAuthenticated(request, {
         failureRedirect: "/login",
     });
+    if (user.role !== 'admin') {
+        return json({ error: PERMISSION_ERROR }, { status: 403 });
+    }
     return json({ });
 }
 
@@ -27,27 +27,50 @@ export const action: ActionFunction = async({ request, context }) => {
     const user = await authenticator.isAuthenticated(request, {
         failureRedirect: "/login",
     });
+    if (user.role !== 'admin') {
+        return json({ error: PERMISSION_ERROR }, { status: 403 });
+    }
+
     const formData = await request.formData();
     const action = formData.get("action");
+    let resultLog: string[] = [];
     if (action == "sloper-datasync") {
-        syncSloperData(context);
+        resultLog = await syncSloperData(context);
     }
     else if (action == "sloper-issuesync") {
-        syncSloperIssues(context);
+        resultLog = await syncSloperIssues(context);
     }
-    return redirect('/routes/manage');
+    return json( resultLog );
 }
 
-export default function IssuesIndex() {
-    const cragData = useLoaderData<LoaderData>();
+export default function ManageRoutes() {
+    const fetcher = useFetcher<string[]>();
+    const [logMessages, setLogMessages] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (fetcher.data) {
+            setLogMessages(fetcher.data);
+        }
+    }, [fetcher.data]);
 
     return (
         <Container size="xl" p="md">
+            <Stack>
             <Title order={1}>Manage Routes</Title>
-            <Form method="post">
-                <Button name="action" value="sloper-datasync" type="submit">Sync Route Data</Button>
-                <Button name="action" value="sloper-issuesync" type="submit">Sync Issues</Button>
-            </Form>
+            <fetcher.Form method="post">
+                <Group>
+                    <Button name="action" value="sloper-datasync" type="submit">Sync Route Data</Button>
+                    <Button name="action" value="sloper-issuesync" type="submit">Sync Issues</Button>
+                </Group>
+            </fetcher.Form>
+            {logMessages.length > 0 && (
+                    <Code>
+                            {logMessages.map((message, index) => (
+                                <Text key={index}>{message}</Text>
+                            ))}
+                    </Code>
+                )}
+            </Stack>
         </Container>
     );
 }

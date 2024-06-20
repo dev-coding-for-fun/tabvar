@@ -7,6 +7,7 @@ import { DB, Issue } from "kysely-codegen";
 import { nanoid } from "nanoid";
 import { parse } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
+import { getLogMessages, clearLogMessages } from "./logger";
 
 const SLOPER_AUTH_PATH = "/DesktopModules/JwtAuth/API/mobile/login"
 const SLOPER_ROUTES_PATH = "/API/SloperPlatform/Route/?isEnabled=1";
@@ -568,7 +569,8 @@ async function cleanupEmpties(context: AppLoadContext) {
     console.log(`Deleted ${result.numDeletedRows} empty Crags`);
 }
 
-export async function syncSloperData(context: AppLoadContext) {
+export async function syncSloperData(context: AppLoadContext) : Promise<string[]> {
+    clearLogMessages();    
     try {
         for (const id of SLOPER_GUIDEBOOKS) {
             const cragResponse = await getSloperData<any>(context, SLOPER_CRAGS_PATH + `&guidebookId=${id}`);
@@ -588,9 +590,11 @@ export async function syncSloperData(context: AppLoadContext) {
     catch (error) {
         console.error(`Error syncing sloper data: ${error}`);
     }
+    return getLogMessages();
 }
 
-export async function syncSloperIssues(context: AppLoadContext) {
+export async function syncSloperIssues(context: AppLoadContext) : Promise<string[]> {
+    clearLogMessages();
     let insertCount = 0, updateCount = 0;
     try {
         const db = getDB(context);
@@ -672,4 +676,5 @@ export async function syncSloperIssues(context: AppLoadContext) {
     catch (error: any) {
         console.log(`Error syncing issues: ${error.message}`);
     }
+    return getLogMessages();
 }
