@@ -30,15 +30,16 @@ export const action: ActionFunction = async ({ request, context }) => {
     if (user.role !== 'admin') {
         return json({ error: PERMISSION_ERROR }, { status: 403 });
     }
-
     const formData = await request.formData();
     const action = formData.get("action");
     const sectorId = Number(formData.get("sectorId"));
     const sloperId = formData.get("sloperId")?.toString();
     if (action == "sloper-datasync") {
+        console.log('starting crag/sector sync');
         return json(await syncSloperCragsAndSectors(context));
     }
     else if (action == "sloper-issuesync") {
+        console.log('starting issue sync');
         return json(await syncSloperIssues(context));
     }
     else if (action == "sloper-routesync" && sectorId && sloperId) {
@@ -61,10 +62,9 @@ export default function ManageRoutes() {
                 setLogMessages(prevMessages => [...prevMessages, ...newLogMessages]);
             }
             if (newSectors) setSectors(newSectors);
-            if (syncCount && sectorId)
-                {
-                    setSyncStatus(prevStatus => ({ ...prevStatus, [sectorId]: syncCount }));
-                }
+            if (syncCount && sectorId) {
+                setSyncStatus(prevStatus => ({ ...prevStatus, [sectorId]: syncCount }));
+            }
         }
     }, [fetcher.data]);
 
@@ -96,9 +96,9 @@ export default function ManageRoutes() {
                 <Title order={1}>Manage Routes</Title>
                 <fetcher.Form method="post">
                     <Group>
-                        <Button name="action" value="sloper-datasync" type="submit">Sync Crag Data</Button>
-                        <Button name="action" value="sloper-issuesync" type="submit">Sync Issues</Button>
-                        <Button onClick={handleSyncAllRoutes} disabled={(!sectors.length || syncingSector > 0)}>Sync All Routes</Button>
+                        <Button name="action" value="sloper-datasync" type="submit">1. Sync Crag Data</Button>
+                        <Button onClick={handleSyncAllRoutes} disabled={(!sectors.length || syncingSector > 0)}>2. Sync All Routes</Button>
+                        <Button name="action" value="sloper-issuesync" type="submit">3. Sync Issues</Button>
                     </Group>
                 </fetcher.Form>
                 {sectors.length > 0 && (
