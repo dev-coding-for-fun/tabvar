@@ -560,19 +560,20 @@ export type SloperSyncResult = {
     sectorId?: string;
 }
 
-export async function syncSloperCragsAndSectors(context: AppLoadContext): Promise<SloperSyncResult> {
+export async function syncSloperCragsAndSectors(context: AppLoadContext, bookIndex: number): Promise<SloperSyncResult> {
     clearLogMessages();
     let sectors: SyncedSector[] = [];
     try {
-        for (const id of SLOPER_GUIDEBOOKS) {
-            const cragResponse = await getSloperData<any>(context, SLOPER_CRAGS_PATH + `&guidebookId=${id}`);
-            const [insertedCrags, updatedCrags, dupeCrags] = await updateCrags(context, cragResponse.data);
-            console.log(`Sloper: ${updatedCrags} crags updated. ${insertedCrags} crags added. Found ${dupeCrags} duplicates`);
+        const bookId = SLOPER_GUIDEBOOKS[bookIndex];
+        if (!bookId) return { log: ["Error: invalid book id"] };
+        
+        const cragResponse = await getSloperData<any>(context, SLOPER_CRAGS_PATH + `&guidebookId=${bookId}`);
+        const [insertedCrags, updatedCrags, dupeCrags] = await updateCrags(context, cragResponse.data);
+        console.log(`Sloper: ${updatedCrags} crags updated. ${insertedCrags} crags added. Found ${dupeCrags} duplicates`);
 
-            //need to fix authz for sectors, until then, we'll get the basics from the crag data
-            const [insertedSectors, updatedSectors, dupeSectors] = await updateSectorsTemp(context, cragResponse.data);
-            console.log(`Sloper: ${updatedSectors} sectors updated. ${insertedSectors} sectors added. Found ${dupeSectors} duplicates`);
-        }
+        //need to fix authz for sectors, until then, we'll get the basics from the crag data
+        const [insertedSectors, updatedSectors, dupeSectors] = await updateSectorsTemp(context, cragResponse.data);
+        console.log(`Sloper: ${updatedSectors} sectors updated. ${insertedSectors} sectors added. Found ${dupeSectors} duplicates`);
         cleanupEmpties(context);
         const result = await getDB(context).selectFrom("external_sector_ref")
             .innerJoin("sector", "external_sector_ref.local_id", "sector.id")

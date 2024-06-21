@@ -34,9 +34,13 @@ export const action: ActionFunction = async ({ request, context }) => {
     const action = formData.get("action");
     const sectorId = Number(formData.get("sectorId"));
     const sloperId = formData.get("sloperId")?.toString();
-    if (action == "sloper-datasync") {
-        console.log('starting crag/sector sync');
-        return json(await syncSloperCragsAndSectors(context));
+    if (action == "sloper-datasync1") {
+        console.log('starting crag/sector sync 1');
+        return json(await syncSloperCragsAndSectors(context, 0));
+    }
+    if (action == "sloper-datasync2") {
+        console.log('starting crag/sector sync 2');
+        return json(await syncSloperCragsAndSectors(context, 1));
     }
     else if (action == "sloper-issuesync") {
         console.log('starting issue sync');
@@ -96,9 +100,10 @@ export default function ManageRoutes() {
                 <Title order={1}>Manage Routes</Title>
                 <fetcher.Form method="post">
                     <Group>
-                        <Button name="action" value="sloper-datasync" type="submit">1. Sync Crag Data</Button>
-                        <Button onClick={handleSyncAllRoutes} disabled={(!sectors.length || syncingSector > 0)}>2. Sync All Routes</Button>
-                        <Button name="action" value="sloper-issuesync" type="submit">3. Sync Issues</Button>
+                        <Button name="action" value="sloper-datasync1" type="submit">1. Sync Crag Data (Banff Rock)</Button>
+                        <Button name="action" value="sloper-datasync2" type="submit">2. Sync Crag Data (Other)</Button>
+                        <Button onClick={handleSyncAllRoutes} disabled={(!sectors.length || syncingSector > 0)}>3. Sync All Routes</Button>
+                        <Button name="action" value="sloper-issuesync" type="submit">4. Sync Issues</Button>
                     </Group>
                 </fetcher.Form>
                 {sectors.length > 0 && (
