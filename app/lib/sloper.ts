@@ -574,7 +574,6 @@ export async function syncSloperCragsAndSectors(context: AppLoadContext, bookInd
         //need to fix authz for sectors, until then, we'll get the basics from the crag data
         const [insertedSectors, updatedSectors, dupeSectors] = await updateSectorsTemp(context, cragResponse.data);
         console.log(`Sloper: ${updatedSectors} sectors updated. ${insertedSectors} sectors added. Found ${dupeSectors} duplicates`);
-        cleanupEmpties(context);
         const result = await getDB(context).selectFrom("external_sector_ref")
             .innerJoin("sector", "external_sector_ref.local_id", "sector.id")
             .select(['external_id', 'local_id', 'sector.name'])
@@ -603,6 +602,7 @@ export async function syncSloperRoutes(context: AppLoadContext, sectorId: number
 }
 
 export async function syncSloperIssues(context: AppLoadContext): Promise<SloperSyncResult> {
+    cleanupEmpties(context);
     clearLogMessages();
     let insertCount = 0, updateCount = 0;
     try {
