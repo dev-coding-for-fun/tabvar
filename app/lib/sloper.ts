@@ -8,6 +8,7 @@ import { nanoid } from "nanoid";
 import { parse } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { getLogMessages, clearLogMessages } from "./logger";
+import { ExtractColumnType } from "node_modules/kysely/dist/esm/util/type-utils";
 
 const SLOPER_AUTH_PATH = "/DesktopModules/JwtAuth/API/mobile/login"
 const SLOPER_ROUTES_PATH = "/API/SloperPlatform/Route/?isEnabled=1";
@@ -87,7 +88,7 @@ function convertSloperToTabvarTypes(sloperCatId: number, sloperTypeId: number, s
 }
 
 export function importSloperIssueMetadata(sloperIssue: SloperIssue): Partial<Issue> {
-    const issue: Partial<Issue> = { 
+    const issue: Partial<Issue> = {
         description: "",
     };
     if (sloperIssue.comments)
@@ -293,71 +294,98 @@ async function updateSectorsTemp(context: AppLoadContext, cragData: any[]): Prom
     return [insertCount, updateCount, dupeCount];
 }
 
-async function updateRoutes(context: AppLoadContext, cragData: any[]): Promise<[number, number, number]> {
+async function updateRoutes(context: AppLoadContext, externalSectorId: string, sectorId: number): Promise<[number, number, number]> {
     const db = getDB(context);
     let updateCount = 0, insertCount = 0, dupeCount = 0;
-
-    for (const crag of cragData) {
-        const cragRef = await db.selectFrom("external_crag_ref")
+    const routeResponse = await getSloperData<any>(context, SLOPER_ROUTES_PATH + `&sectorId=${externalSectorId}`);
+    const routes = routeResponse.data;
+    console.log(`found ${routes.length} routes for sector id ${sectorId} (sloper id ${externalSectorId})`);
+    for (const route of routes) {
+        if (route.TROUTE_TYPE?.route_type.trim() == "Bouldering") continue;
+        const routeRef = await db.selectFrom("external_route_ref")
             .where((eb) => eb.and([
-                eb("external_id", "=", crag.TCRAG?.crag_id.toString()),
-                eb("source", "=", "sloper"),
-            ])).select(["local_id", "sync_children"])
-            .executeTakeFirst();
-        if (cragRef === undefined || cragRef.local_id === null || !cragRef.sync_children) continue;
-        for (const sector of crag.TSECTOR) {
-            const sectorRef = await db.selectFrom("external_sector_ref")
-                .where((eb) => eb.and([
-                    eb("external_id", '=', sector.sector_id.toString()),
-                    eb("source", "=", "sloper")
-                ]))
-                .select(["local_id", "external_id", "sync_children"]).executeTakeFirst();
-            if (sectorRef === undefined || sectorRef.local_id === null || !sectorRef.sync_children) continue;
+                eb("external_id", '=', route.TROUTE?.route_id.toString()),
+                eb("source", "=", "sloper")
+            ]))
+            .select(["local_id", "sync_data", "external_sector_id", "forced_name"]).executeTakeFirst();
+        if (routeRef !== undefined) {
+            if (!routeRef?.sync_data || routeRef?.local_id === null) continue;
+            //found, updating
+            try {
+                let name = he.decode(route.TROUTE?.route_name).trim();
+                if (routeRef.forced_name) name = routeRef.forced_name;
+                await db.updateTable('route')
+                    .set({
+                        name: name,
+                        sector_id: sectorId,
+                        grade_yds: route.TTECH_GRADE?.tech_grade.trim(),
+                        climb_style: route.TROUTE_TYPE?.route_type.trim(),
+                        sort_order: route.TROUTE?.sort_order,
+                        bolt_count: route.TROUTE?.number_of_bolts,
+                        first_ascent_by: he.decode(route.TROUTE?.first_ascent_name).trim(),
+                        first_ascent_date: route.TROUTE?.first_ascent_date,
+                        route_built_date: route.TROUTE?.route_set_date,
+                        route_length: route.TROUTE?.route_length,
+                    }).where("route.id", "=", routeRef?.local_id)
+                    .executeTakeFirst();
+                updateCount++;
+            } catch (error: any) {
+                console.error(`Failed to update existing route ${he.decode(route.TROUTE?.route_name).trim()} (${route.TROUTE?.route_id.toString()}) in sectorid ${sectorId} with external data: ${error.message}`);
+            }
+        }
+        else {
+            //not found, inserting
+            try {
+                const insertResult = await db.insertInto('route')
+                    .values({
+                        name: he.decode(route.TROUTE?.route_name).trim(),
+                        sector_id: sectorId,
+                        grade_yds: route.TTECH_GRADE?.tech_grade.trim(),
+                        climb_style: route.TROUTE_TYPE?.route_type.trim(),
+                        sort_order: route.TROUTE?.sort_order,
+                        bolt_count: route.TROUTE?.number_of_bolts,
+                        first_ascent_by: he.decode(route.TROUTE?.first_ascent_name).trim(),
+                        first_ascent_date: route.TROUTE?.first_ascent_date,
+                        route_built_date: route.TROUTE?.route_set_date,
+                        route_length: route.TROUTE?.route_length,
+                    })
+                    .executeTakeFirst();
+                await db.insertInto('external_route_ref')
+                    .values({
+                        local_id: Number(insertResult.insertId),
+                        external_id: route.TROUTE?.route_id.toString(),
+                        external_sector_id: externalSectorId,
+                        source: "sloper",
+                    }).execute();
+                insertCount++;
+            }
+            catch (error: any) {
+                if (error.message.includes("route.name")) {
+                    //duplicate found, reference it
+                    const existingDuplicate = await db.selectFrom("route")
+                        .where((eb) => eb.and([
+                            eb("route.name", "=", he.decode(route.TROUTE?.route_name).trim()),
+                            eb("route.sector_id", "=", sectorId)
+                        ]))
+                        .select(["route.id", "sector_id", "name", "sort_order"]).executeTakeFirstOrThrow();
+                    console.log(`Duplicate Route: ${existingDuplicate.name}`);
+                    //see if our duplicate has the same external sector id
+                    const existingDupeRef = await db.selectFrom("external_route_ref")
+                        .where((eb) => eb.and([
+                            eb("local_id", "=", existingDuplicate.id),
+                            eb("external_id", "!=", route.TROUTE?.route_id.toString()),
+                            eb("external_sector_id", "=", externalSectorId),
+                            eb("source", "=", "sloper"),
+                        ]))
+                        .select(["local_id"]).executeTakeFirstOrThrow();
 
-            const routeResponse = await getSloperData<any>(context, SLOPER_ROUTES_PATH + `&sectorId=${sector.sector_id.toString()}`);
-            const routes = routeResponse.data;
-            console.log(`found ${routes.length} routes for sector: ${he.decode(sector.sector_name).trim()} (${sector.sector_id.toString()})`);
-            for (const route of routes) {
-                if (route.TROUTE_TYPE?.route_type.trim() == "Bouldering") continue;
-                //console.log(`processing route: ${he.decode(route.TROUTE?.route_name)} (${route.TROUTE?.route_id.toString()})`);
-                const routeRef = await db.selectFrom("external_route_ref")
-                    .where((eb) => eb.and([
-                        eb("external_id", '=', route.TROUTE?.route_id.toString()),
-                        eb("source", "=", "sloper")
-                    ]))
-                    .select(["local_id", "sync_data", "external_sector_id", "forced_name"]).executeTakeFirst();
-                if (routeRef !== undefined) {
-                    if (!routeRef?.sync_data || routeRef?.local_id === null) continue;
-                    //found, updating
-                    try {
-                        let name = he.decode(route.TROUTE?.route_name).trim();
-                        if (routeRef.forced_name) name = routeRef.forced_name;
-                        await db.updateTable('route')
-                            .set({
-                                name: name,
-                                sector_id: sectorRef.local_id,
-                                grade_yds: route.TTECH_GRADE?.tech_grade.trim(),
-                                climb_style: route.TROUTE_TYPE?.route_type.trim(),
-                                sort_order: route.TROUTE?.sort_order,
-                                bolt_count: route.TROUTE?.number_of_bolts,
-                                first_ascent_by: he.decode(route.TROUTE?.first_ascent_name).trim(),
-                                first_ascent_date: route.TROUTE?.first_ascent_date,
-                                route_built_date: route.TROUTE?.route_set_date,
-                                route_length: route.TROUTE?.route_length,
-                            }).where("route.id", "=", routeRef?.local_id)
-                            .executeTakeFirst();
-                        updateCount++;
-                    } catch (error: any) {
-                        console.error(`Failed to update existing route ${he.decode(route.TROUTE?.route_name).trim()} (${route.TROUTE?.route_id.toString()}) in sectorid ${sectorRef.local_id} with external data: ${error.message}`);
-                    }
-                }
-                else {
-                    //not found, inserting
-                    try {
+                    //check and see if the name overlap is coming from the same external sector
+                    if (existingDupeRef !== undefined) {
+                        //if there's a duplicate 'within' the same external sector, we'll allow it, set a random name, and then sort it all out recursively
                         const insertResult = await db.insertInto('route')
                             .values({
-                                name: he.decode(route.TROUTE?.route_name).trim(),
-                                sector_id: sectorRef.local_id,
+                                name: nanoid(16),
+                                sector_id: sectorId,
                                 grade_yds: route.TTECH_GRADE?.tech_grade.trim(),
                                 climb_style: route.TROUTE_TYPE?.route_type.trim(),
                                 sort_order: route.TROUTE?.sort_order,
@@ -368,82 +396,34 @@ async function updateRoutes(context: AppLoadContext, cragData: any[]): Promise<[
                                 route_length: route.TROUTE?.route_length,
                             })
                             .executeTakeFirst();
+                        let newRouteId: number = 0;
+                        if (insertResult.insertId !== null) newRouteId = Number(insertResult.insertId);
+                        else throw new Error(`Failed to insert randomly named route while renaming duplicates on route name: ${existingDuplicate.name} with local sectorid ${existingDuplicate.sector_id}`);
+
                         await db.insertInto('external_route_ref')
                             .values({
-                                local_id: Number(insertResult.insertId),
+                                local_id: newRouteId,
                                 external_id: route.TROUTE?.route_id.toString(),
-                                external_sector_id: sectorRef.external_id,
+                                external_sector_id: externalSectorId,
                                 source: "sloper",
                             }).execute();
                         insertCount++;
-                    }
-                    catch (error: any) {
-                        if (error.message.includes("route.name")) {
-                            //duplicate found, reference it
-                            const existingDuplicate = await db.selectFrom("route")
-                                .where((eb) => eb.and([
-                                    eb("route.name", "=", he.decode(route.TROUTE?.route_name).trim()),
-                                    eb("route.sector_id", "=", sectorRef.local_id)
-                                ]))
-                                .select(["route.id", "sector_id", "name", "sort_order"]).executeTakeFirstOrThrow();
-                            console.log(`Duplicate Route: ${existingDuplicate.name}`);
-                            //see if our duplicate has the same external sector id
-                            const existingDupeRef = await db.selectFrom("external_route_ref")
-                                .where((eb) => eb.and([
-                                    eb("local_id", "=", existingDuplicate.id),
-                                    eb("external_id", "!=", route.TROUTE?.route_id.toString()),
-                                    eb("external_sector_id", "=", sectorRef.external_id),
-                                    eb("source", "=", "sloper"),
-                                ]))
-                                .select(["local_id"]).executeTakeFirstOrThrow();
-
-                            //check and see if the name overlap is coming from the same external sector
-                            if (existingDupeRef !== undefined) {
-                                //if there's a duplicate 'within' the same external sector, we'll allow it, set a random name, and then sort it all out recursively
-                                const insertResult = await db.insertInto('route')
-                                    .values({
-                                        name: nanoid(16),
-                                        sector_id: sectorRef.local_id,
-                                        grade_yds: route.TTECH_GRADE?.tech_grade.trim(),
-                                        climb_style: route.TROUTE_TYPE?.route_type.trim(),
-                                        sort_order: route.TROUTE?.sort_order,
-                                        bolt_count: route.TROUTE?.number_of_bolts,
-                                        first_ascent_by: he.decode(route.TROUTE?.first_ascent_name).trim(),
-                                        first_ascent_date: route.TROUTE?.first_ascent_date,
-                                        route_built_date: route.TROUTE?.route_set_date,
-                                        route_length: route.TROUTE?.route_length,
-                                    })
-                                    .executeTakeFirst();
-                                let newRouteId: number = 0;
-                                if (insertResult.insertId !== null) newRouteId = Number(insertResult.insertId);
-                                else throw new Error(`Failed to insert randomly named route while renaming duplicates on route name: ${existingDuplicate.name} with local sectorid ${existingDuplicate.sector_id}`);
-
-                                await db.insertInto('external_route_ref')
-                                    .values({
-                                        local_id: newRouteId,
-                                        external_id: route.TROUTE?.route_id.toString(),
-                                        external_sector_id: sectorRef.external_id,
-                                        source: "sloper",
-                                    }).execute();
-                                insertCount++;
-                                console.log(`Duplicate route found with shared source sector (inserting): ${existingDuplicate.name} with id ${newRouteId} and sloper id ${route.TROUTE?.route_id.toString()}`)
-                                renameDuplicateRoutesInSector(db, existingDuplicate.name, existingDuplicate.sector_id, existingDuplicate.id, existingDuplicate.sort_order, newRouteId, route.TROUTE?.sort_order);
-                            } else {
-                                await db.insertInto('external_route_ref')
-                                    .values({
-                                        local_id: existingDuplicate.id,
-                                        external_id: route.TROUTE?.route_id.toString(),
-                                        external_sector_id: sectorRef.external_id,
-                                        sync_data: 0,
-                                        source: "sloper",
-                                    }).execute();
-                                dupeCount++;
-                                console.log(`Duplicate route found with differing external sectors (referencing): ${he.decode(route.TROUTE?.route_name).trim()} with sloper id ${route.TROUTE?.route_id.toString()}`)
-                            }
-                        }
-                        else console.error(error.message);
+                        console.log(`Duplicate route found with shared source sector (inserting): ${existingDuplicate.name} with id ${newRouteId} and sloper id ${route.TROUTE?.route_id.toString()}`)
+                        renameDuplicateRoutesInSector(db, existingDuplicate.name, existingDuplicate.sector_id, existingDuplicate.id, existingDuplicate.sort_order, newRouteId, route.TROUTE?.sort_order);
+                    } else {
+                        await db.insertInto('external_route_ref')
+                            .values({
+                                local_id: existingDuplicate.id,
+                                external_id: route.TROUTE?.route_id.toString(),
+                                external_sector_id: externalSectorId,
+                                sync_data: 0,
+                                source: "sloper",
+                            }).execute();
+                        dupeCount++;
+                        console.log(`Duplicate route found with differing external sectors (referencing): ${he.decode(route.TROUTE?.route_name).trim()} with sloper id ${route.TROUTE?.route_id.toString()}`)
                     }
                 }
+                else console.error(error.message);
             }
         }
     }
@@ -569,8 +549,20 @@ async function cleanupEmpties(context: AppLoadContext) {
     console.log(`Deleted ${result.numDeletedRows} empty Crags`);
 }
 
-export async function syncSloperData(context: AppLoadContext) : Promise<string[]> {
-    clearLogMessages();    
+export type SyncedSector = {
+    external_id: string; local_id: number; name: string;
+};
+
+export type SloperSyncResult = {
+    log?: string[];
+    sectorList?: SyncedSector[];
+    syncCount?: number;
+    sectorId?: string;
+}
+
+export async function syncSloperCragsAndSectors(context: AppLoadContext): Promise<SloperSyncResult> {
+    clearLogMessages();
+    let sectors: SyncedSector[] = [];
     try {
         for (const id of SLOPER_GUIDEBOOKS) {
             const cragResponse = await getSloperData<any>(context, SLOPER_CRAGS_PATH + `&guidebookId=${id}`);
@@ -580,20 +572,36 @@ export async function syncSloperData(context: AppLoadContext) : Promise<string[]
             //need to fix authz for sectors, until then, we'll get the basics from the crag data
             const [insertedSectors, updatedSectors, dupeSectors] = await updateSectorsTemp(context, cragResponse.data);
             console.log(`Sloper: ${updatedSectors} sectors updated. ${insertedSectors} sectors added. Found ${dupeSectors} duplicates`);
-
-            const [insertedRoutes, updatedRoutes, dupeRoutes] = await updateRoutes(context, cragResponse.data);
-            console.log(`Sloper: ${updatedRoutes} routes updated. ${insertedRoutes} routes added. Found ${dupeRoutes} duplicates`);
-
         }
         cleanupEmpties(context);
+        const result = await getDB(context).selectFrom("external_sector_ref")
+            .innerJoin("sector", "external_sector_ref.local_id", "sector.id")
+            .select(['external_id', 'local_id', 'sector.name'])
+            .where((eb) => eb.and([
+                eb('external_sector_ref.sync_children', '=', 1),
+                eb('external_sector_ref.source', '=', 'sloper')]))
+            .execute();
+        sectors = result as SyncedSector[];
     }
     catch (error) {
         console.error(`Error syncing sloper data: ${error}`);
     }
-    return getLogMessages();
+    return { log: getLogMessages(), sectorList: sectors };
 }
 
-export async function syncSloperIssues(context: AppLoadContext) : Promise<string[]> {
+export async function syncSloperRoutes(context: AppLoadContext, sectorId: number, externalSectorId: string): Promise<SloperSyncResult> {
+    clearLogMessages();
+    try {
+        const [insertedRoutes, updatedRoutes, dupeRoutes] = await updateRoutes(context, externalSectorId, sectorId);
+        console.log(`Sloper: ${updatedRoutes} routes updated. ${insertedRoutes} routes added. Found ${dupeRoutes} duplicates`);
+        return { log: getLogMessages(), syncCount: insertedRoutes + updatedRoutes };
+    } catch (error) {
+        console.error(`Error syncing routes for sloper sector id ${externalSectorId}: ${error}`);
+    }
+    return { log: getLogMessages(), syncCount: 0 };
+}
+
+export async function syncSloperIssues(context: AppLoadContext): Promise<SloperSyncResult> {
     clearLogMessages();
     let insertCount = 0, updateCount = 0;
     try {
@@ -636,7 +644,7 @@ export async function syncSloperIssues(context: AppLoadContext) : Promise<string
                             last_modified: localIssue.last_modified,
                         }).
                         where("issue.id", "=", issueRef.local_id).executeTakeFirstOrThrow();
-                        updateCount++;
+                    updateCount++;
                 }
                 catch (error: any) {
                     console.error(`Update failed syncing sloper issue (${issue.issue_id}) to existing local issue (${localIssue.id}) with error: ${error.message}`);
@@ -646,24 +654,24 @@ export async function syncSloperIssues(context: AppLoadContext) : Promise<string
             else {
                 try {
                     const insertResponse = await db.insertInto("issue")
-                    .values({
-                        route_id: routeRef.local_id,
-                        issue_type: localIssue.issue_type ?? "",
-                        sub_issue_type: localIssue.sub_issue_type,
-                        status: localIssue.status ?? "",
-                        description: localIssue.description,
-                        bolts_affected: localIssue.bolts_affected,
-                        reported_by: localIssue.reported_by,
-                        reported_at: localIssue.reported_at,
-                        last_modified: localIssue.last_modified,
-                    }).executeTakeFirstOrThrow();
+                        .values({
+                            route_id: routeRef.local_id,
+                            issue_type: localIssue.issue_type ?? "",
+                            sub_issue_type: localIssue.sub_issue_type,
+                            status: localIssue.status ?? "",
+                            description: localIssue.description,
+                            bolts_affected: localIssue.bolts_affected,
+                            reported_by: localIssue.reported_by,
+                            reported_at: localIssue.reported_at,
+                            last_modified: localIssue.last_modified,
+                        }).executeTakeFirstOrThrow();
                     await db.insertInto("external_issue_ref")
-                    .values({
-                        local_id: Number(insertResponse.insertId),
-                        external_id: issue.issue_id,
-                        external_route_id: issue.route_id,
-                        source: "sloper",
-                    }).executeTakeFirstOrThrow();
+                        .values({
+                            local_id: Number(insertResponse.insertId),
+                            external_id: issue.issue_id,
+                            external_route_id: issue.route_id,
+                            source: "sloper",
+                        }).executeTakeFirstOrThrow();
                     insertCount++;
                 }
                 catch (error: any) {
@@ -676,5 +684,5 @@ export async function syncSloperIssues(context: AppLoadContext) : Promise<string
     catch (error: any) {
         console.log(`Error syncing issues: ${error.message}`);
     }
-    return getLogMessages();
+    return { log: getLogMessages() };
 }
