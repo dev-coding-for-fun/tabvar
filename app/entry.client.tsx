@@ -14,12 +14,12 @@ function isProduction() {
 }
 
 (async () => {
-  if (!isProduction()) {
+  /* if (!isProduction()) {
     await tryLoadAndStartRecorder({
       projectId: 'RkWghRBFYGTJoUm0HxHmIGxDv5fCNry68n4FiFw1',
       isProduction: false,
     });
-  }
+  } */
 
   startTransition(() => {
     hydrateRoot(
