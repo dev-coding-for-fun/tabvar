@@ -21,6 +21,9 @@ const theme = createTheme({
     'status-submitted': DEFAULT_THEME.colors.pink,
     'status-active': DEFAULT_THEME.colors.indigo,
     'status-fixed': DEFAULT_THEME.colors.green,
+    'status-reported': DEFAULT_THEME.colors.indigo,
+    'status-viewed' : DEFAULT_THEME.colors.indigo,
+    'status-completed' : DEFAULT_THEME.colors.green,
   }
 })
 
