@@ -22,6 +22,7 @@ const theme = createTheme({
     'status-reported': DEFAULT_THEME.colors.indigo,
     'status-viewed' : DEFAULT_THEME.colors.indigo,
     'status-completed' : DEFAULT_THEME.colors.green,
+    'status-archived': DEFAULT_THEME.colors.red,
   }
 })
 
