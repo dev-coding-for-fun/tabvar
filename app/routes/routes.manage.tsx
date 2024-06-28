@@ -88,7 +88,7 @@ export default function ManageRoutes() {
                         clearInterval(interval);
                         resolve();
                     }
-                }, 3000);
+                }, 15000);
             });
         }
         setSyncingSector(0);
