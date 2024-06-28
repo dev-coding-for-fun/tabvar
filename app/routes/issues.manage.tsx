@@ -1,19 +1,17 @@
-import { ActionIcon, Badge, Center, Container, Group, Text } from "@mantine/core";
+import { ActionIcon, Badge, Center, Container, Group, Modal, Text } from "@mantine/core";
 import { LoaderFunction, json } from "@remix-run/cloudflare";
 import { useLoaderData } from "@remix-run/react";
 import { Issue } from "kysely-codegen";
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { getDB } from "~/lib/db";
 import { authenticator } from "~/lib/auth.server";
-import { IconClick, IconRubberStamp } from "@tabler/icons-react";
+import { IconClick, IconEdit, IconRubberStamp } from "@tabler/icons-react";
+import IssueDetailsModal from "~/components/issueDetailModal";
+import { useDisclosure } from "@mantine/hooks";
+import { IssueWithRoute } from "./issues._index";
+import { useState } from "react";
 
 const PAGE_SIZE = 15;
-
-export interface IssueWithRoute extends Issue {
-    route_name: string;
-    sector_name: string;
-    crag_name: string;
-}
 
 export const loader: LoaderFunction = async ({ request, context }) => {
     const user = await authenticator.isAuthenticated(request, {
@@ -39,8 +37,11 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 
 export default function IssuesIndex() {
     const records = useLoaderData<IssueWithRoute[]>();
+    const [opened, { open, close }] = useDisclosure(false);
+    const [openIssue, setOpenIssue] = useState<IssueWithRoute>();
 
-    const renderActions: DataTableColumn['render'] = (record) => (
+
+    const renderActions: DataTableColumn<IssueWithRoute>['render'] = (record: IssueWithRoute) => (
         <Group gap={4} justify="right" wrap="nowrap">
             <ActionIcon
                 size="sm"
@@ -53,58 +54,78 @@ export default function IssuesIndex() {
             >
                 <IconRubberStamp size={16} />
             </ActionIcon>
+            <ActionIcon
+                size="sm"
+                variant="transparent"
+                color="blue"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenIssue(record);
+                    open();
+                }}
+            >
+                <IconEdit size={16} />
+            </ActionIcon>
+
 
         </Group>
     );
 
     return (
-        <Container size="xl" p="md">
-            <DataTable
-                withTableBorder
-                borderRadius="sm"
-                withColumnBorders
-                striped
-                highlightOnHover
-                records={records}
-                columns={[
-                    {
-                        accessor: "id",
-                        textAlign: "right",
-                    },
-                    {
-                        accessor: "route_name",
-                        render: (record) =>
-                            <Group>
-                                <Text>{record.route_name}</Text>
-                                <Badge size="xs" color="sector-color">{record.sector_name}</Badge>
-                                <Badge size="xs" color="crag-color">{record.crag_name}</Badge>
-                            </Group>,
-                    },
-                    {
-                        accessor: "issue_type",
-                    },
-                    {
-                        accessor: "sub_issue_type",
-                    },
-                    {
-                        accessor: "description",
-                        render: ({ description }) =>
-                            description?.split("\n").map((line, index) => <p key={index}>{line}</p>) || null,
-                    },
-                    {
-                        accessor: "status",
-                        render: (record) =>
-                            <Badge size="md" color={`status-${record.status}`}>{record.status}</Badge>,
-                    },
-                    {
-                        accessor: "actions",
-                        title: (<Center><IconClick size={16} /></Center>),
-                        width: '0%',
-                        render: renderActions,
-                    },
-                ]}
+        <div>
+            <Container size="xl" p="md">
+                <DataTable
+                    withTableBorder
+                    borderRadius="sm"
+                    withColumnBorders
+                    striped
+                    highlightOnHover
+                    records={records}
+                    columns={[
+                        {
+                            accessor: "id",
+                            textAlign: "right",
+                        },
+                        {
+                            accessor: "route_name",
+                            render: (record) =>
+                                <Group>
+                                    <Text>{record.route_name}</Text>
+                                    <Badge size="xs" color="sector-color">{record.sector_name}</Badge>
+                                    <Badge size="xs" color="crag-color">{record.crag_name}</Badge>
+                                </Group>,
+                        },
+                        {
+                            accessor: "issue_type",
+                        },
+                        {
+                            accessor: "sub_issue_type",
+                        },
+                        {
+                            accessor: "description",
+                            render: ({ description }) =>
+                                description?.split("\n").map((line, index) => <p key={index}>{line}</p>) || null,
+                        },
+                        {
+                            accessor: "status",
+                            render: (record) =>
+                                <Badge size="md" color={`status-${record.status}`}>{record.status}</Badge>,
+                        },
+                        {
+                            accessor: "actions",
+                            title: (<Center><IconClick size={16} /></Center>),
+                            width: '0%',
+                            render: renderActions,
+                        },
+                    ]}
 
+                />
+            </Container>
+            {openIssue && (
+            <IssueDetailsModal
+                opened={opened} onClose={close} issue={openIssue}
             />
-        </Container>
+            )}
+        </div>
     );
 }
