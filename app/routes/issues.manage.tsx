@@ -1,17 +1,49 @@
-import { ActionIcon, Badge, Center, Container, Group, Modal, Text } from "@mantine/core";
+import { ActionIcon, Badge, Button, Center, Container, Group, Text, rem } from "@mantine/core";
 import { LoaderFunction, json } from "@remix-run/cloudflare";
-import { useLoaderData } from "@remix-run/react";
-import { Issue } from "kysely-codegen";
+import { useLoaderData, Fetcher, useFetcher } from "@remix-run/react";
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { getDB } from "~/lib/db";
 import { authenticator } from "~/lib/auth.server";
-import { IconClick, IconEdit, IconRubberStamp } from "@tabler/icons-react";
+import { IconArchive, IconArrowBack, IconCheck, IconClick, IconEdit, IconFlag, IconRubberStamp } from "@tabler/icons-react";
 import IssueDetailsModal from "~/components/issueDetailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { IssueWithRoute } from "./issues._index";
 import { useState } from "react";
 
 const PAGE_SIZE = 15;
+
+const StatusActions: React.FC<{ status: string, lastStatus: string | null, onStatusChange: (newStatus: string) => void }> = ({ status, lastStatus, onStatusChange }) => {
+    switch (status) {
+      case "In Moderation":
+        return (
+          <Group gap="xs">
+            <Button size="compact-xs" leftSection={<IconRubberStamp style={{ width: rem(14), height: rem(14) }} />} onClick={() => onStatusChange("Reported")}>Accept</Button>
+            <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => onStatusChange("Archived")}>Delete</Button>
+          </Group>
+        );
+      case "Reported":
+      case "Viewed":
+        return (
+          <Group gap={4} justify="right" wrap="nowrap">
+            <Button size="compact-xs" leftSection={<IconCheck style={{ width: rem(14), height: rem(14) }} />} onClick={() => onStatusChange("Completed")}>Complete</Button>
+            <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => onStatusChange("Archived")}>Delete</Button>
+          </Group>
+        );
+      case "Completed":
+        return (
+          <Group gap="xs">
+            <Button size="compact-xs" leftSection={<IconArrowBack style={{ width: rem(14), height: rem(14) }} />} onClick={() => onStatusChange("Reported")}>Revert</Button>
+            <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => onStatusChange("Archived")}>Delete</Button>
+          </Group>
+        );
+      case "Archived":
+        return lastStatus ? (
+          <Button size="compact-xs" leftSection={<IconArrowBack style={{ width: rem(14), height: rem(14) }} />} onClick={() => onStatusChange(lastStatus)}>Restore to {lastStatus}</Button>
+        ) : null;
+      default:
+        return null;
+    }
+  };
 
 export const loader: LoaderFunction = async ({ request, context }) => {
     const user = await authenticator.isAuthenticated(request, {
@@ -36,13 +68,21 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 }
 
 export default function IssuesIndex() {
-    const records = useLoaderData<IssueWithRoute[]>();
+    const issues = useLoaderData<IssueWithRoute[]>();
     const [opened, { open, close }] = useDisclosure(false);
     const [openIssue, setOpenIssue] = useState<IssueWithRoute>();
 
+    const handleStatusChange = (newStatus: string) => {
+        console.log(`changing status to ${newStatus}`);
+    }
 
     const renderActions: DataTableColumn<IssueWithRoute>['render'] = (record: IssueWithRoute) => (
         <Group gap={4} justify="right" wrap="nowrap">
+                  <StatusActions 
+                            status={record.status} 
+                            lastStatus={record.last_status} 
+                            onStatusChange={handleStatusChange}
+                        /> 
             <ActionIcon
                 size="sm"
                 variant="transparent"
@@ -80,7 +120,7 @@ export default function IssuesIndex() {
                     withColumnBorders
                     striped
                     highlightOnHover
-                    records={records}
+                    records={issues as IssueWithRoute[]}
                     columns={[
                         {
                             accessor: "id",
@@ -109,7 +149,7 @@ export default function IssuesIndex() {
                         {
                             accessor: "status",
                             render: (record) =>
-                                <Badge size="md" color={`status-${record.status}`}>{record.status}</Badge>,
+                                <Badge size="md" color={`status-${record.status.toLowerCase().replace(" ", "-")}`}>{record.status}</Badge>,
                         },
                         {
                             accessor: "actions",

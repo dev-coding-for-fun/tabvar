@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, TextInput, Text, Button, Group, Textarea, Select, Checkbox, Stack, Paper } from '@mantine/core';
+import { Modal, TextInput, Button, Group, Textarea, Select, Checkbox, Stack, Paper } from '@mantine/core';
 import { IssueWithRoute } from '~/routes/issues._index';
 import { useNavigation } from '@remix-run/react';
 import { IssueType, SubIssueType, issueTypes, subIssuesByType } from '~/lib/constants';
-
 interface IssueDetailsModalProps {
     issue: IssueWithRoute;
     initialDescription?: string;
@@ -51,7 +50,7 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({
         <Modal
             opened={opened}
             onClose={onClose}
-            title={`Issue Details - ID: ${issue.id}`}
+            title={`Issue Details (id: ${issue.id})`}
             size="lg"
             padding="md"
             centered
@@ -59,15 +58,17 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({
             <form method="post">
                 <input type="hidden" name="issueId" value={issue.id.toString()} />
                 <Stack>
-                    <Paper withBorder p="sm">
                         <TextInput
                             label="Route"
                             value={issue.route_name}
-                            disabled
-
+                            readOnly
                         />
-                        <Text>{issue.status}</Text>
-                    </Paper>
+    
+                        <TextInput
+                            label="Issue Status"
+                            value={issue.status}
+                            readOnly
+                        />
                     <Select
                         label="Issue Type"
                         name="issueType"
