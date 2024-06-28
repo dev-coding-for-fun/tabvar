@@ -29,7 +29,7 @@ const StatusActions: React.FC<{
     switch (status) {
         case "In Moderation":
             return (
-                <Group gap="xs">
+                <Group gap={4} justify="right" wrap="nowrap">
                     <Button size="compact-xs" leftSection={<IconRubberStamp style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("accept")}>Accept</Button>
                     <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("archive")}>Delete</Button>
                 </Group>
@@ -38,13 +38,13 @@ const StatusActions: React.FC<{
         case "Viewed":
             return (
                 <Group gap={4} justify="right" wrap="nowrap">
-                    <Button size="compact-xs" leftSection={<IconCheck style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("complete")}>Complete</Button>
+                    <Button size="compact-xs" leftSection={<IconCheck style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("complete")}>Done</Button>
                     <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("archive")}>Delete</Button>
                 </Group>
             );
         case "Completed":
             return (
-                <Group gap="xs">
+                <Group gap={4} justify="right" wrap="nowrap">
                     <Button size="compact-xs" leftSection={<IconArrowBack style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("revert")}>Revert</Button>
                     <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("archive")}>Delete</Button>
                 </Group>
