@@ -6,11 +6,11 @@ import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
 import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
-import { issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
+import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 import { uploadFileToR2 } from "~/lib/s3.server";
 
-const R2_UPLOADS_BUCKET = 'tabvar-issues-uploads';
+export const R2_UPLOADS_BUCKET = 'tabvar-issues-uploads';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; //5 MB
 type IssueType = keyof typeof subIssuesByType;
 
@@ -57,7 +57,7 @@ export const action: ActionFunction = async ({ request, context }) => {
       issue_type: issueType,
       sub_issue_type: subIssueType,
       description: notes,
-      status: "submitted",
+      status: "In Moderation",
     })
     .returning('id')
     .executeTakeFirstOrThrow();
@@ -108,7 +108,7 @@ export default function CreateIssue() {
 
   const icon = <IconPhotoUp style={{ width: rem(18), height: rem(18) }} stroke={1.5} />;
 
-  const boltOptions = Array.from({ length: boltCount ?? 10 }, (_, i) => ({ value: `${i + 1}`, label: `Bolt ${i + 1}` }));
+  const boltOptions = Array.from({ length: boltCount ?? 20 }, (_, i) => ({ value: `${i + 1}`, label: `Bolt ${i + 1}` }));
   boltOptions.push({ value: "Anchor", label: "Anchor" });
 
   useEffect(() => {
@@ -129,7 +129,7 @@ export default function CreateIssue() {
 
   useEffect(() => {
     if (selectedIssueType && selectedSubIssue) {
-      if (!subIssuesByType[selectedIssueType].includes(selectedSubIssue)) {
+      if (!subIssuesByType[selectedIssueType].includes(selectedSubIssue as SubIssueType)) {
         setSelectedSubIssue(null);
       }
     }
@@ -151,7 +151,7 @@ export default function CreateIssue() {
 
   const handleRouteChange = (selected: { value: string | null; boltCount: number | null }) => {
     setSelectedRoute(selected.value);
-    setBoltCount(selected.boltCount);
+    setBoltCount((selected.boltCount) ? selected.boltCount : 20);
   }
 
   const handleFileChange = (files: File[]) => {

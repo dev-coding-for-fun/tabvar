@@ -1,5 +1,5 @@
 import { AppLoadContext } from '@remix-run/cloudflare';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 function getS3Client(context: AppLoadContext): S3Client {
   const env = context.cloudflare.env as unknown as Env;
@@ -33,7 +33,6 @@ export async function uploadFileToR2(
   context: AppLoadContext,
   file: File,
   bucketName: string,
-  keyPrefix: string = 'uploads/'
 ): Promise<UploadFileResult> {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
@@ -51,8 +50,18 @@ export async function uploadFileToR2(
   await client.send(command);
 
   return {
-    url: `/${bucketName}/${keyPrefix}${file.name}`,
+    url: `/${file.name}`,
     name: file.name,
     type: file.type,
   };
+}
+
+export async function deleteFromR2(context: AppLoadContext, bucketName: string, url: string) {
+  const client = getS3Client(context);
+  const fileName = url.split('/').pop();
+  const params = {
+    Bucket: bucketName,
+    Key: fileName,
+  };
+  await client.send(new DeleteObjectCommand(params));
 }

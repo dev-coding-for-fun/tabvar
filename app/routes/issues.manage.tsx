@@ -1,14 +1,18 @@
-import { Badge, Box, Button, Center, Container, Group, Text, rem } from "@mantine/core";
+import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal } from "@mantine/core";
 import { ActionFunction, LoaderFunction, json } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { getDB } from "~/lib/db";
 import { authenticator } from "~/lib/auth.server";
-import { IconArchive, IconArrowBack, IconCheck, IconClick, IconEdit, IconRubberStamp } from "@tabler/icons-react";
+import { IconArchive, IconArrowBack, IconCheck, IconClick, IconEdit, IconFileX, IconRubberStamp } from "@tabler/icons-react";
 import IssueDetailsModal from "~/components/issueDetailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { IssueWithRoute } from "./issues._index";
 import { useEffect, useRef, useState } from "react";
+import { PERMISSION_ERROR } from "~/lib/constants";
+import { deleteFromR2 } from "~/lib/s3.server";
+import { R2_UPLOADS_BUCKET } from "./issues.create";
+
 
 const StatusActions: React.FC<{
     status: string,
@@ -51,7 +55,10 @@ const StatusActions: React.FC<{
             );
         case "Archived":
             return (
-                <Button size="compact-xs" leftSection={<IconArrowBack style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("restore")}>Restore to {lastStatus}</Button>
+                <Group gap={4} justify="right" wrap="nowrap">
+                    <Button size="compact-xs" leftSection={<IconArrowBack style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("restore")}>Restore</Button>
+                    <Button size="compact-xs" color={'red'} leftSection={<IconFileX style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("delete")}>Destroy</Button>
+                </Group>
             );
         default:
             return (<Button size="compact-xs" leftSection={<IconArrowBack style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("restore")}>Fix Status</Button>);
@@ -62,6 +69,9 @@ export const action: ActionFunction = async ({ request, context }) => {
     const user = await authenticator.isAuthenticated(request, {
         failureRedirect: "/login",
     });
+    if (user.role !== 'admin' && user.role !== 'member') {
+        return json({ error: PERMISSION_ERROR }, { status: 403 });
+    }
     const formData = await request.formData();
     const action = formData.get("action");
     const status = formData.get("status")?.toString() ?? "";
@@ -71,26 +81,26 @@ export const action: ActionFunction = async ({ request, context }) => {
         switch (action) {
             case "updateIssue": {
                 const issueType = formData.get("issueType")?.toString();
-            const subIssueType = formData.get("subIssueType")?.toString();
-            const description = formData.get("description")?.toString();
-            const isFlagged = formData.get("isFlagged") === "on";
-            const safetyNotice = formData.get("safetyNotice")?.toString();
-            try {
-                await db.updateTable('issue')
-                    .set({
-                        issue_type: issueType,
-                        sub_issue_type: subIssueType,
-                        description: description,
-                        is_flagged: isFlagged ? 1 : 0,
-                        flagged_message: safetyNotice,
-                        last_modified: new Date().toISOString(),
-                    })
-                    .where('id', '=', issueId)
-                    .execute();
-            } catch (error) {
-                console.error('Error updating issue:', error);
-                return json({ success: false, message: 'Failed to update issue' }, { status: 500 });
-            }
+                const subIssueType = formData.get("subIssueType")?.toString();
+                const description = formData.get("description")?.toString();
+                const isFlagged = formData.get("isFlagged") === "on";
+                const safetyNotice = formData.get("safetyNotice")?.toString();
+                try {
+                    await db.updateTable('issue')
+                        .set({
+                            issue_type: issueType,
+                            sub_issue_type: subIssueType,
+                            description: description,
+                            is_flagged: isFlagged ? 1 : 0,
+                            flagged_message: safetyNotice,
+                            last_modified: new Date().toISOString(),
+                        })
+                        .where('id', '=', issueId)
+                        .execute();
+                } catch (error) {
+                    console.error('Error updating issue:', error);
+                    return json({ success: false, message: 'Failed to update issue' }, { status: 500 });
+                }
                 break;
             }
             case "accept":
@@ -149,8 +159,33 @@ export const action: ActionFunction = async ({ request, context }) => {
                     .execute();
                 break;
             }
+            case "delete": {
+                if (user.role == 'admin') {
+                    const attachments = await db.selectFrom('issue_attachment')
+                    .select(['url'])
+                    .where('issue_id', '=', issueId).execute();
+                    if (attachments.length > 0) {
+                        for (const attachment of attachments) {
+                            await deleteFromR2(context, R2_UPLOADS_BUCKET, attachment.url);
+                        }
+                    }
+                    
+                    await db.deleteFrom('issue_attachment')
+                    .where('issue_attachment.issue_id', '=', issueId)
+                    .execute();
+                    await db.deleteFrom('external_issue_ref')
+                    .where('external_issue_ref.local_id', '=', issueId)
+                    .execute();
+                    await db.deleteFrom('issue')
+                    .where('issue.id', '=', issueId)
+                    .execute();
+                }
+                else return json({success: false, message: 'Admin role required to permanently delete issues'}, {status: 403});
+                break;
+
+            }
             default:
-                return json({success: false, message: 'Invalid action'}, { status: 400 });
+                return json({ success: false, message: 'Invalid action' }, { status: 400 });
         }
     }
     return json({ success: true });
@@ -160,9 +195,13 @@ export const loader: LoaderFunction = async ({ request, context }) => {
     const user = await authenticator.isAuthenticated(request, {
         failureRedirect: "/login",
     });
+    if (user.role !== 'admin' && user.role !== 'member') {
+        return json({ error: PERMISSION_ERROR }, { status: 403 });
+    }
     const db = getDB(context);
     const result = await db.selectFrom('issue')
         .innerJoin('route', 'route.id', 'issue.route_id')
+        .leftJoin('issue_attachment', 'issue_attachment.issue_id', 'issue.id')
         .select([
             'issue.id',
             'route.name as route_name',
@@ -174,9 +213,35 @@ export const loader: LoaderFunction = async ({ request, context }) => {
             'issue.last_status',
             'description',
             'bolts_affected',
+            'issue_attachment.id as attachment_id',
+            'issue_attachment.url',
+            'issue_attachment.name as attachment_name',
         ])
         .execute();
-    return json(result);
+    const issues = result.reduce<Record<number, Partial<IssueWithRoute>>>((acc, row) => {
+        if (!acc[row.id]) {
+            acc[row.id] = {
+                id: Number(row.id),
+                route_name: row.route_name,
+                sector_name: row.sector_name ?? "",
+                crag_name: row.crag_name ?? "",
+                issue_type: row.issue_type,
+                sub_issue_type: row.sub_issue_type,
+                status: row.status,
+                last_status: row.last_status,
+                description: row.description,
+                bolts_affected: row.bolts_affected,
+                attachments: [],
+            };
+
+        }
+        if (row.url && row.attachment_name) {
+            acc[row.id].attachments?.push({ url: context.cloudflare.env.R2_BUCKET_DOMAIN + row.url, name: row.attachment_name });
+        }
+        return acc;
+    }, {});
+
+    return json(Object.values(issues));
 }
 
 const TruncatableDescription: React.FC<{ description: string }> = ({ description }) => {
@@ -227,13 +292,17 @@ export default function IssuesIndex() {
     const issues = useLoaderData<IssueWithRoute[]>();
     const [opened, { open, close }] = useDisclosure(false);
     const [openIssue, setOpenIssue] = useState<IssueWithRoute>();
+    const [imageOverlay, setImageOverlay] = useState<{ isOpen: boolean; url: string }>({
+        isOpen: false,
+        url: "",
+    });
 
     const renderActions: DataTableColumn<IssueWithRoute>['render'] = (record: IssueWithRoute) => (
         <Group gap={4} justify="right" wrap="nowrap">
             <StatusActions
                 status={record.status}
                 lastStatus={record.last_status}
-                issueId={Number(record.id)} 
+                issueId={Number(record.id)}
             />
             <Button
                 size="compact-xs"
@@ -287,6 +356,25 @@ export default function IssuesIndex() {
                             render: (record) => <TruncatableDescription description={record.description || ''} />,
                         },
                         {
+                            accessor: "Images",
+                            render: (record) => (
+                                <Group gap={2}>
+                                    {record.attachments?.map((attachment) => (
+                                        <Image
+                                            key={attachment.name}
+                                            src={attachment.url}
+                                            alt={attachment.name ?? ""}
+                                            width={40}
+                                            height={40}
+                                            fit="contain"
+                                            style={{ cursor: 'pointer' }}
+                                            onClick={() => setImageOverlay({ isOpen: true, url: attachment.url ?? "" })}
+                                        />
+                                    ))}
+                                </Group>
+                            )
+                        },
+                        {
                             accessor: "status",
                             render: (record) =>
                                 <Badge size="md" color={`status-${record.status.toLowerCase().replace(" ", "-")}`}>{record.status}</Badge>,
@@ -306,6 +394,19 @@ export default function IssuesIndex() {
                     opened={opened} onClose={close} issue={openIssue}
                 />
             )}
+            <Modal
+                opened={imageOverlay.isOpen}
+                onClose={() => setImageOverlay({ isOpen: false, url: "" })}
+                size="auto"
+                padding="xs"
+            >
+                <Image
+                    src={imageOverlay.url}
+                    alt="Full size image"
+                    fit="contain"
+                    style={{ maxWidth: '90vw', maxHeight: '90vh' }}
+                />
+            </Modal>
         </div>
     );
 }

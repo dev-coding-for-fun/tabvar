@@ -1,7 +1,7 @@
 import { Badge, Center, Container, Group, Select, SelectProps, Stack, Text, Title } from "@mantine/core";
 import { LoaderFunction, json } from "@remix-run/cloudflare";
 import { Link, useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
-import { Crag, Issue } from "kysely-codegen";
+import { Crag, Issue, IssueAttachment } from "kysely-codegen";
 import { DataTable } from "mantine-datatable";
 import { getDB } from "~/lib/db";
 import { IconCheck, IconClick, IconViewfinder } from "@tabler/icons-react";
@@ -9,14 +9,16 @@ import { useEffect, useRef, useState } from "react";
 import { showNotification } from "@mantine/notifications";
 import { authenticator } from "~/lib/auth.server";
 
-export interface IssueWithRoute extends Issue {
+export interface IssueWithRoute extends Omit<Issue, 'id'> {
+    id: number;
     route_name: string;
     sector_name: string;
     crag_name: string;
+    attachments?: Partial<IssueAttachment>[];
 }
 
 export const loader: LoaderFunction = async ({ context, request }) => {
-    const user: User = await authenticator.isAuthenticated(request, {
+    const user = await authenticator.isAuthenticated(request, {
         failureRedirect: "/login",
     });
 
