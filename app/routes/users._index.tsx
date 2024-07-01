@@ -1,8 +1,8 @@
-import { ActionIcon, Badge, Button, Center, Container, Group, Modal, Popover, Select, Stack, Text } from "@mantine/core";
+import { ActionIcon, Badge, Button, Center, Container, Group, Popover, Select, Stack, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { ActionFunction, LoaderFunction, json, redirect } from "@remix-run/cloudflare";
 import { Form, useLoaderData, useSubmit } from "@remix-run/react";
-import { IconClick, IconSquareKey, IconUserMinus, IconX } from "@tabler/icons-react";
+import { IconClick, IconSquareKey, IconUserMinus } from "@tabler/icons-react";
 import { User } from "kysely-codegen";
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { useState } from "react";
@@ -26,6 +26,12 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
+    const user: User = await authenticator.isAuthenticated(request, {
+        failureRedirect: "/login",
+    });
+    if (user.role !== 'admin') {
+        return json({ error: PERMISSION_ERROR }, { status: 403 });
+    }
     const formData = await request.formData();
     const action = formData.get("action");
     const userId = formData.get("uid")?.toString();
