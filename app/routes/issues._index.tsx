@@ -1,10 +1,10 @@
-import { Badge, Center, Container, Group, Select, SelectProps, Stack, Text, Title } from "@mantine/core";
+import { Badge, Container, Group, Select, SelectProps, Stack, Text, Title, Tooltip } from "@mantine/core";
 import { LoaderFunction, json } from "@remix-run/cloudflare";
 import { Link, useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
-import { Crag, Issue, IssueAttachment } from "kysely-codegen";
+import { Crag, Issue, IssueAttachment, User } from "kysely-codegen";
 import { DataTable } from "mantine-datatable";
 import { getDB } from "~/lib/db";
-import { IconCheck, IconClick, IconViewfinder } from "@tabler/icons-react";
+import { IconCheck, IconChevronRight, IconFlag } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { showNotification } from "@mantine/notifications";
 import { authenticator } from "~/lib/auth.server";
@@ -23,7 +23,7 @@ export const loader: LoaderFunction = async ({ context, request }) => {
     });
 
     const db = getDB(context);
-    const result = await db.selectFrom('crag')
+    const crags = await db.selectFrom('crag')
         .select([
             'crag.id',
             'crag.name',
@@ -31,17 +31,18 @@ export const loader: LoaderFunction = async ({ context, request }) => {
             'crag.stats_issue_flagged',
         ])
         .execute();
-    return json(result);
+    return json({ crags: crags, user: user });
 }
 
 
 export default function IssuesIndex() {
     const [searchParams] = useSearchParams();
-    const crags = useLoaderData<Crag[]>();
+    const { crags, user } = useLoaderData<{ crags: Crag[], user: User; }>();
     const fetcher = useFetcher();
     const [issues, setIssues] = useState<IssueWithRoute[]>([]);
     const [selectedCrag, setSelectedCrag] = useState<{ id: string | null; name: string | null }>({ id: null, name: null });
     const cragSelectRef = useRef<HTMLInputElement>(null);
+    const fz = "sm";
 
     useEffect(() => {
         if (fetcher.data) {
@@ -70,7 +71,7 @@ export default function IssuesIndex() {
         if (crag?.stats_public_issue_count !== undefined) issueCount = Number(crag?.stats_public_issue_count);
         return (
             <Group flex="1" gap="xs">
-                {checked && <IconViewfinder />}
+                {checked && <IconChevronRight />}
                 {option.label}
                 {issueCount > 0 && <Badge circle color="red">{crags.find(crag => crag.id?.toString() === option.value)?.stats_active_issue_count}</Badge>}
             </Group>
@@ -82,7 +83,12 @@ export default function IssuesIndex() {
 
             <Stack>
                 <Title order={1}>Route Issues</Title>
-                <Link to={`/issues/create`}>➕ Submit new issue</Link>
+                <Stack gap="xs">
+                    <Link to={`/issues/create`}>➕ Submit New Issue</Link>
+                    {(user.role === 'admin' || user.role === "member") && (
+                        <Link to={`/issues/manage`}>⚙️ Manage Issues</Link>
+                    )}
+                </Stack>
                 <Select
                     label="Pick a crag"
                     placeholder="Pick one"
@@ -111,13 +117,13 @@ export default function IssuesIndex() {
                     records={issues}
                     columns={[
                         {
-                            accessor: "id",
-                            textAlign: "right",
-                        },
-                        {
                             accessor: "route_name",
                             render: (record) =>
                                 <Group>
+                                    {(record.is_flagged === 1) && (
+                                        <Tooltip position="top" withArrow label={record.flagged_message} fz={fz}>
+                                                <IconFlag fill="red" color="red" />                                  
+                                        </Tooltip>)}
                                     <Text>{record.route_name}</Text>
                                     <Badge size="xs" color="sector-color">{record.sector_name}</Badge>
                                 </Group>,
@@ -137,11 +143,6 @@ export default function IssuesIndex() {
                             accessor: "status",
                             render: (record) =>
                                 <Badge size="md" color={`status-${record.status.toLowerCase().trim()}`}>{record.status}</Badge>,
-                        },
-                        {
-                            accessor: "actions",
-                            title: (<Center><IconClick size={16} /></Center>),
-                            width: '0%',
                         },
                     ]}
 
