@@ -18,7 +18,9 @@ export default function Index() {
       <ul>
         <li>
           <Link to={`/issues/create`}>Create Issue</Link>
+        </li><li>
           <Link to={`/issues/`}>View Issues</Link>
+        </li><li>
           <Link to={`/issues/manage`}>Manage Issues</Link>
         </li>
       </ul>
