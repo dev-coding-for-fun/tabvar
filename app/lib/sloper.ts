@@ -8,7 +8,6 @@ import { nanoid } from "nanoid";
 import { parse } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { getLogMessages, clearLogMessages } from "./logger";
-import { ExtractColumnType } from "node_modules/kysely/dist/esm/util/type-utils";
 
 const SLOPER_AUTH_PATH = "/DesktopModules/JwtAuth/API/mobile/login"
 const SLOPER_ROUTES_PATH = "/API/SloperPlatform/Route/?isEnabled=1";
@@ -91,11 +90,13 @@ export function importSloperIssueMetadata(sloperIssue: SloperIssue): Partial<Iss
     const issue: Partial<Issue> = {
         description: "",
     };
-    if (sloperIssue.comments)
-        issue.description = `📥(Imported comment): ${he.decode(sloperIssue.comments)}`;
-    if (sloperIssue.TROUTE.route_safety_notice)
-        issue.description += `\n📥(Imported notice): ${he.decode(sloperIssue.TROUTE.route_safety_notice)}`;
-    issue.description = issue.description?.trim();
+    if (sloperIssue.comments) {
+        issue.description = he.decode(sloperIssue.comments.trim());
+    }
+    if (sloperIssue.TROUTE.route_safety_notice) {
+        issue.flagged_message = he.decode(sloperIssue.TROUTE.route_safety_notice.trim());
+        issue.is_flagged = 1;
+    } else issue.is_flagged = 0;
     const { issueType, subIssueType } = convertSloperToTabvarTypes(Number(sloperIssue.issue_category_id), Number(sloperIssue.issue_type_id), Number(sloperIssue.issue_type_detail_id));
     issue.issue_type = issueType;
     issue.sub_issue_type = subIssueType;
@@ -106,7 +107,6 @@ export function importSloperIssueMetadata(sloperIssue: SloperIssue): Partial<Iss
     issue.reported_by = he.decode(sloperIssue.user_name);
     return issue;
 }
-
 
 async function getSloperAuth(context: AppLoadContext): Promise<string | null> {
     const response = await fetch(context.cloudflare.env.SLOPER_URL + SLOPER_AUTH_PATH, {
@@ -566,7 +566,7 @@ export async function syncSloperCragsAndSectors(context: AppLoadContext, bookInd
     try {
         const bookId = SLOPER_GUIDEBOOKS[bookIndex];
         if (!bookId) return { log: ["Error: invalid book id"] };
-        
+
         const cragResponse = await getSloperData<any>(context, SLOPER_CRAGS_PATH + `&guidebookId=${bookId}`);
         const [insertedCrags, updatedCrags, dupeCrags] = await updateCrags(context, cragResponse.data);
         console.log(`Sloper: ${updatedCrags} crags updated. ${insertedCrags} crags added. Found ${dupeCrags} duplicates`);
@@ -639,6 +639,8 @@ export async function syncSloperIssues(context: AppLoadContext): Promise<SloperS
                             sub_issue_type: localIssue.sub_issue_type,
                             status: localIssue.status,
                             description: localIssue.description,
+                            is_flagged: localIssue.is_flagged,
+                            flagged_message: localIssue.flagged_message,
                             bolts_affected: localIssue.bolts_affected,
                             reported_by: localIssue.reported_by,
                             reported_at: localIssue.reported_at,
@@ -661,6 +663,8 @@ export async function syncSloperIssues(context: AppLoadContext): Promise<SloperS
                             sub_issue_type: localIssue.sub_issue_type,
                             status: localIssue.status ?? "",
                             description: localIssue.description,
+                            is_flagged: localIssue.is_flagged,
+                            flagged_message: localIssue.flagged_message,
                             bolts_affected: localIssue.bolts_affected,
                             reported_by: localIssue.reported_by,
                             reported_at: localIssue.reported_at,

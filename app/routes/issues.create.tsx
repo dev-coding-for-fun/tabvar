@@ -103,7 +103,7 @@ export default function CreateIssue() {
 
   const isSubIssueDisabled = (subIssue: string) => {
     if (!selectedIssueType) return true;
-    return !subIssuesByType[selectedIssueType].includes(subIssue);
+    return !subIssuesByType[selectedIssueType].includes(subIssue as SubIssueType);
   };
 
   const icon = <IconPhotoUp style={{ width: rem(18), height: rem(18) }} stroke={1.5} />;
