@@ -8,6 +8,7 @@ import {
 import '@mantine/core/styles.layer.css';
 import 'mantine-datatable/styles.layer.css';
 import '@mantine/notifications/styles.css';
+import './styles/custom.css'
 
 import { ColorSchemeScript, DEFAULT_THEME, MantineProvider, createTheme } from '@mantine/core';
 import { Notifications } from "@mantine/notifications";
@@ -23,7 +24,8 @@ const theme = createTheme({
     'status-viewed' : DEFAULT_THEME.colors.indigo,
     'status-completed' : DEFAULT_THEME.colors.green,
     'status-archived': DEFAULT_THEME.colors.red,
-  }
+  },
+  fontFamily: "'Lato', sans-serif",
 })
 
 export function Layout({ children }: { children: React.ReactNode }) {

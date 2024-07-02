@@ -1,0 +1,15 @@
+.mantine-Badge-root {
+    padding-top: 2px;  /* Adjust this value as needed */
+  }
+
+.mantine-Select-input {
+    padding-top: 2px;
+}
+
+.mantine-PillsInputField-field {
+    padding-top: 2px;
+}
+
+.mantine-FileInput-input {
+    padding-top: 7px;
+}
