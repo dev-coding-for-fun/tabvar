@@ -27,6 +27,11 @@ function getGoogleStrategy(context: AppLoadContext): GoogleStrategy<User> {
                 .where('uid', '=', id)
                 .executeTakeFirst();
             if (!user) {
+                const invite = await db.selectFrom('user_invite')
+                    .selectAll()
+                    .where("email", "=", email)
+                    .executeTakeFirst();
+                const role = (invite !== undefined) ? invite.role : "anonymous";
                 user = await db.insertInto('user')
                     .values({
                         uid: id,
@@ -35,7 +40,7 @@ function getGoogleStrategy(context: AppLoadContext): GoogleStrategy<User> {
                         email_verified: 1,
                         provider_id: 'google',
                         avatar_url: avatarUrl,
-                        role: "anonymous",
+                        role: role,
                     })
                     .returningAll().executeTakeFirstOrThrow();
             }
