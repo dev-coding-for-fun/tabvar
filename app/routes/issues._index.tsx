@@ -7,7 +7,7 @@ import { getDB } from "~/lib/db";
 import { IconCheck, IconChevronRight, IconFlag } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { showNotification } from "@mantine/notifications";
-import { authenticator } from "~/lib/auth.server";
+import { getAuthenticator } from "~/lib/auth.server";
 
 export interface IssueWithRoute extends Omit<Issue, 'id'> {
     id: number;
@@ -18,7 +18,8 @@ export interface IssueWithRoute extends Omit<Issue, 'id'> {
 }
 
 export const loader: LoaderFunction = async ({ context, request }) => {
-    const user = await authenticator.isAuthenticated(request, {
+    const x = await getAuthenticator(context);
+        const user = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
 
@@ -29,7 +30,7 @@ export const loader: LoaderFunction = async ({ context, request }) => {
             'crag.name',
             (user.role) ? 'crag.stats_active_issue_count' : 'crag.stats_public_issue_count',
             'crag.stats_issue_flagged',
-        ])
+        ]).orderBy([(user.role) ? 'crag.stats_active_issue_count desc' : 'crag.stats_public_issue_count desc', 'crag.name'])
         .execute();
     return json({ crags: crags, user: user });
 }

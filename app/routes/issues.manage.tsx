@@ -3,7 +3,7 @@ import { ActionFunction, AppLoadContext, LoaderFunction, json } from "@remix-run
 import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { getDB } from "~/lib/db";
-import { authenticator } from "~/lib/auth.server";
+import { getAuthenticator } from "~/lib/auth.server";
 import { IconArchive, IconArrowBack, IconCheck, IconClick, IconEdit, IconFileX, IconFlag, IconRubberStamp } from "@tabler/icons-react";
 import IssueDetailsModal from "~/components/issueDetailModal";
 import { useDisclosure } from "@mantine/hooks";
@@ -166,7 +166,7 @@ async function deleteIssue(context: AppLoadContext, issueId: number, user: User)
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
-    const user = await authenticator.isAuthenticated(request, {
+    const user = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin' && user.role !== 'member') {
@@ -301,7 +301,7 @@ export const action: ActionFunction = async ({ request, context }) => {
 }
 
 export const loader: LoaderFunction = async ({ request, context }) => {
-    const user = await authenticator.isAuthenticated(request, {
+    const user = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin' && user.role !== 'member') {

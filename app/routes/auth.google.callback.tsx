@@ -1,8 +1,8 @@
 import { ActionFunctionArgs } from '@remix-run/cloudflare'
-import { authenticator } from '~/lib/auth.server'
+import { getAuthenticator } from '~/lib/auth.server'
 
-export const loader = ({ request }: ActionFunctionArgs) => {
-  return authenticator.authenticate('google', request, {
+export const loader = ({ request, context }: ActionFunctionArgs) => {
+  return getAuthenticator(context).authenticate('google', request, {
     successRedirect: '/issues',
     failureRedirect: '/login',
   })

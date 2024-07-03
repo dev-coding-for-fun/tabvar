@@ -8,12 +8,12 @@ import { User, UserInvite } from "kysely-codegen";
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { useEffect, useState } from "react";
 import { useErrorNotification } from "~/components/useErrorNotification";
-import { authenticator } from "~/lib/auth.server";
+import { getAuthenticator } from "~/lib/auth.server";
 import { PERMISSION_ERROR, userRoles } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 
 export const loader: LoaderFunction = async ({ request, context }) => {
-    const user: User = await authenticator.isAuthenticated(request, {
+    const user: User = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {
@@ -30,7 +30,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
-    const user: User = await authenticator.isAuthenticated(request, {
+    const user: User = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {

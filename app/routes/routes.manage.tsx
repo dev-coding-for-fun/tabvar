@@ -3,7 +3,7 @@ import { ActionFunction, LoaderFunction, json } from "@remix-run/cloudflare";
 import { useFetcher } from "@remix-run/react";
 import { Issue, User } from "kysely-codegen";
 import { useEffect, useState } from "react";
-import { authenticator } from "~/lib/auth.server";
+import { getAuthenticator } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { SloperSyncResult, SyncedSector, syncSloperCragsAndSectors, syncSloperIssues, syncSloperRoutes } from "~/lib/sloper";
 
@@ -13,8 +13,8 @@ export interface IssueWithRoute extends Issue {
     crag_name: string;
 }
 
-export const loader: LoaderFunction = async ({ request }) => {
-    const user: User = await authenticator.isAuthenticated(request, {
+export const loader: LoaderFunction = async ({ request, context }) => {
+    const user: User = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {
@@ -24,7 +24,7 @@ export const loader: LoaderFunction = async ({ request }) => {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
-    const user = await authenticator.isAuthenticated(request, {
+    const user = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {

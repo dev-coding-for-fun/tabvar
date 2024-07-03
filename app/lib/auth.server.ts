@@ -1,20 +1,33 @@
 // app/services/auth.server.ts
-import { AppLoadContext } from '@remix-run/cloudflare';
+import { AppLoadContext, createCookieSessionStorage, redirect } from '@remix-run/cloudflare';
 import { Authenticator } from 'remix-auth';
 import { GoogleStrategy } from 'remix-auth-google'
 import { getDB } from './db';
-import { sessionStorage } from './session.server';
 import { Generated, User } from 'kysely-codegen';
 
-export const authenticator = new Authenticator<User>(sessionStorage);
+let _authenticator: Authenticator<User> | null = null;
+let _sessionStorage: ReturnType<typeof createCookieSessionStorage> | null = null;
 
-function getGoogleStrategy(context: AppLoadContext): GoogleStrategy<User> {
-    const env = context.cloudflare.env as Env
-    return new GoogleStrategy<User>(
+
+export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
+    if (_authenticator?.isAuthenticated !== undefined) return _authenticator;
+    _sessionStorage  = createCookieSessionStorage({
+        cookie: {
+            name: "_session",
+            sameSite: "lax",
+            path: "/",
+            httpOnly: true,
+            secrets: [context.cloudflare.env.COOKIE_SECRET],
+            secure: context.cloudflare.env.ENVIRONMENT === "production",
+        },
+    });
+    _authenticator = new Authenticator<User>(_sessionStorage);
+
+    const googleStrategy = new GoogleStrategy<User>(
         {
-            clientID: env.GOOGLE_CLIENT_ID ?? '',
-            clientSecret: env.GOOGLE_CLIENT_SECRET ?? '',
-            callbackURL: env.BASE_URL + '/auth/google/callback',
+            clientID: context.cloudflare.env.GOOGLE_CLIENT_ID ?? '',
+            clientSecret: context.cloudflare.env.GOOGLE_CLIENT_SECRET ?? '',
+            callbackURL: context.cloudflare.env.BASE_URL + '/auth/google/callback',
         },
         async ({ profile }) => {
             const db = getDB(context);
@@ -55,8 +68,17 @@ function getGoogleStrategy(context: AppLoadContext): GoogleStrategy<User> {
             };
         }
     );
+    _authenticator.use(googleStrategy);
+    return _authenticator;
 }
 
-export function initAuth(context: AppLoadContext) {
-    authenticator.use(getGoogleStrategy(context));
+export async function logout(request: Request) {
+    if (!_sessionStorage) throw new Error("Session storage not initialized");
+    
+    const session = await _sessionStorage.getSession(request.headers.get("Cookie"));
+    return redirect("/login", {
+        headers: {
+            "Set-Cookie": await _sessionStorage.destroySession(session),
+        },
+    });
 }
