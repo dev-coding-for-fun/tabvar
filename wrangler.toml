@@ -77,7 +77,7 @@ bucket_name = "tabvar-issues-uploads"
 ENVIRONMENT = "production"
 COOKIE_DOMAIN="tabvar.org"
 GOOGLE_CLIENT_ID="823275884172-dpbp17m92idbn1mruag4j5sdr0brripl.apps.googleusercontent.com"
-BASE_URL="https://tabvar.pages.dev"
+BASE_URL="https://app.tabvar.org"
 SLOPER_URL="https://www.sloperclimbing.com"
 
 [[env.production.d1_databases]]
