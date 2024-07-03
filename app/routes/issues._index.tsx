@@ -18,7 +18,6 @@ export interface IssueWithRoute extends Omit<Issue, 'id'> {
 }
 
 export const loader: LoaderFunction = async ({ context, request }) => {
-    const x = await getAuthenticator(context);
         const user = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });

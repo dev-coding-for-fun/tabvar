@@ -19,6 +19,7 @@ export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
             httpOnly: true,
             secrets: [context.cloudflare.env.COOKIE_SECRET],
             secure: context.cloudflare.env.ENVIRONMENT === "production",
+            domain: context.cloudflare.env.COOKIE_DOMAIN
         },
     });
     _authenticator = new Authenticator<User>(_sessionStorage);
