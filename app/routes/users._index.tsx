@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Button, Center, Container, Group, List, Popover, Select, Stack, Text, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Badge, Button, Center, Container, Group, List, Popover, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
 import { ActionFunction, LoaderFunction, json, redirect } from "@remix-run/cloudflare";
@@ -69,25 +69,28 @@ export const action: ActionFunction = async ({ request, context }) => {
             return json({ success: true });
         }
         case "create_invite": {
-            const inviteEmail = formData.get("invite_email")?.toString();
+            const inviteEmails = formData.get("invite_email")?.toString();
             const inviteName = formData.get("invite_name")?.toString();
             const inviteRole = formData.get("invite_role")?.toString();
-            if (inviteEmail && inviteRole) {
+            if (inviteEmails && inviteRole) {
                 const db = getDB(context);
-                try {
-                    await db.insertInto('user_invite')
-                        .values({
-                            email: inviteEmail,
-                            display_name: inviteName || null,
-                            role: inviteRole || null,
-                            invited_by_uid: user.uid,
-                            invited_by_name: user.display_name ?? "",
-                            token_expires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 365 days from now
-                        })
-                        .execute();
-                } catch (error) {
-                    if (error instanceof Error) console.log(error.message);
-                    return json({ success: false, message: `Could not create invite. If this email is already invited, delete it first to re-invite.` }, { status: 500 });
+                const emails = inviteEmails.split(/[,;\s]+/).filter(email => email.trim());
+                for (const email of emails) {
+                    try {
+                        await db.insertInto('user_invite')
+                            .values({
+                                email: email.trim(),
+                                display_name: emails.length === 1 ? inviteName || null : null,
+                                role: inviteRole || null,
+                                invited_by_uid: user.uid,
+                                invited_by_name: user.display_name ?? "",
+                                token_expires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 365 days from now
+                            })
+                            .execute();
+                    } catch (error) {
+                        if (error instanceof Error) console.log(error.message);
+                        return json({ success: false, message: `Could not create invite. If this email is already invited, delete it first to re-invite.` }, { status: 500 });
+                    }
                 }
                 return json({ success: true, message: `Invite created.` });
             }
@@ -240,14 +243,15 @@ export default function UsersIndex() {
                 <Form method="post">
                     <input type="hidden" name="action" value="create_invite" />
                     <Stack>
-                        <TextInput
+                        <Textarea
                             name="invite_email"
                             label="Email"
+                            description="Enter an email or a list of emails separated by a semicolon"
                             required
                         />
                         <TextInput
                             name="invite_name"
-                            label="Name (optional)"
+                            label="Name (optional, single email invitations only)"
                         />
                         <Select
                             name="invite_role"
