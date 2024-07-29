@@ -1,0 +1,96 @@
+/* CSS for the Header */
+
+.header-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 28px;
+    font-weight: 300;
+    background-color: #ffffff; /* White background */
+  }
+  
+  .logo {
+    height: 40px; /* Adjust logo size */
+  }
+
+  .main-navigation {
+    margin-left: auto; 
+    margin-right: 20px;
+  }
+  
+  .nav-list {
+    display: flex;
+    list-style: none;
+    margin: 0 10px 0 0;
+    padding: 0;
+  }
+  
+  .nav-item {
+    position: relative;
+    margin-left: 15px; /* Spacing between nav items */
+  }
+  
+  .nav-link {
+    text-decoration: none;
+    font-size: 16px;
+    color: #333; /* Dark grey color */
+    padding: 5px 10px;
+    transition: color 0.3s;
+  }
+  
+  .nav-link:hover {
+    color: #000; /* Black color on hover */
+  }
+  
+  .has-submenu .nav-link::after {
+    content: ""; /* Down arrow for submenu */
+    margin-left: 5px;
+    font-size: 12px;
+  }
+  
+  .submenu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: #333333;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    border-radius: 4px;
+    white-space: nowrap;
+    padding: 10px 0;
+  }
+  
+  .submenu-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .submenu-item {
+    padding: 10px 20px;
+  }
+  
+  .submenu-link {
+    text-decoration: none;
+    color: #fff;
+    display: block;
+    font-size: 16px;
+    transition: color 0.3s;
+  }
+  
+  .submenu-link:hover {
+    color: #a8d5e2;
+  }
+  
+  /* Show submenu on hover */
+  .nav-item.has-submenu:hover .submenu {
+    display: block;
+  }
+  
+  .nav-item svg {
+    width: 12px;
+    height: 12px;
+    transform: scale(2);
+    stroke: rgba(0,0,0,0.6);
+  }

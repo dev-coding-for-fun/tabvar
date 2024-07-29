@@ -17,8 +17,9 @@
   "dependencies": {
     "@alwaysmeticulous/recorder-loader": "^2.132.0",
     "@aws-sdk/client-s3": "^3.583.0",
-    "@mantine/core": "^7.9.0",
-    "@mantine/hooks": "^7.9.0",
+    "@mantine/core": "^7.11.0",
+    "@mantine/dates": "^7.11.2",
+    "@mantine/hooks": "^7.11.0",
     "@mantine/notifications": "^7.10.0",
     "@remix-run/cloudflare": "^2.9.2",
     "@remix-run/cloudflare-pages": "^2.8.1",
