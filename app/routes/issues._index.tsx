@@ -93,6 +93,7 @@ export default function IssuesIndex() {
                     label="Pick a crag"
                     placeholder="Pick one"
                     searchable
+                    scrollAreaProps={{ type: "auto" }}
                     maxDropdownHeight={600}
                     renderOption={renderSelectOption}
                     data={crags.map((crag) => ({ value: crag.id.toString(), label: crag.name ?? '' }))}
