@@ -1,4 +1,4 @@
-import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip } from "@mantine/core";
+import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput } from "@mantine/core";
 import { ActionFunction, AppLoadContext, LoaderFunction, json } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { DataTable, DataTableColumn } from "mantine-datatable";
@@ -13,7 +13,9 @@ import { PERMISSION_ERROR } from "~/lib/constants";
 import { deleteFromR2 } from "~/lib/s3.server";
 import { R2_UPLOADS_BUCKET } from "./issues.create";
 import { Issue, User } from "kysely-codegen";
-
+import RouteSearchBox from "~/components/routeSearchBox";
+import { SerializeFrom } from "@remix-run/server-runtime";
+import { RouteSearchResults } from "~/routes/api.search";
 
 const StatusActions: React.FC<{
     status: string,
@@ -313,6 +315,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         .leftJoin('issue_attachment', 'issue_attachment.issue_id', 'issue.id')
         .select([
             'issue.id',
+            'issue.route_id',
             'route.name as route_name',
             'route.sector_name',
             'route.crag_name',
@@ -333,6 +336,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         if (!acc[row.id]) {
             acc[row.id] = {
                 id: Number(row.id),
+                route_id: row.route_id,
                 route_name: row.route_name,
                 sector_name: row.sector_name ?? "",
                 crag_name: row.crag_name ?? "",
@@ -406,16 +410,33 @@ const TruncatableDescription: React.FC<{ description: string, fz: string }> = ({
 };
 
 export default function IssuesManager() {
-    const { issues, user } = useLoaderData<{ issues: IssueWithRoute[]; user: User; }>();
+    const { issues, user } = useLoaderData<{ issues: SerializeFrom<IssueWithRoute[]>; user: User; }>();
     const [opened, { open, close }] = useDisclosure(false);
-    const [openIssue, setOpenIssue] = useState<IssueWithRoute>();
+    const [openIssue, setOpenIssue] = useState<SerializeFrom<IssueWithRoute>>();
+    const [selectedResult, setSelectedResult] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filteredIssues, setFilteredIssues] = useState<SerializeFrom<IssueWithRoute>[]>(issues);
+    const searchFetcher = useFetcher<RouteSearchResults[]>();
     const [imageOverlay, setImageOverlay] = useState<{ isOpen: boolean; url: string }>({
         isOpen: false,
         url: "",
     });
     const fz = "sm";
 
-    const renderActions: DataTableColumn<IssueWithRoute>['render'] = (record: IssueWithRoute) => (
+    // Effect to handle search results and filter issues
+    useEffect(() => {
+        if (searchFetcher.data && searchQuery.length > 1) {
+            const searchResults = searchFetcher.data;
+            const matchingIssues = issues.filter(issue => 
+                searchResults.some(route => issue.route_id === route.id)
+            );
+            setFilteredIssues(matchingIssues);
+        } else if (searchQuery.length <= 1) {
+            setFilteredIssues(issues);
+        }
+    }, [searchFetcher.data, searchQuery, issues]);
+
+    const renderActions: DataTableColumn<SerializeFrom<IssueWithRoute>>['render'] = (record: SerializeFrom<IssueWithRoute>) => (
         <Group gap={4} justify="right" wrap="nowrap">
             <StatusActions
                 status={record.status}
@@ -437,6 +458,10 @@ export default function IssuesManager() {
         </Group>
     );
 
+    function handleSearchChange(selected: { value: string | null; boltCount: number | null; }): void {
+        throw new Error("Function not implemented.");
+    }
+
     return (
         <Container size="xl">
             <Stack>
@@ -447,14 +472,29 @@ export default function IssuesManager() {
                         <Link to={`/issues/`}>🔍 Explore Issues</Link>
                     )}
                 </Stack>
-                <DataTable
+
+                <TextInput
+                    placeholder="Filter by route, sector, or crag..."
+                    value={searchQuery}
+                    onChange={(event) => {
+                        const query = event.currentTarget.value;
+                        setSearchQuery(query);
+                        if (query.length > 1) {
+                            searchFetcher.load(`/api/search?query=${encodeURIComponent(query)}&limit=500`);
+                        } else {
+                            setFilteredIssues(issues);
+                        }
+                    }}
+                />
+
+                <DataTable<SerializeFrom<IssueWithRoute>>
                     withTableBorder
                     borderRadius="sm"
                     fz={fz}
                     withColumnBorders
                     striped
                     highlightOnHover
-                    records={issues as IssueWithRoute[]}
+                    records={filteredIssues}
                     columns={[
                         {
                             accessor: "id",
@@ -466,7 +506,7 @@ export default function IssuesManager() {
                                 <Group gap={4}>
                                     {(record.is_flagged === 1) && (
                                         <Tooltip position="top" withArrow label={record.flagged_message} fz={fz}>
-                                                <IconFlag fill="red" color="red" />                                  
+                                            <IconFlag fill="red" color="red" />
                                         </Tooltip>)}
                                     <Text fz={fz}>{record.route_name}</Text>
                                     <Group gap={4} wrap="nowrap">
@@ -522,7 +562,7 @@ export default function IssuesManager() {
             </Stack>
             {openIssue && (
                 <IssueDetailsModal
-                    opened={opened} onClose={close} issue={openIssue}
+                    opened={opened} onClose={close} issue={openIssue as IssueWithRoute}
                 />
             )}
             <Modal
