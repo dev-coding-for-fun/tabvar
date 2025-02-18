@@ -1,11 +1,13 @@
-import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Stack, Textarea, Title, rem } from "@mantine/core";
+import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Space, Stack, Textarea, Title, rem } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
 import { ActionFunction, json, redirect } from "@remix-run/cloudflare";
 import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
 import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
+import RouteDetailsModal from "~/components/routeDetailsModal";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
+import { getAuthenticator } from "~/lib/auth.server";
 import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 import { uploadFileToR2 } from "~/lib/s3.server";
@@ -30,6 +32,9 @@ const validateIssueType = (issueType: string) => {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
+  const user = await getAuthenticator(context).isAuthenticated(request, {
+    failureRedirect: "/login",
+  });
   const formData = await request.formData();
   const routeId = formData.get("route")?.toString() ?? '';
   const issueType = formData.get("issueType")?.toString() ?? '';
@@ -95,6 +100,7 @@ export default function CreateIssue() {
   const [overlayVisible, { open, close }] = useDisclosure(false);
   const formRef = useRef<HTMLFormElement>(null);
   const searchBoxRef = useRef<SearchBoxRef | null>(null);
+  const [routeModalOpened, setRouteModalOpened] = useState(false);
 
 
   const actionData = useActionData<{ [key: string]: string }>();
@@ -168,7 +174,7 @@ export default function CreateIssue() {
     }
 
     else if (validFiles.length === files.length) {
-      setFileError(null); 
+      setFileError(null);
     }
     setSelectedFiles(validFiles);
   };
@@ -176,9 +182,10 @@ export default function CreateIssue() {
   return (
     <Container size="md" p="md">
       <Stack>
-      <Title order={1}>Submit an issue</Title>
-      <Link to={`/issues/`}>👁‍🗨 View Issues</Link>
+        <Title order={1}>Submit an issue</Title>
+        <Link to={`/issues/`}>👁‍🗨 View Issues</Link>
       </Stack>
+
       <Form method="post" ref={formRef} encType="multipart/form-data">
         <LoadingOverlay visible={overlayVisible} zIndex={1000} overlayProps={{ radius: "sm", blur: 2 }} />
         <RouteSearchBox
@@ -189,6 +196,8 @@ export default function CreateIssue() {
           value={selectedRoute}
           ref={searchBoxRef}
         />
+        <Button variant="subtle" size="compact-sm" onClick={() => setRouteModalOpened(true)}>➕ New Route</Button>
+        <Space h="sm" />
         <Stack>
           <Radio.Group
             label="Select what is affected by the issue"
@@ -250,6 +259,10 @@ export default function CreateIssue() {
           </Group>
         </Stack>
       </Form>
+      <RouteDetailsModal
+        opened={routeModalOpened}
+        onClose={() => setRouteModalOpened(false)}
+      />
     </Container>
   )
 }
