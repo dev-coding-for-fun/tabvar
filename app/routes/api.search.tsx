@@ -11,6 +11,7 @@ export interface RouteSearchResults extends RouteSearch {
 export const loader: LoaderFunction = async ({ request, context }) => {
     const url = new URL(request.url);
     const separateRouteCragSector = url.searchParams.get('separateRouteCragSector') === 'true';
+    const limit: number = Number(url.searchParams.get('limit')) || 10;
     const query = url.searchParams.get('query')?.replace(/[^a-zA-Z0-9\s]/g, '') || null;
     if (!query) {
         return new Response(JSON.stringify({ routes: [] }), {
@@ -63,7 +64,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                         sql<string>`pitch_count`.as('pitch_count')
                     ])
             ) 
-            .limit(10)
+            .limit(limit)
             .execute();
         console.log(results);
         return json(results);
@@ -80,7 +81,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                 'bolt_count',
                 'pitch_count'
             ])
-            .limit(10)
+            .limit(limit)
             .execute();
         return json(routes);
     }
