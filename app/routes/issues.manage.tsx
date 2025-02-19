@@ -37,7 +37,7 @@ const StatusActions: React.FC<{
         case "In Moderation":
             return (
                 <Group gap={4} justify="right" wrap="nowrap">
-                    <Button size="compact-xs" leftSection={<IconRubberStamp style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("accept")}>Accept</Button>
+                    <Button size="compact-xs" leftSection={<IconRubberStamp style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("accept")}>Accept Issue</Button>
                     <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("archive")}>Delete</Button>
                 </Group>
             );
@@ -45,7 +45,7 @@ const StatusActions: React.FC<{
         case "Viewed":
             return (
                 <Group gap={4} justify="right" wrap="nowrap">
-                    <Button size="compact-xs" leftSection={<IconCheck style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("complete")}>Done</Button>
+                    <Button size="compact-xs" leftSection={<IconCheck style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("complete")}>Mark as Done</Button>
                     <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("archive")}>Delete</Button>
                 </Group>
             );
