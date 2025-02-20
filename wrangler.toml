@@ -79,6 +79,7 @@ COOKIE_DOMAIN="tabvar.org"
 GOOGLE_CLIENT_ID="823275884172-dpbp17m92idbn1mruag4j5sdr0brripl.apps.googleusercontent.com"
 BASE_URL="https://app.tabvar.org"
 SLOPER_URL="https://www.sloperclimbing.com"
+MAPBOX_STYLE_URL="mapbox://styles/mapbox/outdoors-v12"
 
 [[env.production.d1_databases]]
 binding = "DB"
