@@ -13,6 +13,7 @@ class HtmlDecodePlugin implements KyselyPlugin {
       '&lt;': '<',
       '&gt;': '>',
       '&amp;': '&',
+      '&#8217;': "'",
       // Add more entities if needed
     }
     return text.replace(/&#?\w+;/g, entity => entities[entity] || entity)
