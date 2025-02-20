@@ -7,6 +7,18 @@ export function getLabelFromValue<T extends { value: string, label: string }[]>(
     return foundItem ? foundItem.label : valueToFind;
 }
 
+export function getGradeColor(grade: string | null): string {
+    if (!grade) return 'var(--mantine-color-yellow-5)';
+    
+    const numericGrade = parseFloat(grade.replace('5.', ''));
+    
+    if (numericGrade <= 10.4) return 'var(--mantine-color-green-6)';    // 5.0-5.10d
+    if (numericGrade <= 11.4) return 'var(--mantine-color-blue-7)';     // 5.11a-5.11d
+    if (numericGrade <= 12.4) return 'var(--mantine-color-dark-7)';     // 5.12a-5.12d
+    if (numericGrade > 12.4) return 'var(--mantine-color-red-7)';     // 5.13a+
+    return 'var(--mantine-color-yellow-5)';                             // everything else
+}
+
 export type IssueType = typeof issueTypes[number]['value'];
 export type SubIssueType = typeof subIssues[number]['value'];
 export type RolesType = typeof userRoles[number]['value'];
