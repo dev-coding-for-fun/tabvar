@@ -10,7 +10,7 @@
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "start": "wrangler pages dev ./build/client",
     "typecheck": "tsc",
-    "typegen": "wrangler types && kysely-codegen",
+    "typegen": "wrangler types && kysely-codegen --out-file app/lib/db.d.ts",
     "preview": "npm run build && wrangler pages dev",
     "cf-typegen": "wrangler types"
   },
