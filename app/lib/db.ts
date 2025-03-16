@@ -1,7 +1,7 @@
 
 import { Kysely, KyselyPlugin, PluginTransformQueryArgs, PluginTransformResultArgs, QueryResult, RootOperationNode, UnknownRow } from 'kysely';
 import { D1Dialect } from 'kysely-d1'
-import { DB } from 'kysely-codegen'
+import { DB } from './db.d'
 import { AppLoadContext } from '@remix-run/cloudflare';
 
 // Create a plugin to decode HTML entities

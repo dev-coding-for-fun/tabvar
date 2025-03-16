@@ -5,6 +5,7 @@ sloperdata
 /.vscode
 /build
 .env
+.env.cursor
 
 .wrangler
 
