@@ -1,7 +1,7 @@
 import { Badge, Container, Group, Select, SelectProps, Stack, Text, Title, Tooltip } from "@mantine/core";
 import { LoaderFunction, json } from "@remix-run/cloudflare";
 import { Link, useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
-import { Crag, Issue, IssueAttachment, User } from "kysely-codegen";
+import { Crag, Issue, IssueAttachment, User } from "~/lib/models";
 import { DataTable } from "mantine-datatable";
 import { getDB } from "~/lib/db";
 import { IconCheck, IconChevronRight, IconFlag } from "@tabler/icons-react";
@@ -67,13 +67,13 @@ export default function IssuesIndex() {
     const renderSelectOption: SelectProps['renderOption'] = ({ option, checked }) => {
         const crag = crags.find(crag => crag.id?.toString() === option.value);
         let issueCount: number = 0;
-        if (crag?.stats_active_issue_count !== undefined) issueCount = Number(crag?.stats_active_issue_count);
-        if (crag?.stats_public_issue_count !== undefined) issueCount = Number(crag?.stats_public_issue_count);
+        if (crag?.statsActiveIssueCount !== undefined) issueCount = Number(crag?.statsActiveIssueCount);
+        if (crag?.statsPublicIssueCount !== undefined) issueCount = Number(crag?.statsPublicIssueCount);
         return (
             <Group flex="1" gap="xs">
                 {checked && <IconChevronRight />}
                 {option.label}
-                {issueCount > 0 && <Badge circle color="red">{crags.find(crag => crag.id?.toString() === option.value)?.stats_active_issue_count}</Badge>}
+                {issueCount > 0 && <Badge circle color="red">{crags.find(crag => crag.id?.toString() === option.value)?.statsActiveIssueCount}</Badge>}
             </Group>
         )
     };
@@ -121,8 +121,8 @@ export default function IssuesIndex() {
                             accessor: "route_name",
                             render: (record) =>
                                 <Group>
-                                    {(record.is_flagged === 1) && (
-                                        <Tooltip position="top" withArrow label={record.flagged_message} fz={fz}>
+                                    {(record.isFlagged) && (
+                                        <Tooltip position="top" withArrow label={record.flaggedMessage} fz={fz}>
                                                 <IconFlag fill="red" color="red" />                                  
                                         </Tooltip>)}
                                     <Text>{record.route_name}</Text>
@@ -130,10 +130,10 @@ export default function IssuesIndex() {
                                 </Group>,
                         },
                         {
-                            accessor: "issue_type",
+                            accessor: "issueType",
                         },
                         {
-                            accessor: "sub_issue_type",
+                            accessor: "subIssueType",
                         },
                         {
                             accessor: "description",

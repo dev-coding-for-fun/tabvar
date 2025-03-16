@@ -1,4 +1,4 @@
-// Domain models based on database schema
+
 export interface Crag {
     id: number;
     name: string;

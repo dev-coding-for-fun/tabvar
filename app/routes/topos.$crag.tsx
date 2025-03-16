@@ -6,31 +6,17 @@ import { IconFlag, IconArrowBack } from "@tabler/icons-react";
 import { getDB } from "~/lib/db";
 import { useEffect, useRef, useState } from "react";
 import { getGradeColor } from "~/lib/constants";
-
-interface Route {
-  id: number;
-  name: string;
-  grade_yds: string | null;
-  climb_style: string | null;
-  bolt_count: number | null;
-  first_ascent_by: string | null;
-  route_length: number | null;
-  has_issue: boolean;
-  issue_type: string | null;
-  sub_issue_type: string | null;
-  issue_description: string | null;
-  flagged_message: string | null;
-}
-
-interface Sector {
-  id: number;
-  name: string;
-  routes: Route[];
-}
+import type { Crag, Sector, Route } from "~/lib/models";
 
 interface CragData {
   name: string;
-  sectors: Sector[];
+  sectors: Array<Sector & { routes: Array<Route & {
+    has_issue: boolean;
+    issue_type?: string;
+    sub_issue_type?: string;
+    issue_description?: string;
+    flagged_message?: string;
+  }> }>;
   stats_public_issue_count: number;
 }
 
@@ -61,6 +47,7 @@ export const loader: LoaderFunction = async ({ params, context }) => {
     .leftJoin(
       db.selectFrom("issue")
         .select([
+          "id",
           "route_id",
           "issue_type",
           "sub_issue_type",
@@ -96,12 +83,30 @@ export const loader: LoaderFunction = async ({ params, context }) => {
     .execute();
 
   // Transform the flat data into a nested structure
-  const sectors: Sector[] = [];
-  const sectorMap = new Map<number, Sector>();
+  const sectors: Array<Sector & { routes: Array<Route & {
+    has_issue: boolean;
+    issue_type?: string;
+    sub_issue_type?: string;
+    issue_description?: string;
+    flagged_message?: string;
+  }> }> = [];
+  const sectorMap = new Map<number, Sector & { routes: Array<Route & {
+    has_issue: boolean;
+    issue_type?: string;
+    sub_issue_type?: string;
+    issue_description?: string;
+    flagged_message?: string;
+  }> }>();
 
   sectorsWithRoutes.forEach((row) => {
     if (!sectorMap.has(row.sector_id)) {
-      const newSector: Sector = {
+      const newSector: Sector & { routes: Array<Route & {
+        has_issue: boolean;
+        issue_type?: string;
+        sub_issue_type?: string;
+        issue_description?: string;
+        flagged_message?: string;
+      }> } = {
         id: row.sector_id,
         name: row.sector_name,
         routes: [],
@@ -115,16 +120,16 @@ export const loader: LoaderFunction = async ({ params, context }) => {
       sector?.routes.push({
         id: row.route_id,
         name: row.route_name,
-        grade_yds: row.grade_yds,
-        climb_style: row.climb_style,
-        bolt_count: row.bolt_count,
-        first_ascent_by: row.first_ascent_by,
-        route_length: row.route_length,
+        gradeYds: row.grade_yds ?? undefined,
+        climbStyle: row.climb_style ?? undefined,
+        boltCount: row.bolt_count ?? undefined,
+        firstAscentBy: row.first_ascent_by ?? undefined,
+        routeLength: row.route_length ?? undefined,
         has_issue: row.has_active_issue > 0,
-        issue_type: row.issue_type,
-        sub_issue_type: row.sub_issue_type,
-        issue_description: row.issue_description,
-        flagged_message: row.flagged_message
+        issue_type: row.issue_type ?? undefined,
+        sub_issue_type: row.sub_issue_type ?? undefined,
+        issue_description: row.issue_description ?? undefined,
+        flagged_message: row.flagged_message ?? undefined
       });
     }
   });
@@ -232,7 +237,7 @@ export default function CragPage() {
                   p="xs"
                   withBorder
                   style={{
-                    borderLeft: `${rem(6)} solid ${getGradeColor(route.grade_yds)}`,
+                    borderLeft: `${rem(6)} solid ${getGradeColor(route.gradeYds ?? '')}`,
                   }}
                 >
                   <Stack gap={2}>
@@ -246,7 +251,7 @@ export default function CragPage() {
                         </Text>
                       </Group>
                       <Text size="md" c="dimmed">
-                        {route.grade_yds}
+                        {route.gradeYds}
                       </Text>
                     </Group>
                     
@@ -267,14 +272,14 @@ export default function CragPage() {
                     )}
                     
                     <Text size="xs" c="dimmed">
-                      {route.climb_style}
-                      {route.bolt_count ? ` • ${route.bolt_count} bolts` : ''}
-                      {route.route_length ? ` • ${route.route_length}m` : ''}
+                      {route.climbStyle}
+                      {route.boltCount ? ` • ${route.boltCount} bolts` : ''}
+                      {route.routeLength ? ` • ${route.routeLength}m` : ''}
                     </Text>
                     
-                    {route.first_ascent_by && (
+                    {route.firstAscentBy && (
                       <Text size="xs" c="dimmed" fs="italic">
-                        First Ascent: {route.first_ascent_by}
+                        First Ascent: {route.firstAscentBy}
                       </Text>
                     )}
                   </Stack>

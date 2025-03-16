@@ -1,7 +1,7 @@
 import { Button, Code, Container, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
 import { ActionFunction, LoaderFunction, json } from "@remix-run/cloudflare";
 import { useFetcher } from "@remix-run/react";
-import { Issue, User } from "kysely-codegen";
+import { Issue, User } from "~/lib/models";
 import { useEffect, useState } from "react";
 import { getAuthenticator } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";

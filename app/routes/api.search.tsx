@@ -1,7 +1,7 @@
 import { LoaderFunction, json } from '@remix-run/cloudflare'; // assuming Remix is being used
 import { sql } from 'kysely';
 import { getDB } from '~/lib/db';
-import { RouteSearch } from 'kysely-codegen';
+import { RouteSearch } from '~/lib/db.d';
 
 export interface RouteSearchResults extends RouteSearch {
     id: number;

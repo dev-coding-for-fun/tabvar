@@ -5,7 +5,7 @@ import mapboxgl from 'mapbox-gl';
 import { useEffect, useRef } from 'react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { getDB } from "~/lib/db";
-import { Crag } from "kysely-codegen";
+import { Crag } from "~/lib/models";
 
 interface LoaderData {
   crags: Crag[];

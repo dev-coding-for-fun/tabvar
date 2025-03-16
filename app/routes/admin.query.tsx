@@ -3,7 +3,7 @@ import { Form, useActionData, useLoaderData } from "@remix-run/react";
 import { Container, Stack, Title, Textarea, Button, Table, Text, Code, Alert } from "@mantine/core";
 import { getAuthenticator } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
-import { User } from "kysely-codegen";
+import { User } from "~/lib/models";
 import { getDB } from "~/lib/db";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { sql } from "kysely";

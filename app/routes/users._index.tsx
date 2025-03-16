@@ -4,7 +4,7 @@ import { showNotification } from "@mantine/notifications";
 import { ActionFunction, LoaderFunction, json, redirect } from "@remix-run/cloudflare";
 import { Form, useActionData, useLoaderData, useSubmit } from "@remix-run/react";
 import { IconClick, IconSquareKey, IconTrash, IconUserMinus, IconX } from "@tabler/icons-react";
-import { User, UserInvite } from "kysely-codegen";
+import { User, UserInvite } from "~/lib/models";
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { useEffect, useState } from "react";
 import { useErrorNotification } from "~/components/useErrorNotification";
@@ -83,7 +83,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                                 display_name: emails.length === 1 ? inviteName || null : null,
                                 role: inviteRole || null,
                                 invited_by_uid: user.uid,
-                                invited_by_name: user.display_name ?? "",
+                                invited_by_name: user.displayName ?? "",
                                 token_expires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 365 days from now
                             })
                             .execute();
@@ -220,7 +220,7 @@ export default function UsersIndex() {
                             accessor: "display_name",
                             render: (record) =>
                                 <Group key={record.uid}>
-                                    <Text>{record.display_name}</Text>
+                                    <Text>{record.displayName}</Text>
                                     <Badge size="xs" color="sector-color">{record.role}</Badge>
                                 </Group>,
                         },
@@ -269,10 +269,10 @@ export default function UsersIndex() {
                             <Group>
                                 <Group>
                                     <Text><strong>Email:</strong> {invite.email}</Text>
-                                    <Text><strong>Name:</strong> {invite.display_name || 'N/A'}</Text>
+                                    <Text><strong>Name:</strong> {invite.displayName || 'N/A'}</Text>
                                     <Badge>{invite.role}</Badge>
-                                    <Text><strong>Invited by:</strong> {invite.invited_by_name}</Text>
-                                    <Text><strong>Invitation Expires:</strong> {new Date(invite.token_expires as string).toLocaleString()}</Text>
+                                    <Text><strong>Invited by:</strong> {invite.invitedByName}</Text>
+                                    <Text><strong>Invitation Expires:</strong> {new Date(invite.tokenExpires as string).toLocaleString()}</Text>
                                 </Group>
                                 <Form method="post">
                                     <input type="hidden" name="action" value="delete_invite" />
