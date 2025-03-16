@@ -9,17 +9,6 @@ export interface _CfKV {
   value: Buffer | null;
 }
 
-export interface Area {
-  crag_id: number | null;
-  created_at: Generated<string>;
-  data_source: string | null;
-  id: Generated<number>;
-  latitude: number | null;
-  longitude: number | null;
-  name: string;
-  sloper_sector_id: number | null;
-}
-
 export interface AttachmentAuditLog {
   action: string;
   after_name: string | null;
@@ -236,7 +225,6 @@ export interface UserInvite {
 
 export interface DB {
   _cf_KV: _CfKV;
-  area: Area;
   attachment_audit_log: AttachmentAuditLog;
   crag: Crag;
   d1_migrations: D1Migrations;
