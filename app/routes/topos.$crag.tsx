@@ -24,7 +24,14 @@ export const loader: LoaderFunction = async ({ params, context, request }) => {
 
   try {
     const crag: Crag = await loadCragByName(context, cragName);
-    return { crag, user };
+    
+    //bring any untitled sectors to the top
+    const untitledSectors = crag.sectors?.filter(sector => sector.name?.startsWith("Untitled Sector"))
+      .sort((a, b) => a.name > b.name ? 1 : -1);   
+    const otherSectors = crag.sectors?.filter(sector => sector.name !== "Untitled Sector");
+    const sortedSectors = [...(untitledSectors || []), ...(otherSectors || [])];
+    
+    return { crag: { ...crag, sectors: sortedSectors }, user };
   } catch (error) {
     throw new Response("Crag not found", { status: 404 });
   }
@@ -123,6 +130,21 @@ export const action: ActionFunction = async ({ request, context }) => {
       return await deleteRoute(context, routeId);
     }
 
+    case "update_sector_order": {
+      const sectorsData = JSON.parse(formData.get("sectors")?.toString() ?? "[]");
+      const db = getDB(context);
+      
+      // Update each sector's sort order
+      for (const sector of sectorsData) {
+        await db.updateTable('sector')
+          .set({ sort_order: sector.sortOrder })
+          .where('id', '=', sector.id)
+          .execute();
+      }
+      
+      return { success: true };
+    }
+
     default:
       return { success: false, error: `Unknown action: ${action}` };
   }
@@ -140,6 +162,7 @@ export default function CragPage() {
   const [newRouteSectorId, setNewRouteSectorId] = useState<number | null>(null);
   const [deleteRouteId, setDeleteRouteId] = useState<number | null>(null);
   const [deleteRouteName, setDeleteRouteName] = useState<string>("");
+  const [sortingSectors, setSortingSectors] = useState(false);
   const deleteFetcher = useFetcher();
   const sectorNameFetcher = useFetcher();
   const sectorCreateFetcher = useFetcher();
@@ -173,21 +196,37 @@ export default function CragPage() {
     setNewRouteSectorId(null);
   };
 
-  const handleDragEnd = async (result: DropResult) => {
-    if (!result.destination) return;
+  const handleSectorReorder = async (sectors: Sector[], sourceIndex: number, destinationIndex: number) => {
+    const [reorderedSector] = sectors.splice(sourceIndex, 1);
+    sectors.splice(destinationIndex, 0, reorderedSector);
 
-    const sectorId = parseInt(result.source.droppableId);
-    const sector = crag.sectors?.find(s => s.id === sectorId);
-    if (!sector || !sector.routes) return;
+    // Update the sectors array immediately for UI
+    setCrag(prevCrag => ({
+      ...prevCrag,
+      sectors: sectors.map((sector, index) => ({ ...sector, sortOrder: index + 1 }))
+    }));
 
-    const routes = [...sector.routes];
-    const [reorderedRoute] = routes.splice(result.source.index, 1);
-    routes.splice(result.destination.index, 0, reorderedRoute);
+    // Save the new order
+    const formData = new FormData();
+    formData.append('action', 'update_sector_order');
+    formData.append('sectors', JSON.stringify(sectors.map((sector, index) => ({
+      id: sector.id,
+      sortOrder: index + 1
+    }))));
+
+    await fetch(window.location.pathname, {
+      method: 'POST',
+      body: formData
+    });
+  };
+
+  const handleRouteReorder = async (sectorId: number, routes: Route[], sourceIndex: number, destinationIndex: number) => {
+    const [reorderedRoute] = routes.splice(sourceIndex, 1);
+    routes.splice(destinationIndex, 0, reorderedRoute);
 
     // Update the routes array in the sector immediately for UI
     const updatedSectors = crag.sectors.map(s => {
       if (s.id === sectorId) {
-        // Use 1-based indices for sort orders
         return { ...s, routes: routes.map((route, index) => ({ ...route, sortOrder: index + 1 })) };
       }
       return s;
@@ -212,6 +251,32 @@ export default function CragPage() {
       method: 'POST',
       body: formData
     });
+  };
+
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
+
+    // Handle sector reordering
+    if (result.type === 'sector') {
+      await handleSectorReorder(
+        [...crag.sectors],
+        result.source.index,
+        result.destination.index
+      );
+      return;
+    }
+
+    // Handle route reordering
+    const sectorId = parseInt(result.source.droppableId);
+    const sector = crag.sectors?.find(s => s.id === sectorId);
+    if (!sector || !sector.routes) return;
+
+    await handleRouteReorder(
+      sectorId,
+      [...sector.routes],
+      result.source.index,
+      result.destination.index
+    );
   };
 
   const handleDeleteClick = (routeId: number, routeName: string) => {
@@ -266,7 +331,7 @@ export default function CragPage() {
       routes: [],
       latitude: null,
       longitude: null,
-      sortOrder: (crag.sectors?.[0]?.sortOrder ?? -1) - 1,
+      sortOrder: -1,
       createdAt: new Date().toISOString()
     };
 
@@ -338,39 +403,80 @@ export default function CragPage() {
               </Badge>
             )}
             {canEdit && (
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size="lg"
-                title="Add Sector"
-                onClick={handleAddSector}
-              >
-                <IconTextPlus size={20} />
-              </ActionIcon>
+              <>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="lg"
+                  title="Add Sector"
+                  onClick={handleAddSector}
+                >
+                  <IconTextPlus size={20} />
+                </ActionIcon>
+                <ActionIcon
+                  variant={sortingSectors ? "filled" : "subtle"}
+                  color={sortingSectors ? "blue" : "gray"}
+                  size="lg"
+                  title={sortingSectors ? "Save Order" : "Sort Sectors"}
+                  onClick={() => setSortingSectors(!sortingSectors)}
+                  disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null}
+                >
+                  <IconArrowsUpDown size={20} />
+                </ActionIcon>
+              </>
             )}
           </Group>
         </Group>
 
         <DragDropContext onDragEnd={handleDragEnd}>
-          {crag.sectors?.sort((a, b) => (a.sortOrder ?? -1) - (b.sortOrder ?? -1)).map((sector) => (
-            <SectorCard
-              key={sector.id}
-              sector={sector}
-              theme={theme}
-              canEdit={!!canEdit}
-              editingRouteId={editingRouteId}
-              reorderingSectorId={reorderingSectorId}
-              newRouteSectorId={newRouteSectorId}
-              onNewRoute={handleNewRoute}
-              onReorderingChange={setReorderingSectorId}
-              onEditClick={handleEditClick}
-              onCancelEdit={handleCancelEdit}
-              onCancelNewRoute={handleCancelNewRoute}
-              onDeleteClick={handleDeleteClick}
-              onSectorNameChange={handleSectorNameChange}
-              onDeleteSector={handleDeleteSector}
-            />
-          ))}
+          <Droppable droppableId="sectors" type="sector" isDropDisabled={!sortingSectors}>
+            {(provided: DroppableProvided) => (
+              <Stack gap="md" ref={provided.innerRef} {...provided.droppableProps}>
+                {crag.sectors?.map((sector, index) => (
+                  <Draggable
+                    key={sector.id}
+                    draggableId={sector.id.toString()}
+                    index={index}
+                    isDragDisabled={!sortingSectors}
+                  >
+                    {(provided: DraggableProvided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        style={{
+                          ...provided.draggableProps.style,
+                          opacity: snapshot.isDragging ? 0.8 : 1,
+                          transform: snapshot.isDragging
+                            ? `${provided.draggableProps.style?.transform} scale(1.02)`
+                            : provided.draggableProps.style?.transform,
+                        }}
+                      >
+                        <SectorCard
+                          sector={sector}
+                          theme={theme}
+                          canEdit={!!canEdit}
+                          editingRouteId={editingRouteId}
+                          reorderingSectorId={reorderingSectorId}
+                          newRouteSectorId={newRouteSectorId}
+                          sortingSectors={sortingSectors}
+                          onNewRoute={handleNewRoute}
+                          onReorderingChange={setReorderingSectorId}
+                          onEditClick={handleEditClick}
+                          onCancelEdit={handleCancelEdit}
+                          onCancelNewRoute={handleCancelNewRoute}
+                          onDeleteClick={handleDeleteClick}
+                          onSectorNameChange={handleSectorNameChange}
+                          onDeleteSector={handleDeleteSector}
+                        />
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </Stack>
+            )}
+          </Droppable>
         </DragDropContext>
       </Stack>
     </Container>
