@@ -1,97 +1,106 @@
-
 export interface Crag {
     id: number;
     name: string;
-    latitude?: number;
-    longitude?: number;
-    hasSectors: boolean;
-    createdAt?: string;
-    statsActiveIssueCount?: number;
-    statsIssueFlagged?: number;
-    statsPublicIssueCount?: number;
-  }
+    latitude: number | null | undefined;
+    longitude: number | null | undefined;
+    hasSectors: boolean | null | undefined;
+    sectors: Sector[];
+    createdAt: string | null | undefined;
+    statsActiveIssueCount: number | null | undefined;
+    statsIssueFlagged: number | null | undefined;
+    statsPublicIssueCount: number | null | undefined;
+}
 
 export interface Sector {
     id: number;
     name: string;
-    cragId?: number;
-    latitude?: number;
-    longitude?: number;
-    sortOrder?: number;
-    createdAt?: string;
-  }
+    cragId: number | null | undefined;
+    crag?: Crag;
+    routes: Route[];
+    latitude: number | null | undefined;
+    longitude: number | null | undefined;
+    sortOrder: number | null | undefined;
+    createdAt: string | null | undefined;
+}
 
 export interface Route {
     id: number;
     name: string;
-    sectorId?: number;
-    sectorName?: string;
-    cragName?: string;
-    altNames?: string;
-    boltCount?: number;
-    climbStyle?: string;
-    firstAscentBy?: string;
-    firstAscentDate?: string;
-    gradeYds?: string;
-    latitude?: number;
-    longitude?: number;
-    pitchCount?: number;
-    routeBuiltDate?: string;
-    routeLength?: number;
-    sortOrder?: number;
-    status?: string;
-    createdAt?: string;
-  }
+    sectorId: number | null | undefined;
+    sector?: Sector;
+    sectorName: string | null | undefined;
+    cragName: string | null | undefined;
+    crag?: Crag | null | undefined;
+    issues: Issue[];
+    altNames: string | null | undefined;
+    boltCount: number | null | undefined;
+    climbStyle: string | null | undefined;
+    firstAscentBy: string | null | undefined;
+    firstAscentDate: string | null | undefined;
+    gradeYds: string | null | undefined;
+    latitude: number | null | undefined;
+    longitude: number | null | undefined;
+    pitchCount: number | null | undefined;
+    routeBuiltDate: string | null | undefined;
+    routeLength: number | null | undefined;
+    sortOrder: number | null | undefined;
+    status: string | null | undefined;
+    createdAt: string | null | undefined;
+}
 
 export interface Issue {
-  id: number;
-  routeId: number;
-  issueType: string;
-  subIssueType?: string;
-  status: string;
-  description?: string;
-  boltsAffected?: string;
-  createdAt: string;
-  reportedAt?: string;
-  reportedBy?: string;
-  reportedByUid?: string;
-  approvedAt?: string;
-  approvedByUid?: string;
-  archivedAt?: string;
-  archivedByUid?: string;
-  lastModified?: string;
-  lastStatus?: string;
-  isFlagged?: boolean;
-  flaggedMessage?: string;
+    id: number;
+    routeId: number;
+    route?: Route;
+    attachments: IssueAttachment[];
+    issueType: string;
+    subIssueType: string | null | undefined;
+    status: string;
+    description: string | null | undefined;
+    boltsAffected: string | null | undefined;
+    createdAt: string;
+    reportedAt: string | null | undefined;
+    reportedBy: string | null | undefined;
+    reportedByUid: string | null | undefined;
+    approvedAt: string | null | undefined;
+    approvedByUid: string | null | undefined;
+    archivedAt: string | null | undefined;
+    archivedByUid: string | null | undefined;
+    lastModified: string | null | undefined;
+    lastStatus: string | null | undefined;
+    isFlagged: boolean | null | undefined;
+    flaggedMessage: string | null | undefined;
 }
 
 export interface IssueAttachment {
     id: number;
     issueId: number;
+    issue?: Issue;
     url: string;
     type: string;
-    name?: string;
-    createdAt?: string;
-  }
+    name: string | null | undefined;
+    createdAt: string | null | undefined;
+}
 
-  export interface User {
+export interface User {
     uid: string;
-    displayName?: string;
-    email?: string;
-    emailVerified?: boolean;
-    avatarUrl?: string;
-    providerId?: string;
-    role?: string;
-    createdAt?: string;
-  }
+    displayName: string | null | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | null | undefined;
+    avatarUrl: string | null | undefined;
+    providerId: string | null | undefined;
+    role: string | null | undefined;
+    createdAt: string | null | undefined;
+}
 
-  export interface UserInvite {
+export interface UserInvite {
     email: string;
-    displayName?: string;
-    role?: string;
+    user?: User;
+    displayName: string | null | undefined;
+    role: string | null | undefined;
     invitedByUid: string;
     invitedByName: string;
-    token?: string;
-    tokenExpires?: string;
-    createdAt?: string;
-  }
+    token: string | null | undefined;
+    tokenExpires: string | null | undefined;
+    createdAt: string | null | undefined;
+}
