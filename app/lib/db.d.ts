@@ -82,6 +82,7 @@ export interface Issue {
   archived_at: string | null;
   archived_by_uid: string | null;
   bolts_affected: string | null;
+  crag_id: number | null;
   created_at: Generated<string>;
   description: string | null;
   flagged_message: string | null;
