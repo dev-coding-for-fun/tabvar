@@ -214,7 +214,7 @@ export default function UsersIndex() {
                     withColumnBorders
                     striped
                     highlightOnHover
-                    records={users}
+                    records={users as Array<User & Record<string, unknown>>}
                     columns={[
                         {
                             accessor: "display_name",
