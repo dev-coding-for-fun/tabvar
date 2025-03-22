@@ -1,5 +1,5 @@
 import { Badge, Container, Group, Select, SelectProps, Stack, Text, Title, Tooltip } from "@mantine/core";
-import { LoaderFunction, json } from "@remix-run/cloudflare";
+import { LoaderFunction } from "@remix-run/cloudflare";
 import { Link, useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
 import { Crag, Issue, IssueAttachment, User } from "~/lib/models";
 import { DataTable } from "mantine-datatable";
@@ -8,14 +8,6 @@ import { IconCheck, IconChevronRight, IconFlag } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { showNotification } from "@mantine/notifications";
 import { getAuthenticator } from "~/lib/auth.server";
-
-export interface IssueWithRoute extends Omit<Issue, 'id'> {
-    id: number;
-    route_name: string;
-    sector_name: string;
-    crag_name: string;
-    attachments?: Partial<IssueAttachment>[];
-}
 
 export const loader: LoaderFunction = async ({ context, request }) => {
         const user = await getAuthenticator(context).isAuthenticated(request, {
@@ -31,22 +23,21 @@ export const loader: LoaderFunction = async ({ context, request }) => {
             'crag.stats_issue_flagged',
         ]).orderBy([(user.role) ? 'crag.stats_active_issue_count desc' : 'crag.stats_public_issue_count desc', 'crag.name'])
         .execute();
-    return json({ crags: crags, user: user });
+    return { crags: crags, user: user };
 }
-
 
 export default function IssuesIndex() {
     const [searchParams] = useSearchParams();
     const { crags, user } = useLoaderData<{ crags: Crag[], user: User; }>();
     const fetcher = useFetcher();
-    const [issues, setIssues] = useState<IssueWithRoute[]>([]);
+    const [issues, setIssues] = useState<Issue[]>([]);
     const [selectedCrag, setSelectedCrag] = useState<{ id: string | null; name: string | null }>({ id: null, name: null });
     const cragSelectRef = useRef<HTMLInputElement>(null);
     const fz = "sm";
 
     useEffect(() => {
         if (fetcher.data) {
-            setIssues(fetcher.data as IssueWithRoute[]);
+            setIssues(fetcher.data as Issue[]);
         }
     }, [fetcher.data]);
 
@@ -125,8 +116,8 @@ export default function IssuesIndex() {
                                         <Tooltip position="top" withArrow label={record.flaggedMessage} fz={fz}>
                                                 <IconFlag fill="red" color="red" />                                  
                                         </Tooltip>)}
-                                    <Text>{record.route_name}</Text>
-                                    <Badge size="xs" color="sector-color">{record.sector_name}</Badge>
+                                    <Text>{record.route?.name}</Text>
+                                    <Badge size="xs" color="sector-color">{record.route?.sectorName}</Badge>
                                 </Group>,
                         },
                         {

@@ -1,7 +1,7 @@
 import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Space, Stack, Textarea, Title, rem } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
-import { ActionFunction, json, redirect } from "@remix-run/cloudflare";
+import { ActionFunction, data, redirect } from "@remix-run/cloudflare";
 import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
 import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
@@ -47,7 +47,7 @@ export const action: ActionFunction = async ({ request, context }) => {
   };
   if (Object.values(errors).some(Boolean)) {
     const errorMessage = (errors.routeId) ?? '' + errors.issueType ?? '';
-    return json({ success: false, message: errorMessage }, { status: 400 });
+    return data({ success: false, message: errorMessage }, { status: 400 });
   }
 
   const uploadedFiles = await Promise.all(files.map((file) =>
@@ -70,7 +70,7 @@ export const action: ActionFunction = async ({ request, context }) => {
   const issueId = issueResult.id;
 
   if (!issueId) {
-    return json({ success: false, message: 'Failed to submit issue' }, { status: 500 });
+    return data({ success: false, message: 'Failed to submit issue' }, { status: 500 });
   }
 
   await Promise.all(uploadedFiles.map(uploadedFile =>

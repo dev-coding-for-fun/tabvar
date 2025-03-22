@@ -1,4 +1,4 @@
-import { LoaderFunction, json } from '@remix-run/cloudflare'; // assuming Remix is being used
+import { LoaderFunction } from '@remix-run/cloudflare'; // assuming Remix is being used
 import { getDB } from '~/lib/db';
 
 
@@ -27,5 +27,5 @@ export const loader: LoaderFunction = async ({ request, context }) => {
             'issue.flagged_message',
             'issue.status'])
         .execute();
-    return json(issues);
+    return issues;
 };

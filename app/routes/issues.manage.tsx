@@ -1,5 +1,5 @@
 import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput } from "@mantine/core";
-import { ActionFunction, AppLoadContext, LoaderFunction, json } from "@remix-run/cloudflare";
+import { ActionFunction, AppLoadContext, LoaderFunction, data } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { getDB } from "~/lib/db";
@@ -7,14 +7,11 @@ import { getAuthenticator } from "~/lib/auth.server";
 import { IconArchive, IconArrowBack, IconCheck, IconClick, IconEdit, IconFileX, IconFlag, IconRubberStamp } from "@tabler/icons-react";
 import IssueDetailsModal from "~/components/issueDetailModal";
 import { useDisclosure } from "@mantine/hooks";
-import { IssueWithRoute } from "./issues._index";
 import { useEffect, useRef, useState } from "react";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { deleteFromR2 } from "~/lib/s3.server";
 import { R2_UPLOADS_BUCKET } from "./issues.create";
-import { Issue, User } from "kysely-codegen";
-import RouteSearchBox from "~/components/routeSearchBox";
-import { SerializeFrom } from "@remix-run/server-runtime";
+import { Issue, Route, Sector, Crag, User } from "~/lib/models";
 import { RouteSearchResults } from "~/routes/api.search";
 
 const StatusActions: React.FC<{
@@ -74,11 +71,11 @@ async function modifyIssue(context: AppLoadContext, issueId: number, updates: Pa
         .where('id', '=', issueId).executeTakeFirstOrThrow();
     await db.updateTable('issue')
         .set({
-            issue_type: updates.issue_type,
-            sub_issue_type: updates.sub_issue_type,
+            issue_type: updates.issueType,
+            sub_issue_type: updates.subIssueType,
             description: updates.description,
-            is_flagged: updates.is_flagged,
-            flagged_message: updates.flagged_message,
+            is_flagged: updates.isFlagged ? 1 : 0,
+            flagged_message: updates.flaggedMessage,
             last_modified: new Date().toISOString(),
         })
         .where('id', '=', issueId)
@@ -88,18 +85,18 @@ async function modifyIssue(context: AppLoadContext, issueId: number, updates: Pa
             issue_id: issueId,
             action: "update",
             uid: user.uid,
-            user_display_name: user.display_name,
+            user_display_name: user.displayName,
             user_role: user.role,
             before_issue_type: issue.issue_type,
-            after_issue_type: updates.issue_type,
+            after_issue_type: updates.issueType,
             before_sub_issue_type: issue.sub_issue_type,
-            after_sub_issue_type: updates.sub_issue_type,
+            after_sub_issue_type: updates.subIssueType,
             before_description: issue.description,
             after_description: updates.description,
             before_is_flagged: issue.is_flagged,
-            after_is_flagged: updates.is_flagged,
+            after_is_flagged: updates.isFlagged ? 1 : 0,
             before_flagged_message: issue.flagged_message,
-            after_flagged_message: updates.flagged_message,
+            after_flagged_message: updates.flaggedMessage,
 
         })
         .execute();
@@ -107,7 +104,7 @@ async function modifyIssue(context: AppLoadContext, issueId: number, updates: Pa
 
 async function modifyIssueStatus(context: AppLoadContext, issueId: number, updates: Partial<Omit<Issue, "id" | "created_at">>, user: User) {
     const db = getDB(context);
-    updates.last_modified = new Date().toISOString();
+    updates.lastModified = new Date().toISOString();
     const issue = await db.selectFrom('issue').selectAll()
         .where('id', '=', issueId).executeTakeFirstOrThrow();
     await db.updateTable('issue')
@@ -120,7 +117,7 @@ async function modifyIssueStatus(context: AppLoadContext, issueId: number, updat
             issue_id: issueId,
             action: "update",
             uid: user.uid,
-            user_display_name: user.display_name,
+            user_display_name: user.displayName,
             user_role: user.role,
             before_status: issue.status,
             after_status: updates.status,
@@ -153,7 +150,7 @@ async function deleteIssue(context: AppLoadContext, issueId: number, user: User)
             issue_id: issueId,
             action: "delete",
             uid: user.uid,
-            user_display_name: user.display_name,
+            user_display_name: user.displayName,
             user_role: user.role,
             before_bolts_affected: issue.bolts_affected,
             before_description: issue.description,
@@ -172,7 +169,7 @@ export const action: ActionFunction = async ({ request, context }) => {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin' && user.role !== 'member') {
-        return json({ error: PERMISSION_ERROR }, { status: 403 });
+        return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
     const formData = await request.formData();
     const action = formData.get("action");
@@ -182,19 +179,19 @@ export const action: ActionFunction = async ({ request, context }) => {
         switch (action) {
             case "updateIssue": {
                 const issueUpdates: Partial<Issue> = {
-                    issue_type: formData.get("issueType")?.toString(),
-                    sub_issue_type: formData.get("subIssueType")?.toString(),
+                    issueType: formData.get("issueType")?.toString(),
+                    subIssueType: formData.get("subIssueType")?.toString(),
                     description: formData.get("description")?.toString(),
-                    is_flagged: formData.get("isFlagged") === "on" ? 1 : 0,
-                    flagged_message: formData.get("safetyNotice")?.toString(),
+                    isFlagged: formData.get("isFlagged") === "on" ? true : false,
+                    flaggedMessage: formData.get("safetyNotice")?.toString(),
                 };
 
                 try {
                     modifyIssue(context, issueId, issueUpdates, user);
-                    return json({ success: true, message: 'Issue updated' });
+                    return data({ success: true, message: 'Issue updated' });
                 } catch (error) {
                     console.error('Error updating issue:', error);
-                    return json({ success: false, message: 'Failed to update issue' }, { status: 500 });
+                    return data({ success: false, message: 'Failed to update issue' }, { status: 500 });
                 }
                 break;
             }
@@ -205,14 +202,14 @@ export const action: ActionFunction = async ({ request, context }) => {
                         issueId,
                         {
                             status: "Reported",
-                            last_status: status,
-                            approved_at: new Date().toISOString(),
-                            approved_by_uid: user.uid,
+                            lastStatus: status,
+                            approvedAt: new Date().toISOString(),
+                            approvedByUid: user.uid,
                         },
                         user);
                 } catch (error) {
                     console.error('Error updating issue status:', error);
-                    return json({ success: false, message: 'Failed to update issue status' }, { status: 500 });
+                    return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
                 }
 
                 break;
@@ -223,14 +220,14 @@ export const action: ActionFunction = async ({ request, context }) => {
                         issueId,
                         {
                             status: "Archived",
-                            last_status: status,
-                            archived_at: new Date().toISOString(),
-                            archived_by_uid: user.uid,
+                            lastStatus: status,
+                            archivedAt: new Date().toISOString(),
+                            archivedByUid: user.uid,
                         },
                         user);
                 } catch (error) {
                     console.error('Error updating issue status:', error);
-                    return json({ success: false, message: 'Failed to update issue status' }, { status: 500 });
+                    return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
                 }
                 break;
             case "complete":
@@ -240,14 +237,14 @@ export const action: ActionFunction = async ({ request, context }) => {
                         issueId,
                         {
                             status: "Completed",
-                            last_status: status,
-                            archived_at: new Date().toISOString(),
-                            archived_by_uid: user.uid,
+                            lastStatus: status,
+                            archivedAt: new Date().toISOString(),
+                            archivedByUid: user.uid,
                         },
                         user);
                 } catch (error) {
                     console.error('Error updating issue status:', error);
-                    return json({ success: false, message: 'Failed to update issue status' }, { status: 500 });
+                    return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
                 }
                 break;
             case "revert":
@@ -257,12 +254,12 @@ export const action: ActionFunction = async ({ request, context }) => {
                         issueId,
                         {
                             status: "Reported",
-                            last_status: status,
+                            lastStatus: status,
                         },
                         user);
                 } catch (error) {
                     console.error('Error updating issue status:', error);
-                    return json({ success: false, message: 'Failed to update issue status' }, { status: 500 });
+                    return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
                 }
                 break;
             case "restore": {
@@ -273,12 +270,12 @@ export const action: ActionFunction = async ({ request, context }) => {
                         issueId,
                         {
                             status: newStatus,
-                            last_status: status,
+                            lastStatus: status,
                         },
                         user);
                 } catch (error) {
                     console.error('Error updating issue status:', error);
-                    return json({ success: false, message: 'Failed to update issue status' }, { status: 500 });
+                    return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
                 }
                 break;
             }
@@ -288,26 +285,26 @@ export const action: ActionFunction = async ({ request, context }) => {
                         deleteIssue(context, issueId, user);
                     } catch (error) {
                         console.error('Error updating issue status:', error);
-                        return json({ success: false, message: 'Failed to update issue status' }, { status: 500 });
+                        return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
                     }
                 }
-                else return json({ success: false, message: 'Admin role required to permanently delete issues' }, { status: 403 });
+                else return data({ success: false, message: 'Admin role required to permanently delete issues' }, { status: 403 });
                 break;
 
             }
             default:
-                return json({ success: false, message: 'Invalid action' }, { status: 400 });
+                return data({ success: false, message: 'Invalid action' }, { status: 400 });
         }
     }
-    return json({ success: true });
+    return { success: true };
 }
 
 export const loader: LoaderFunction = async ({ request, context }) => {
-    const user = await getAuthenticator(context).isAuthenticated(request, {
+    const user: User = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
-    if (user.role !== 'admin' && user.role !== 'member') {
-        return json({ error: PERMISSION_ERROR }, { status: 403 });
+    if (user.role !== 'admin') {
+        return data({ issues: [], error: PERMISSION_ERROR }, { status: 403 });
     }
     const db = getDB(context);
     const result = await db.selectFrom('issue')
@@ -330,38 +327,43 @@ export const loader: LoaderFunction = async ({ request, context }) => {
             'issue_attachment.id as attachment_id',
             'issue_attachment.url',
             'issue_attachment.name as attachment_name',
+            'issue.created_at'
         ])
         .execute();
-    const issues = result.reduce<Record<number, Partial<IssueWithRoute>>>((acc, row) => {
-        if (!acc[row.id]) {
-            acc[row.id] = {
-                id: Number(row.id),
-                route_id: row.route_id,
-                route_name: row.route_name,
-                sector_name: row.sector_name ?? "",
-                crag_name: row.crag_name ?? "",
-                issue_type: row.issue_type,
-                sub_issue_type: row.sub_issue_type,
-                status: row.status,
-                last_status: row.last_status,
-                description: row.description,
-                is_flagged: row.is_flagged,
-                flagged_message: row.flagged_message,
-                bolts_affected: row.bolts_affected,
-                attachments: [],
-            };
 
-        }
-        if (row.url && row.attachment_name) {
-            acc[row.id].attachments?.push({ url: context.cloudflare.env.R2_BUCKET_DOMAIN + row.url, name: row.attachment_name });
-        }
-        return acc;
-    }, {});
-
-    return json({
-        issues: Object.values(issues),
-        user: user
+    const issues: Issue[] = result.map((row) => {
+        const route: Route = {
+            id: row.route_id,
+            name: row.route_name,
+            sectorName: row.sector_name ?? "",
+            cragName: row.crag_name ?? "",
+        } as Route;
+        return {
+            id: Number(row.id),
+            routeId: row.route_id,
+            route,
+            issueType: row.issue_type,
+            status: row.status,
+            lastStatus: row.last_status ?? undefined,
+            description: row.description ?? undefined,
+            isFlagged: Boolean(row.is_flagged),
+            flaggedMessage: row.flagged_message ?? undefined,
+            boltsAffected: row.bolts_affected ?? undefined,
+            createdAt: row.created_at ?? "",
+            attachments: row.url && row.attachment_name && row.attachment_id ? [{
+                id: row.attachment_id,
+                issueId: row.id,
+                url: row.url,
+                type: "image",
+                name: row.attachment_name
+            }] : []
+        } as Issue;
     });
+
+    return {
+        issues,
+        user
+    };
 }
 
 const TruncatableDescription: React.FC<{ description: string, fz: string }> = ({ description, fz }) => {
@@ -410,12 +412,12 @@ const TruncatableDescription: React.FC<{ description: string, fz: string }> = ({
 };
 
 export default function IssuesManager() {
-    const { issues, user } = useLoaderData<{ issues: SerializeFrom<IssueWithRoute[]>; user: User; }>();
+    const { issues, user } = useLoaderData<{ issues: Issue[]; user: User; }>();
     const [opened, { open, close }] = useDisclosure(false);
-    const [openIssue, setOpenIssue] = useState<SerializeFrom<IssueWithRoute>>();
+    const [openIssue, setOpenIssue] = useState<Issue>();
     const [selectedResult, setSelectedResult] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [filteredIssues, setFilteredIssues] = useState<SerializeFrom<IssueWithRoute>[]>(issues);
+    const [filteredIssues, setFilteredIssues] = useState<Issue[]>(issues);
     const searchFetcher = useFetcher<RouteSearchResults[]>();
     const [imageOverlay, setImageOverlay] = useState<{ isOpen: boolean; url: string }>({
         isOpen: false,
@@ -428,7 +430,7 @@ export default function IssuesManager() {
         if (searchFetcher.data && searchQuery.length > 1) {
             const searchResults = searchFetcher.data;
             const matchingIssues = issues.filter(issue => 
-                searchResults.some(route => issue.route_id === route.id)
+                searchResults.some(route => issue.routeId === route.id)
             );
             setFilteredIssues(matchingIssues);
         } else if (searchQuery.length <= 1) {
@@ -436,11 +438,11 @@ export default function IssuesManager() {
         }
     }, [searchFetcher.data, searchQuery, issues]);
 
-    const renderActions: DataTableColumn<SerializeFrom<IssueWithRoute>>['render'] = (record: SerializeFrom<IssueWithRoute>) => (
+    const renderActions: DataTableColumn<Issue>['render'] = (record: Issue) => (
         <Group gap={4} justify="right" wrap="nowrap">
             <StatusActions
                 status={record.status}
-                lastStatus={record.last_status}
+                lastStatus={record.lastStatus ?? null}
                 issueId={Number(record.id)}
             />
             <Button
@@ -453,8 +455,6 @@ export default function IssuesManager() {
             >
                 Edit
             </Button>
-
-
         </Group>
     );
 
@@ -487,7 +487,7 @@ export default function IssuesManager() {
                     }}
                 />
 
-                <DataTable<SerializeFrom<IssueWithRoute>>
+                <DataTable<Issue>
                     withTableBorder
                     borderRadius="sm"
                     fz={fz}
@@ -504,14 +504,14 @@ export default function IssuesManager() {
                             accessor: "route_name",
                             render: (record) =>
                                 <Group gap={4}>
-                                    {(record.is_flagged === 1) && (
-                                        <Tooltip position="top" withArrow label={record.flagged_message} fz={fz}>
+                                    {record.isFlagged && (
+                                        <Tooltip position="top" withArrow label={record.flaggedMessage} fz={fz}>
                                             <IconFlag fill="red" color="red" />
                                         </Tooltip>)}
-                                    <Text fz={fz}>{record.route_name}</Text>
+                                    <Text fz={fz}>{record.route?.name}</Text>
                                     <Group gap={4} wrap="nowrap">
-                                        <Badge size="xs" color="sector-color">{record.sector_name}</Badge>
-                                        <Badge size="xs" color="crag-color">{record.crag_name}</Badge>
+                                        <Badge size="xs" color="sector-color">{record.route?.sectorName}</Badge>
+                                        <Badge size="xs" color="crag-color">{record.route?.cragName}</Badge>
                                     </Group>
                                 </Group>
                         },
@@ -562,7 +562,7 @@ export default function IssuesManager() {
             </Stack>
             {openIssue && (
                 <IssueDetailsModal
-                    opened={opened} onClose={close} issue={openIssue as IssueWithRoute}
+                    opened={opened} onClose={close} issue={openIssue as Issue}
                 />
             )}
             <Modal
