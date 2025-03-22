@@ -55,7 +55,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </li>
                 <li className="nav-item has-submenu">
                   <a href="https://www.tabvar.org/routebuilders" className="nav-link" aria-expanded="false" aria-haspopup="true">Routebuilders Section</a>
-                  <svg viewBox="0 0 24 24" stroke="currentColor" focusable="false"><g transform="translate(9.7,12) rotate(45)"><path d="M-4.2 0 L4.2 0" stroke-width="2"></path></g><g transform="translate(14.3,12) rotate(-45)"><path class="MrYMx" d="M-4.2 0 L4.2 0" stroke-width="2"></path></g></svg>
+                  <svg viewBox="0 0 24 24" stroke="currentColor" focusable="false"><g transform="translate(9.7,12) rotate(45)"><path d="M-4.2 0 L4.2 0" strokeWidth="2"></path></g><g transform="translate(14.3,12) rotate(-45)"><path className="MrYMx" d="M-4.2 0 L4.2 0" strokeWidth="2"></path></g></svg>
                   <div className="submenu">
                     <ul className="submenu-list">
                       <li className="submenu-item">
@@ -72,7 +72,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </li>
                 <li className="nav-item has-submenu">
                   <a href="https://www.tabvar.org/about" className="nav-link" aria-expanded="false" aria-haspopup="true">About</a>
-                  <svg viewBox="0 0 24 24" stroke="currentColor" focusable="false"><g transform="translate(9.7,12) rotate(45)"><path d="M-4.2 0 L4.2 0" stroke-width="2"></path></g><g transform="translate(14.3,12) rotate(-45)"><path class="MrYMx" d="M-4.2 0 L4.2 0" stroke-width="2"></path></g></svg>
+                  <svg viewBox="0 0 24 24" stroke="currentColor" focusable="false"><g transform="translate(9.7,12) rotate(45)"><path d="M-4.2 0 L4.2 0" strokeWidth="2"></path></g><g transform="translate(14.3,12) rotate(-45)"><path className="MrYMx" d="M-4.2 0 L4.2 0" strokeWidth="2"></path></g></svg>
                   <div className="submenu">
                     <ul className="submenu-list">
                       <li className="submenu-item">
