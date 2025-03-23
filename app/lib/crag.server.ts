@@ -1,6 +1,7 @@
 import type { AppLoadContext } from "@remix-run/cloudflare";
 import { getDB } from "./db";
 import type { Crag, Sector, Route, Issue, IssueAttachment } from "./models";
+import { redirect } from "@remix-run/cloudflare";
 
 async function loadAttachmentsForIssues(db: ReturnType<typeof getDB>, issues: Issue[]): Promise<void> {
     const issueIds = issues.map(issue => issue.id);
@@ -175,5 +176,34 @@ export async function loadCragById(context: AppLoadContext, id: number): Promise
 
 export async function loadCragByName(context: AppLoadContext, name: string): Promise<Crag> {
     return loadCrag(context, name);
+}
+
+export async function deleteCrag(context: AppLoadContext, cragId: number): Promise<{ success: boolean; error?: string }> {
+    try {
+        const db = getDB(context);
+        
+        if (!cragId) {
+            return { success: false, error: "Crag ID is required" };
+        }
+
+        // Check if crag has any sectors
+        const sectors = await db.selectFrom('sector')
+            .select('id')
+            .where('crag_id', '=', cragId)
+            .execute();
+        
+        if (sectors.length > 0) {
+            return { success: false, error: "Cannot delete crag with sectors" };
+        }
+
+        // Delete the crag
+        await db.deleteFrom('crag')
+            .where('id', '=', cragId)
+            .execute();
+        
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Failed to delete crag" };
+    }
 }
 

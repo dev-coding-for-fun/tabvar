@@ -1,12 +1,12 @@
 import { Container, Group, Paper, Stack, Text, Title, useMantineTheme, rem, Button, Box, Badge, ActionIcon, Modal } from "@mantine/core";
-import { type LoaderFunction, type ActionFunction } from "@remix-run/cloudflare";
+import { type LoaderFunction, type ActionFunction, data, redirect } from "@remix-run/cloudflare";
 import { useLoaderData, Link, useSearchParams, useNavigate, useFetcher } from "@remix-run/react";
 import { sql } from "kysely";
 import { IconFlag, IconArrowBack, IconPencil, IconArrowsUpDown, IconPencilPlus, IconTrash, IconTextPlus } from "@tabler/icons-react";
 import { getDB } from "~/lib/db";
 import { useEffect, useRef, useState } from "react";
 import type { Crag, Sector, Route } from "~/lib/models";
-import { loadCragByName } from "~/lib/crag.server";
+import { loadCragByName, deleteCrag } from "~/lib/crag.server";
 import { getAuthenticator } from "~/lib/auth.server";
 import type { User } from "~/lib/models";
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from '@hello-pangea/dnd';
@@ -40,7 +40,10 @@ export const loader: LoaderFunction = async ({ params, context, request }) => {
 export const action: ActionFunction = async ({ request, context }) => {
   const formData = await request.formData();
   const action = formData.get("action")?.toString();
-
+  const user = await getAuthenticator(context).isAuthenticated(request);
+  if (!user || (user.role !== 'admin' && user.role !== 'member')) {
+    return data({ error: 'Unauthorized' }, { status: 403 });
+  }
   switch (action) {
     case "create_sector": {
       const cragId = formData.get("cragId")?.toString();
@@ -145,6 +148,16 @@ export const action: ActionFunction = async ({ request, context }) => {
       return { success: true };
     }
 
+    case "delete_crag": {
+      const cragId = Number(formData.get("cragId")) ?? null;
+
+      const result = await deleteCrag(context, cragId);
+      if (!result.success) {
+        return new Response(result.error, { status: 400 });
+      }
+      return redirect("/topos");
+    }
+
     default:
       return { success: false, error: `Unknown action: ${action}` };
   }
@@ -163,10 +176,12 @@ export default function CragPage() {
   const [deleteRouteId, setDeleteRouteId] = useState<number | null>(null);
   const [deleteRouteName, setDeleteRouteName] = useState<string>("");
   const [sortingSectors, setSortingSectors] = useState(false);
+  const [deleteCragModalOpen, setDeleteCragModalOpen] = useState(false);
   const deleteFetcher = useFetcher();
   const sectorNameFetcher = useFetcher();
   const sectorCreateFetcher = useFetcher();
   const sectorDeleteFetcher = useFetcher();
+  const deleteCragFetcher = useFetcher();
 
   // Update local state when server data changes
   useEffect(() => {
@@ -363,6 +378,14 @@ export default function CragPage() {
     sectorDeleteFetcher.submit(formData, { method: 'post' });
   };
 
+  const handleDeleteCrag = async () => {
+    const formData = new FormData();
+    formData.append('action', 'delete_crag');
+    formData.append('cragId', crag.id.toString());
+    
+    deleteCragFetcher.submit(formData, { method: 'post' });
+  };
+
   return (
     <Container size="xl" py="xl">
       <Modal
@@ -377,6 +400,22 @@ export default function CragPage() {
           <Group justify="flex-end" mt="md">
             <Button variant="subtle" onClick={() => setDeleteRouteId(null)}>Cancel</Button>
             <Button color="red" onClick={handleConfirmDelete}>Delete</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={deleteCragModalOpen}
+        onClose={() => setDeleteCragModalOpen(false)}
+        title="Delete Crag"
+        size="sm"
+      >
+        <Stack>
+          <Text>Are you sure you want to delete "{crag.name}"?</Text>
+          <Text size="sm" c="red">This action cannot be undone.</Text>
+          <Group justify="flex-end" mt="md">
+            <Button variant="subtle" onClick={() => setDeleteCragModalOpen(false)}>Cancel</Button>
+            <Button color="red" onClick={handleDeleteCrag}>Delete</Button>
           </Group>
         </Stack>
       </Modal>
@@ -422,6 +461,16 @@ export default function CragPage() {
                   disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null}
                 >
                   <IconArrowsUpDown size={20} />
+                </ActionIcon>
+                <ActionIcon
+                  variant="subtle"
+                  color="red"
+                  size="lg"
+                  title="Delete Crag"
+                  onClick={() => setDeleteCragModalOpen(true)}
+                  disabled={crag.sectors?.length > 0 || reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null}
+                >
+                  <IconTrash size={20} />
                 </ActionIcon>
               </>
             )}
