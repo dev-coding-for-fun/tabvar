@@ -1,27 +1,90 @@
-import { json, type LoaderFunction } from "@remix-run/cloudflare";
-import { Link, useLoaderData } from "@remix-run/react";
-import { Container, Title, Table, Anchor } from "@mantine/core";
+import { type LoaderFunction, type ActionFunction, data } from "@remix-run/cloudflare";
+import { Link, useLoaderData, useFetcher } from "@remix-run/react";
+import { Container, Title, Table, Anchor, Group, ActionIcon, Modal, TextInput, Button, Stack } from "@mantine/core";
 import mapboxgl from 'mapbox-gl';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { getDB } from "~/lib/db";
-import { Crag } from "~/lib/models";
+import { Crag, User } from "~/lib/models";
+import { getAuthenticator } from "~/lib/auth.server";
+import { IconMapPinPlus } from "@tabler/icons-react";
 
 interface LoaderData {
   crags: Crag[];
   mapboxAccessToken: string;
   mapboxStyleUrl: string;
+  user: User | null;
 }
 
-export const loader: LoaderFunction = async ({ context }) => {
+export const action: ActionFunction = async ({ context, request }) => {
+  const user = await getAuthenticator(context).isAuthenticated(request);
+  if (!user || (user.role !== 'admin' && user.role !== 'member')) {
+    return data({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  const formData = await request.formData();
+  const action = formData.get('action')?.toString();
+
+  switch (action) {
+    case 'create_crag': {
+      const name = formData.get('name')?.toString();
+      if (!name) {
+        return data({ error: 'Name is required' }, { status: 400 });
+      }
+
+      const db = getDB(context);
+      const newCrag = await db
+        .insertInto('crag')
+        .values({
+          name,
+          latitude: null,
+          longitude: null,
+          created_at: new Date().toISOString()
+        })
+        .returning(['id', 'name', 'latitude', 'longitude'])
+        .executeTakeFirst();
+
+      return data({ success: true, crag: newCrag });
+    }
+
+    case 'update_position': {
+      const cragId = formData.get('cragId');
+      const latitude = formData.get('latitude');
+      const longitude = formData.get('longitude');
+
+      if (!cragId || !latitude || !longitude) {
+        return data({ error: 'Missing required fields' }, { status: 400 });
+      }
+
+      const db = getDB(context);
+      await db
+        .updateTable('crag')
+        .set({
+          latitude: Number(latitude),
+          longitude: Number(longitude)
+        })
+        .where('id', '=', Number(cragId))
+        .execute();
+
+      return data({ success: true });
+    }
+
+    default:
+      return data({ error: `Unknown action: ${action}` }, { status: 400 });
+  }
+};
+
+export const loader: LoaderFunction = async ({ context, request }) => {
   const db = getDB(context);
   const crags = await db
     .selectFrom("crag")
     .select(["id", "name", "latitude", "longitude"])
+    .orderBy("name", "asc")
     .execute();
   
   const mapboxAccessToken = context.cloudflare.env.MAPBOX_ACCESS_TOKEN;
   const mapboxStyleUrl = context.cloudflare.env.MAPBOX_STYLE_URL;
+  const user = await getAuthenticator(context).isAuthenticated(request);
 
   if (!mapboxAccessToken) {
     throw new Error("Mapbox access token is not configured");
@@ -31,14 +94,107 @@ export const loader: LoaderFunction = async ({ context }) => {
     throw new Error("Mapbox style URL is not configured");
   }
 
-  return json({ crags, mapboxAccessToken, mapboxStyleUrl });
+  return { crags, mapboxAccessToken, mapboxStyleUrl, user };
 };
 
 export default function RoutesIndex() {
-  const { crags, mapboxAccessToken, mapboxStyleUrl } = useLoaderData<LoaderData>();
+  const { crags: initialCrags, mapboxAccessToken, mapboxStyleUrl, user } = useLoaderData<LoaderData>();
+  const [crags, setCrags] = useState(initialCrags);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newCragName, setNewCragName] = useState('');
+  const fetcher = useFetcher();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const [editingCragId, setEditingCragId] = useState<number | null>(null);
+  const [placingCragId, setPlacingCragId] = useState<number | null>(null);
+  const markers = useRef<{ [key: number]: mapboxgl.Marker }>({});
+  const cragPositions = useRef<{ [key: number]: [number, number] }>({});
+  const canEdit = user && (user.role === 'admin' || user.role === 'member');
 
+  // Update local state when server data changes
+  useEffect(() => {
+    setCrags(initialCrags);
+  }, [initialCrags]);
+
+  const handleSetOnMap = (cragId: number) => {
+    if (!map.current) return;
+    
+    // Get the center of the current map view
+    const center = map.current.getCenter();
+    const position: [number, number] = [center.lng, center.lat];
+    
+    // Store the position
+    cragPositions.current[cragId] = position;
+    
+    // Remove existing marker if any
+    const existingMarker = markers.current[cragId];
+    if (existingMarker) {
+      existingMarker.remove();
+    }
+    
+    // Create new draggable marker
+    const newMarker = createMarker(cragId, true);
+    if (newMarker) {
+      markers.current[cragId] = newMarker;
+      setPlacingCragId(cragId);
+    }
+  };
+
+  const handleCreateCrag = () => {
+    if (!newCragName.trim()) return;
+
+    const formData = new FormData();
+    formData.append('action', 'create_crag');
+    formData.append('name', newCragName.trim());
+
+    fetcher.submit(formData, { method: 'post' });
+    setIsCreateDialogOpen(false);
+    setNewCragName('');
+  };
+
+  const createPopupHtml = (cragId: number, isMovable: boolean = false) => {
+    const crag = crags.find(c => c.id === cragId);
+    if (!crag) return '';
+    
+    return `
+      <div style="text-align: center;">
+        <h3 style="margin-bottom: 8px;">${crag.name}</h3>
+        <a href="/topos/${encodeURIComponent(crag.name)}" style="color: #228BE6; text-decoration: none; display: block; margin-bottom: 8px;">
+          View Routes
+        </a>
+        ${(user?.role === 'admin' || user?.role === 'member') ? `
+          <a href="#" onclick="window.handleMovePin(${cragId}, ${isMovable}); return false;" style="color: #228BE6; text-decoration: none;">
+            ${isMovable ? 'Save Position' : 'Move Pin'}
+          </a>
+        ` : ''}
+      </div>
+    `;
+  };
+
+  const createMarker = (cragId: number, isMovable: boolean = false) => {
+    const position = cragPositions.current[cragId];
+    if (!position) return null;
+
+    const marker = new mapboxgl.Marker({
+      color: isMovable ? '#ff0000' : '#3b82f6',
+      scale: isMovable ? 1.2 : 1,
+      draggable: isMovable
+    })
+      .setLngLat(position)
+      .setPopup(new mapboxgl.Popup().setHTML(createPopupHtml(cragId, isMovable)))
+      .addTo(map.current!);
+
+    if (isMovable) {
+      marker.on('dragend', () => {
+        const lngLat = marker.getLngLat();
+        cragPositions.current[cragId] = [lngLat.lng, lngLat.lat];
+      });
+    }
+
+    return marker;
+  };
+
+  // Effect for initial map setup and marker creation
   useEffect(() => {
     if (!mapContainer.current) return;
 
@@ -57,33 +213,99 @@ export default function RoutesIndex() {
     // Add markers for each crag
     crags.filter(crag => crag.latitude && crag.longitude).forEach((crag) => {
       if (crag.latitude && crag.longitude) {
-        const marker = new mapboxgl.Marker()
-          .setLngLat([Number(crag.longitude), Number(crag.latitude)])
-          .setPopup(
-            new mapboxgl.Popup().setHTML(
-              `<div style="text-align: center;">
-                <h3 style="margin-bottom: 8px;">${crag.name}</h3>
-                <a href="/topos/${encodeURIComponent(crag.name)}" style="color: #228BE6; text-decoration: none;">
-                  View Routes
-                </a>
-              </div>`
-            )
-          )
-          .addTo(map.current!);
+        const position: [number, number] = [Number(crag.longitude), Number(crag.latitude)];
+        cragPositions.current[crag.id] = position;
+        
+        const marker = createMarker(crag.id);
+        if (marker) {
+          markers.current[crag.id] = marker;
+        }
       }
     });
+
+    // Add global handler for move pin clicks
+    (window as any).handleMovePin = (cragId: number, isMovable: boolean) => {
+      if (isMovable) {
+        // Save the new position
+        const position = cragPositions.current[cragId];
+        if (position) {
+          const formData = new FormData();
+          formData.append('action', 'update_position');
+          formData.append('cragId', cragId.toString());
+          formData.append('latitude', position[1].toString());
+          formData.append('longitude', position[0].toString());
+          fetcher.submit(formData, { method: 'post' });
+        }
+        setEditingCragId(null); // Reset editing state after saving
+        setPlacingCragId(null); // Reset placing state after saving
+      } else {
+        setEditingCragId(cragId); // Set this crag as the one being edited
+      }
+      
+      // Remove existing marker
+      const existingMarker = markers.current[cragId];
+      if (existingMarker) {
+        existingMarker.remove();
+      }
+
+      // Create new marker with updated appearance
+      const newMarker = createMarker(cragId, !isMovable);
+      if (newMarker) {
+        markers.current[cragId] = newMarker;
+      }
+    };
 
     // Cleanup on unmount
     return () => {
       if (map.current) {
         map.current.remove();
       }
+      delete (window as any).handleMovePin;
     };
-  }, [mapboxAccessToken, mapboxStyleUrl, crags]);
+  }, [mapboxAccessToken, mapboxStyleUrl, crags, user, fetcher]);
 
   return (
     <Container size="xl" p="md">
-      <Title order={1} mb="md">Climbing Areas</Title>
+      <Modal
+        opened={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
+        title="Create New Crag"
+        size="sm"
+      >
+        <Stack>
+          <TextInput
+            label="Name"
+            value={newCragName}
+            onChange={(e) => setNewCragName(e.target.value)}
+            placeholder="Enter crag name"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleCreateCrag();
+              }
+            }}
+          />
+          <Group justify="flex-end" mt="md">
+            <Button variant="subtle" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateCrag}>Create</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Group gap="xs" mb="md">
+        <Title order={1}>Climbing Areas</Title>
+        {canEdit && (
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="lg"
+            title="Add Crag"
+            onClick={() => setIsCreateDialogOpen(true)}
+          >
+            <IconMapPinPlus size={20} />
+          </ActionIcon>
+        )}
+      </Group>
       <div ref={mapContainer} style={{ height: "800px", width: "100%" }} />
 
       <Title order={2} mt="xl" mb="md">Crag List</Title>
@@ -99,9 +321,21 @@ export default function RoutesIndex() {
           {crags.map((crag) => (
             <Table.Tr key={crag.id.toString()}>
               <Table.Td>
-                <Link to={`/topos/${encodeURIComponent(crag.name)}`} style={{ textDecoration: 'none' }}>
-                  <Anchor>{crag.name}</Anchor>
-                </Link>
+                <Group gap="xs">
+                  <Link to={`/topos/${encodeURIComponent(crag.name)}`} style={{ textDecoration: 'none' }}>
+                    <Anchor>{crag.name}</Anchor>
+                  </Link>
+                  {canEdit && (!crag.latitude || !crag.longitude) && (
+                    <Button
+                      variant="light"
+                      size="xs"
+                      onClick={() => handleSetOnMap(crag.id)}
+                      disabled={placingCragId === crag.id}
+                    >
+                      {placingCragId === crag.id ? 'Placing..' : 'Set on Map'}
+                    </Button>
+                  )}
+                </Group>
               </Table.Td>
               <Table.Td>{crag.latitude?.toFixed(4)}</Table.Td>
               <Table.Td>{crag.longitude?.toFixed(4)}</Table.Td>
