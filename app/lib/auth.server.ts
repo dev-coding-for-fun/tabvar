@@ -3,7 +3,8 @@ import { AppLoadContext, createCookieSessionStorage, redirect } from '@remix-run
 import { Authenticator } from 'remix-auth';
 import { GoogleStrategy } from 'remix-auth-google'
 import { getDB } from './db';
-import { Generated, User } from 'kysely-codegen';
+import { sql } from 'kysely';
+import { User } from './models';
 
 let _authenticator: Authenticator<User> | null = null;
 let _sessionStorage: ReturnType<typeof createCookieSessionStorage> | null = null;
@@ -37,7 +38,15 @@ export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
             const avatarUrl = photos[0].value;
 
             let user = await db.selectFrom('user')
-                .selectAll()
+                .select([
+                    'uid', 
+                    'email', 
+                    'display_name as displayName',
+                    sql<boolean>`email_verified = 1`.as('emailVerified'),
+                    'provider_id as providerId', 
+                    'avatar_url as avatarUrl', 
+                    'role', 
+                    'created_at as createdAt'])
                 .where('uid', '=', id)
                 .executeTakeFirst();
             if (!user) {
@@ -56,17 +65,24 @@ export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
                         avatar_url: avatarUrl,
                         role: role,
                     })
-                    .returningAll().executeTakeFirstOrThrow();
+                    .returning([
+                        'uid', 
+                        'email', 
+                        'display_name as displayName',
+                        sql<boolean>`email_verified = 1`.as('emailVerified'),
+                        'provider_id as providerId', 
+                        'avatar_url as avatarUrl', 
+                        'role', 
+                        'created_at as createdAt'])
+                    .executeTakeFirstOrThrow();
             }
             await db.insertInto('signin_event')
                 .values({
                     uid: id,
                 })
                 .returningAll().executeTakeFirst();
-            return {
-                ...user,
-                created_at: user.created_at as unknown as Generated<string | null>
-            };
+            
+            return user;
         }
     );
     _authenticator.use(googleStrategy);

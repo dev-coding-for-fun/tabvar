@@ -1,7 +1,7 @@
 import { ActionIcon, Badge, Button, Center, Container, Group, List, Popover, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
-import { ActionFunction, LoaderFunction, json, redirect } from "@remix-run/cloudflare";
+import { ActionFunction, LoaderFunction, data, redirect } from "@remix-run/cloudflare";
 import { Form, useActionData, useLoaderData, useSubmit } from "@remix-run/react";
 import { IconClick, IconSquareKey, IconTrash, IconUserMinus, IconX } from "@tabler/icons-react";
 import { User, UserInvite } from "~/lib/models";
@@ -17,7 +17,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {
-        return json({ users: [], error: PERMISSION_ERROR }, { status: 403 });
+        return data({ users: [], error: PERMISSION_ERROR }, { status: 403 });
     }
     const db = getDB(context);
     const users = await db.selectFrom('user')
@@ -26,7 +26,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
     const invites = await db.selectFrom('user_invite')
         .selectAll()
         .execute();
-    return json({ users: users, invites: invites });
+    return data({ users: users, invites: invites });
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
@@ -34,7 +34,7 @@ export const action: ActionFunction = async ({ request, context }) => {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {
-        return json({ error: PERMISSION_ERROR }, { status: 403 });
+        return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
     const formData = await request.formData();
     const action = formData.get("action");
@@ -53,7 +53,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                     .execute();
                 console.log(`deleting user with email ${email}`);
             }
-            return json({ success: true });
+            return data({ success: true });
         }
         case "set_role": {
             const userId = formData.get("uid")?.toString();
@@ -66,7 +66,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                     .execute();
                 console.log(`Set role '${role}' on uid '${userId}'`);
             }
-            return json({ success: true });
+            return data({ success: true });
         }
         case "create_invite": {
             const inviteEmails = formData.get("invite_email")?.toString();
@@ -89,10 +89,10 @@ export const action: ActionFunction = async ({ request, context }) => {
                             .execute();
                     } catch (error) {
                         if (error instanceof Error) console.log(error.message);
-                        return json({ success: false, message: `Could not create invite. If this email is already invited, delete it first to re-invite.` }, { status: 500 });
+                        return data({ success: false, message: `Could not create invite. If this email is already invited, delete it first to re-invite.` }, { status: 500 });
                     }
                 }
-                return json({ success: true, message: `Invite created.` });
+                return data({ success: true, message: `Invite created.` });
             }
             break;
         }
@@ -103,7 +103,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                 await db.deleteFrom('user_invite')
                     .where('email', '=', inviteEmail)
                     .execute();
-                return json({ success: true, message: `Invite deleted.` });
+                return data({ success: true, message: `Invite deleted.` });
             }
             break;
         }

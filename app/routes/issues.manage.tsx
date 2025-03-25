@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { deleteFromR2 } from "~/lib/s3.server";
 import { R2_UPLOADS_BUCKET } from "./issues.create";
-import { Issue, Route, Sector, Crag, User } from "~/lib/models";
+import { Issue, Route, User } from "~/lib/models";
 import { RouteSearchResults } from "~/routes/api.search";
 
 const StatusActions: React.FC<{
@@ -300,7 +300,7 @@ export const action: ActionFunction = async ({ request, context }) => {
 }
 
 export const loader: LoaderFunction = async ({ request, context }) => {
-    const user: User = await getAuthenticator(context).isAuthenticated(request, {
+    const user = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {

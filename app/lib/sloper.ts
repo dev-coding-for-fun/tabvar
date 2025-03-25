@@ -3,7 +3,7 @@ import { AppLoadContext } from "@remix-run/cloudflare";
 import { getDB } from "./db";
 import he from 'he';
 import { Kysely } from "kysely";
-import { DB, Issue } from "kysely-codegen";
+import { DB, Issue } from "~/lib/db.d";
 import { nanoid } from "nanoid";
 import { parse } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";

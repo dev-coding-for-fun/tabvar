@@ -1,21 +1,20 @@
-import { ActionFunction, LoaderFunction, json } from "@remix-run/cloudflare";
+import { ActionFunction, LoaderFunction, data } from "@remix-run/cloudflare";
 import { Form, useActionData, useLoaderData } from "@remix-run/react";
 import { Container, Stack, Title, Textarea, Button, Table, Text, Code, Alert } from "@mantine/core";
 import { getAuthenticator } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
-import { User } from "~/lib/models";
+import { User } from "~/lib/db.d";
 import { getDB } from "~/lib/db";
 import { IconAlertCircle } from "@tabler/icons-react";
-import { sql } from "kysely";
 
 export const loader: LoaderFunction = async ({ request, context }) => {
     const user: User = await getAuthenticator(context).isAuthenticated(request, {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {
-        return json({ error: PERMISSION_ERROR }, { status: 403 });
+        return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
-    return json({ user });
+    return { user };
 };
 
 export const action: ActionFunction = async ({ request, context }) => {
@@ -23,14 +22,14 @@ export const action: ActionFunction = async ({ request, context }) => {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {
-        return json({ error: PERMISSION_ERROR }, { status: 403 });
+        return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
 
     const formData = await request.formData();
     const queryString = formData.get("query")?.toString();
 
     if (!queryString) {
-        return json({ error: "No query provided" });
+        return data({ error: "No query provided" });
     }
 
     try {
@@ -41,7 +40,7 @@ export const action: ActionFunction = async ({ request, context }) => {
         } as any);
 
         const { rows } = result;
-        return json({
+        return data({
             success: true,
             rows,
             numRows: rows.length,
@@ -49,7 +48,7 @@ export const action: ActionFunction = async ({ request, context }) => {
             query: queryString
         });
     } catch (error) {
-        return json({
+        return data({
             error: error instanceof Error ? error.message : "Unknown error occurred",
             query: queryString
         });

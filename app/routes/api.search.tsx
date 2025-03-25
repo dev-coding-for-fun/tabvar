@@ -1,4 +1,4 @@
-import { LoaderFunction, json } from '@remix-run/cloudflare'; // assuming Remix is being used
+import { LoaderFunction } from '@remix-run/cloudflare'; // assuming Remix is being used
 import { sql } from 'kysely';
 import { getDB } from '~/lib/db';
 import { RouteSearch } from '~/lib/db.d';
@@ -67,7 +67,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
             .limit(limit)
             .execute();
         console.log(results);
-        return json(results);
+        return results;
     }
     else {
         const routes: RouteSearchResults[] = await db.selectFrom('route_search')
@@ -83,6 +83,6 @@ export const loader: LoaderFunction = async ({ request, context }) => {
             ])
             .limit(limit)
             .execute();
-        return json(routes);
+        return routes;
     }
 }

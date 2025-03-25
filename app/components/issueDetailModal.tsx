@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, TextInput, Button, Group, Textarea, Select, Checkbox, Stack, Paper } from '@mantine/core';
-import { IssueWithRoute } from '~/routes/issues._index';
 import { useFetcher } from '@remix-run/react';
 import { IssueType, SubIssueType, issueTypes, subIssuesByType } from '~/lib/constants';
+import { Issue } from '~/lib/models';
 
 interface IssueDetailsModalProps {
-    issue: IssueWithRoute;
+    issue: Issue;
     initialDescription?: string;
     opened: boolean;
     onClose: () => void;
@@ -16,8 +16,8 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({
     opened,
     onClose,
 }) => {
-    const [issueType, setIssueType] = useState<IssueType | null>(issue.issue_type as IssueType | null);
-    const [subIssueType, setSubIssueType] = useState<SubIssueType | null>(issue.sub_issue_type as SubIssueType | null);
+    const [issueType, setIssueType] = useState<IssueType | null>(issue.issueType as IssueType | null);
+    const [subIssueType, setSubIssueType] = useState<SubIssueType | null>(issue.subIssueType as SubIssueType | null);
     const fetcher = useFetcher();
 
     // Update sub-issue type options based on the selected issue type
@@ -56,7 +56,7 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({
                 <Stack>
                     <TextInput
                         label="Route"
-                        value={issue.route_name}
+                        value={issue.routeName}
                         readOnly
                     />
 
@@ -92,14 +92,14 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({
                         <Checkbox
                             label="Safety Flagged"
                             name="isFlagged"
-                            defaultChecked={(issue.is_flagged ?? 0) > 0}
+                            defaultChecked={(issue.isFlagged ?? false)}
                         />
                         <Textarea
                             autosize
                             minRows={3}
                             name="safetyNotice"
                             label="Safety Notice"
-                            defaultValue={issue.flagged_message ?? ""}
+                            defaultValue={issue.flaggedMessage ?? ""}
                         />
                     </Paper>
 
