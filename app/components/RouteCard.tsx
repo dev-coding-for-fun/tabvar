@@ -3,6 +3,7 @@ import { IconFlag } from "@tabler/icons-react";
 import { getGradeColor } from "~/lib/constants";
 import type { Route } from "~/lib/models";
 import { useEffect, useRef, useState } from "react";
+import { TopoGallery } from "./TopoGallery";
 
 interface TruncatableDescriptionProps {
     description: string;
@@ -86,7 +87,7 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                         {route.gradeYds}
                     </Text>
                 </Group>
-                
+
                 {route.issues.length > 0 && (
                     <Stack gap="xs">
                         <Text size="sm" c="red" fw={500}>
@@ -102,27 +103,38 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                         )}
                     </Stack>
                 )}
-                
-                <Text size="xs" c="dimmed">
-                    {route.climbStyle}
-                    {route.boltCount ? ` • ${route.boltCount} bolts` : ''}
-                    {route.pitchCount && route.pitchCount > 1 ? ` • ${route.pitchCount} pitches` : ''}
-                    {route.routeLength ? ` • ${route.routeLength}m (${Math.round(route.routeLength * 3.28084)}ft)` : ''}
-                </Text>
-                
-                {route.firstAscentBy && (
-                    <Text size="xs" c="dimmed" fs="italic">
-                        First Ascent: {route.firstAscentBy}
-                    </Text>
-                )}
+
+                <Group align="flex-start" justify="flex-start" gap="lg">
+                    <Stack gap={2}>
+                        <Text size="xs" c="dimmed">
+                            {route.climbStyle}
+                            {route.boltCount ? ` • ${route.boltCount} bolts` : ''}
+                            {route.pitchCount && route.pitchCount > 1 ? ` • ${route.pitchCount} pitches` : ''}
+                            {route.routeLength ? ` • ${route.routeLength}m (${Math.round(route.routeLength * 3.28084)}ft)` : ''}
+                        </Text>
+
+                        {route.firstAscentBy && (
+                            <Text size="xs" c="dimmed" fs="italic">
+                                First Ascent: {route.firstAscentBy}
+                            </Text>
+                        )}
+                    </Stack>
+
+                    <TopoGallery
+                        attachments={route.attachments ?? []}
+                        routeId={route.id}
+                        canEdit={canEdit}
+                        size="xs"
+                    />
+                </Group>
             </Stack>
             {canEdit && (
-                <Text 
-                    size="xs" 
-                    c="dimmed" 
-                    style={{ 
-                        position: 'absolute', 
-                        right: 8, 
+                <Text
+                    size="xs"
+                    c="dimmed"
+                    style={{
+                        position: 'absolute',
+                        right: 8,
                         bottom: 8,
                         opacity: 0.6
                     }}

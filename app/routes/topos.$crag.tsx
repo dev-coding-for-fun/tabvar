@@ -1,10 +1,9 @@
-import { Container, Group, Paper, Stack, Text, Title, useMantineTheme, rem, Button, Box, Badge, ActionIcon, Modal } from "@mantine/core";
+import { Container, Group, Stack, Text, Title, useMantineTheme, rem, Button, Box, Badge, ActionIcon, Modal } from "@mantine/core";
 import { type LoaderFunction, type ActionFunction, data, redirect } from "@remix-run/cloudflare";
 import { useLoaderData, Link, useSearchParams, useNavigate, useFetcher } from "@remix-run/react";
-import { sql } from "kysely";
-import { IconFlag, IconArrowBack, IconPencil, IconArrowsUpDown, IconPencilPlus, IconTrash, IconTextPlus } from "@tabler/icons-react";
+import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus } from "@tabler/icons-react";
 import { getDB } from "~/lib/db";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Crag, Sector, Route } from "~/lib/models";
 import { loadCragByName, deleteCrag } from "~/lib/crag.server";
 import { getAuthenticator } from "~/lib/auth.server";
@@ -13,6 +12,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, D
 import { SectorCard } from "~/components/SectorCard";
 import { createSector, updateSectorName, deleteSector } from "~/lib/sector.server";
 import { createRoute, updateRoute, updateRouteOrder, deleteRoute } from "~/lib/route.server";
+import { deleteAttachment, uploadAttachment } from "~/lib/attachment.server";
 
 export const loader: LoaderFunction = async ({ params, context, request }) => {
   const cragName = params.crag;
@@ -156,6 +156,28 @@ export const action: ActionFunction = async ({ request, context }) => {
         return new Response(result.error, { status: 400 });
       }
       return redirect("/topos");
+    }
+
+    case "delete_route_attachment": {
+      const routeId = Number(formData.get("routeId")) ?? null;
+      const attachmentId = Number(formData.get("attachmentId")) ?? null;
+
+      if (!routeId || !attachmentId) {
+        return { success: false, error: "Missing required fields" };
+      }
+
+      return await deleteAttachment(context, routeId, attachmentId);
+    }
+
+    case "upload_route_attachment": {
+      const routeId = Number(formData.get("routeId")) ?? null;
+      const file = formData.get("file") as File;
+
+      if (!routeId || !file) {
+        return { success: false, error: "Missing required fields" };
+      }
+
+      return await uploadAttachment(context, file, routeId);
     }
 
     default:
