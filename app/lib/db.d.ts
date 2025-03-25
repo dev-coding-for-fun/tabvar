@@ -36,6 +36,12 @@ export interface Crag {
   stats_public_issue_count: number | null;
 }
 
+export interface CragAttachment {
+  attachment_id: number;
+  crag_id: number;
+  created_at: Generated<string | null>;
+}
+
 export interface D1Migrations {
   applied_at: Generated<string>;
   id: Generated<number | null>;
@@ -156,6 +162,12 @@ export interface Route {
   status: string | null;
 }
 
+export interface RouteAttachment {
+  attachment_id: number;
+  created_at: Generated<string | null>;
+  route_id: number;
+}
+
 export interface RouteSearch {
   bolt_count: string | null;
   crag_name: string | null;
@@ -196,10 +208,24 @@ export interface Sector {
   sort_order: number | null;
 }
 
+export interface SectorAttachment {
+  attachment_id: number;
+  created_at: Generated<string | null>;
+  sector_id: number;
+}
+
 export interface SigninEvent {
   signin_at: Generated<string>;
   signin_id: Generated<number>;
   uid: string;
+}
+
+export interface TopoAttachment {
+  created_at: Generated<string | null>;
+  id: Generated<number>;
+  name: string | null;
+  type: string;
+  url: string;
 }
 
 export interface User {
@@ -226,8 +252,10 @@ export interface UserInvite {
 
 export interface DB {
   _cf_KV: _CfKV;
+  area: Area;
   attachment_audit_log: AttachmentAuditLog;
   crag: Crag;
+  crag_attachment: CragAttachment;
   d1_migrations: D1Migrations;
   external_crag_ref: ExternalCragRef;
   external_issue_ref: ExternalIssueRef;
@@ -237,13 +265,16 @@ export interface DB {
   issue_attachment: IssueAttachment;
   issue_audit_log: IssueAuditLog;
   route: Route;
+  route_attachment: RouteAttachment;
   route_search: RouteSearch;
   route_search_config: RouteSearchConfig;
   route_search_data: RouteSearchData;
   route_search_docsize: RouteSearchDocsize;
   route_search_idx: RouteSearchIdx;
   sector: Sector;
+  sector_attachment: SectorAttachment;
   signin_event: SigninEvent;
+  topo_attachment: TopoAttachment;
   user: User;
   user_invite: UserInvite;
 }

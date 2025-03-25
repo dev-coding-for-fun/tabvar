@@ -7,6 +7,8 @@ export const MIXEDICE_GRADES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 
 export const AID_GRADES = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6'];
 export const CLIMB_STYLES = ['Sport', 'Trad', 'Boulder', 'Mixed Rock', 'Mixed Ice', 'Ice', 'Aid'];
 
+export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
 export function getGradesbyStyle(style: string): string[] {
     switch (style) {
         case 'Sport':
