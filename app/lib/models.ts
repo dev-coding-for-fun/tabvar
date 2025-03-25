@@ -5,6 +5,7 @@ export interface Crag {
     longitude: number | null | undefined;
     hasSectors: boolean | null | undefined;
     sectors: Sector[];
+    attachments?: TopoAttachment[];
     createdAt: string | null | undefined;
     statsActiveIssueCount: number | null | undefined;
     statsIssueFlagged: number | null | undefined;
@@ -17,6 +18,7 @@ export interface Sector {
     cragId: number | null | undefined;
     crag?: Crag;
     routes: Route[];
+    attachments?: TopoAttachment[];
     latitude: number | null | undefined;
     longitude: number | null | undefined;
     sortOrder: number | null | undefined;
@@ -32,6 +34,7 @@ export interface Route {
     cragName: string | null | undefined;
     crag?: Crag | null | undefined;
     issues: Issue[];
+    attachments?: TopoAttachment[];
     altNames: string | null | undefined;
     boltCount: number | null | undefined;
     climbStyle: string | null | undefined;
@@ -49,6 +52,7 @@ export interface Route {
 }
 
 export interface Issue {
+    routeName: string | number | readonly string[] | undefined;
     id: number;
     routeId: number;
     route?: Route;
@@ -102,5 +106,16 @@ export interface UserInvite {
     invitedByName: string;
     token: string | null | undefined;
     tokenExpires: string | null | undefined;
+    createdAt: string | null | undefined;
+}
+
+export interface TopoAttachment {
+    id: number;
+    url: string;
+    type: string;
+    name: string | null | undefined;
+    routes: Route[];
+    sectors: Sector[];
+    crags: Crag[];
     createdAt: string | null | undefined;
 }
