@@ -4,6 +4,7 @@ import { getGradeColor } from "~/lib/constants";
 import type { Route } from "~/lib/models";
 import { useEffect, useRef, useState } from "react";
 import { TopoGallery } from "./TopoGallery";
+import { useFetcher } from "@remix-run/react";
 
 interface TruncatableDescriptionProps {
     description: string;
@@ -62,10 +63,36 @@ interface RouteCardProps {
 }
 
 export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
+    const fetcher = useFetcher();
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'link';
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+        
+        if (data.type === 'attachment') {
+            const formData = new FormData();
+            formData.append('_action', 'add');
+            formData.append('routeId', route.id.toString());
+            formData.append('attachmentId', data.id.toString());
+            
+            fetcher.submit(formData, { 
+                method: 'post',
+                action: '/api/attachments'
+            });
+        }
+    };
+
     return (
         <Paper
             p="xs"
             withBorder
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
             style={{
                 borderLeft: `${rem(6)} solid ${getGradeColor(route.gradeYds ?? '')}`,
                 flex: 1,

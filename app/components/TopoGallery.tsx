@@ -82,6 +82,25 @@ export function TopoGallery({
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, attachment: TopoAttachment) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({
+      type: 'attachment',
+      id: attachment.id,
+      attachmentType: attachment.type
+    }));
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+    console.log('Dropped attachment:', data);
+  };
+
   const getIconSize = () => {
     switch (size) {
       case 'xs': return 20;
@@ -120,7 +139,7 @@ export function TopoGallery({
         size="sm"
       >
         <Stack>
-          <Text>Are you sure you want to delete this attachment?</Text>
+          <Text>Are you sure you want to remove this attachment from this object?</Text>
           <Text size="sm" c="red">This action cannot be undone.</Text>
           <Group justify="flex-end" mt="md">
             <Button variant="subtle" onClick={() => setDeleteAttachmentId(null)}>Cancel</Button>
@@ -137,10 +156,14 @@ export function TopoGallery({
             key={attachment.id}
             pos="relative"
             radius="sm"
+            draggable
+            onDragStart={(e) => handleDragStart(e, attachment)}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
             style={{
               width: getPreviewSize(),
               height: getPreviewSize(),
-              cursor: 'pointer',
+              cursor: 'grab',
               overflow: 'visible',
               display: 'flex',
               alignItems: 'center',
