@@ -1,7 +1,8 @@
 import { ActionFunction, data } from "@remix-run/cloudflare";
 import type { AppLoadContext } from "@remix-run/cloudflare";
-import type { TopoAttachment } from "~/lib/models";
+import type { TopoAttachment, User } from "~/lib/models";
 import { removeAttachment, uploadAttachment, addAttachmentToRoute } from "~/lib/attachment.server";
+import { getAuthenticator } from "~/lib/auth.server";
 
 interface AttachmentUploadResult {
   success: boolean;
@@ -10,6 +11,10 @@ interface AttachmentUploadResult {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
+  const user = await getAuthenticator(context).isAuthenticated(request);
+  if (!user || (user.role !== 'admin' && user.role !== 'member')) {
+    return data({ error: 'Unauthorized' }, { status: 403 });
+  }
   const formData = await request.formData();
   const action = formData.get("_action");
   const routeId = Number(formData.get("routeId"));
