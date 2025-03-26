@@ -12,7 +12,6 @@ import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/cons
 import { getDB } from "~/lib/db";
 import { uploadFileToR2 } from "~/lib/s3.server";
 
-export const R2_UPLOADS_BUCKET = 'tabvar-issues-uploads';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; //5 MB
 type IssueType = keyof typeof subIssuesByType;
 
@@ -50,8 +49,9 @@ export const action: ActionFunction = async ({ request, context }) => {
     return data({ success: false, message: errorMessage }, { status: 400 });
   }
 
+  const env = context.cloudflare.env as unknown as Env;
   const uploadedFiles = await Promise.all(files.map((file) =>
-    uploadFileToR2(context, file, R2_UPLOADS_BUCKET)
+    uploadFileToR2(context, file, env.ISSUES_BUCKET_NAME, env.ISSUES_BUCKET_DOMAIN)
   ));
 
   const db = getDB(context);

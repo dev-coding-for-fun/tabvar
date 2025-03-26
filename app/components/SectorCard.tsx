@@ -5,6 +5,7 @@ import type { Sector as SectorType, Route } from "~/lib/models";
 import { RouteCard } from "./RouteCard";
 import { RouteEditCard } from "./RouteEditCard";
 import { useState } from "react";
+import { TopoGallery } from "./TopoGallery";
 
 interface SectorCardProps {
   sector: SectorType;
@@ -151,7 +152,7 @@ export function SectorCard({
           )}
         </Group>
 
-        <Droppable droppableId={sector.id.toString()} isDropDisabled={reorderingSectorId !== sector.id}>
+        <Droppable droppableId={sector.id.toString()} type="route" isDropDisabled={reorderingSectorId !== sector.id}>
           {(provided: DroppableProvided) => (
             <Stack gap="xs" ref={provided.innerRef} {...provided.droppableProps}>
               {newRouteSectorId === sector.id && (
@@ -190,7 +191,7 @@ export function SectorCard({
                           cursor: reorderingSectorId === sector.id ? 'row-resize' : 'default'
                         }}
                       >
-                        <Group gap={4} align="flex-start">
+                        <Group gap="xs">
                           {canEdit && (
                             <Stack gap={5} miw={30}>
                               <ActionIcon
@@ -225,7 +226,11 @@ export function SectorCard({
                               onCancel={onCancelEdit}
                             />
                           ) : (
-                            <RouteCard route={route} theme={theme} canEdit={canEdit} />
+                            <RouteCard 
+                              route={route} 
+                              theme={theme} 
+                              canEdit={canEdit}
+                            />
                           )}
                         </Group>
                       </div>

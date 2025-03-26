@@ -1,9 +1,12 @@
-import { ActionIcon, Group, Image, Modal, Paper, Stack, Text, useMantineTheme, FileButton, LoadingOverlay } from "@mantine/core";
-import { IconPaperclip, IconTrash, IconFileTypePdf } from "@tabler/icons-react";
+import { ActionIcon, Group, Image, Modal, Paper, Stack, Text, useMantineTheme, FileButton, LoadingOverlay, Button } from "@mantine/core";
+import { IconPaperclip, IconX, IconFileTypePdf, IconPhoto } from "@tabler/icons-react";
 import { useState } from "react";
-import { useAttachments } from "~/lib/hooks/useAttachments";
+import { useFetcher } from "@remix-run/react";
 import { notifications } from "@mantine/notifications";
-import type { TopoAttachment as TopoAttachment } from "~/lib/models";
+import type { TopoAttachment } from "~/lib/models";
+import Lightbox from "yet-another-react-lightbox-lite";
+import type { LightboxProps } from "yet-another-react-lightbox-lite";
+import "yet-another-react-lightbox-lite/styles.css";
 
 interface TopoGalleryProps {
   attachments: TopoAttachment[];
@@ -19,48 +22,73 @@ export function TopoGallery({
   size = 'md'
 }: TopoGalleryProps) {
   const theme = useMantineTheme();
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const { uploadAttachment, deleteAttachment, isUploading } = useAttachments({
-    onSuccess: () => {
-      notifications.show({
-        title: 'Success',
-        message: 'Attachment operation completed successfully',
-        color: 'green'
-      });
-    },
-    onError: (error) => {
-      notifications.show({
-        title: 'Error',
-        message: error,
-        color: 'red'
-      });
-    }
-  });
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | undefined>(undefined);
+  const [deleteAttachmentId, setDeleteAttachmentId] = useState<number | null>(null);
+  const fetcher = useFetcher();
 
-  const handleAttachmentClick = (attachment: TopoAttachment) => {
+  const imageAttachments = attachments.filter(attachment => attachment.type.startsWith('image/'));
+
+  const handleAttachmentClick = (attachment: TopoAttachment, index: number) => {
     if (attachment.type.startsWith('image/')) {
-      setSelectedImage(attachment.url);
+      const imageIndex = imageAttachments.findIndex(img => img.id === attachment.id);
+      setSelectedImageIndex(imageIndex);
     } else if (attachment.type === 'application/pdf') {
-      window.open(attachment.url, '_blank');
+      const url = attachment.url.startsWith('http') ? attachment.url : `https://${attachment.url}`;
+      window.open(url, '_blank');
     }
+  };
+
+  const handleDeleteClick = (attachment: TopoAttachment) => {
+    setDeleteAttachmentId(attachment.id);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteAttachmentId) return;
+    
+    const formData = new FormData();
+    formData.append('_action', 'delete');
+    formData.append('routeId', routeId.toString());
+    formData.append('attachmentId', deleteAttachmentId.toString());
+
+    fetcher.submit(formData, { 
+      method: 'post',
+      action: '/api/attachments'
+    });
+
+    setDeleteAttachmentId(null);
   };
 
   const handleFileSelect = async (file: File | null) => {
     if (!file) return;
-    await uploadAttachment(routeId, file);
-  };
 
-  const handleDeleteAttachment = async (attachmentId: number) => {
-    await deleteAttachment(routeId, attachmentId);
+    try {
+      const formData = new FormData();
+      formData.append('_action', 'upload');
+      formData.append('routeId', routeId.toString());
+      formData.append('file', file);
+
+      fetcher.submit(formData, { 
+        method: 'post',
+        action: '/api/attachments',
+        encType: 'multipart/form-data'
+      });
+    } catch (error) {
+      console.error('Error preparing file:', error);
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to prepare file for upload',
+        color: 'red'
+      });
+    }
   };
 
   const getIconSize = () => {
     switch (size) {
-      case 'xs': return 16;
-      case 'sm': return 20;
-      case 'md': return 24;
-      case 'lg': return 28;
-      case 'xl': return 32;
+      case 'xs': return 20;
+      case 'sm': return 24;
+      case 'md': return 28;
+      case 'lg': return 32;
+      case 'xl': return 40;
     }
   };
 
@@ -76,26 +104,35 @@ export function TopoGallery({
 
   return (
     <>
+      <Lightbox
+        index={selectedImageIndex}
+        setIndex={setSelectedImageIndex}
+        slides={imageAttachments.map(attachment => ({
+          src: attachment.url,
+          alt: attachment.name || 'Topo image'
+        }))}
+      />
+
       <Modal
-        opened={!!selectedImage}
-        onClose={() => setSelectedImage(null)}
-        size="xl"
-        padding={0}
+        opened={deleteAttachmentId !== null}
+        onClose={() => setDeleteAttachmentId(null)}
+        title="Delete Attachment"
+        size="sm"
       >
-        {selectedImage && (
-          <Image
-            src={selectedImage}
-            alt="Topo preview"
-            fit="contain"
-            style={{ maxHeight: '80vh' }}
-          />
-        )}
+        <Stack>
+          <Text>Are you sure you want to delete this attachment?</Text>
+          <Text size="sm" c="red">This action cannot be undone.</Text>
+          <Group justify="flex-end" mt="md">
+            <Button variant="subtle" onClick={() => setDeleteAttachmentId(null)}>Cancel</Button>
+            <Button color="red" onClick={handleConfirmDelete}>Delete</Button>
+          </Group>
+        </Stack>
       </Modal>
 
       <Group gap="xs" wrap="nowrap" pos="relative">
-        <LoadingOverlay visible={isUploading} />
+        <LoadingOverlay visible={fetcher.state !== 'idle'} />
         
-        {attachments.map((attachment) => (
+        {attachments.map((attachment, index) => (
           <Paper
             key={attachment.id}
             pos="relative"
@@ -104,42 +141,38 @@ export function TopoGallery({
               width: getPreviewSize(),
               height: getPreviewSize(),
               cursor: 'pointer',
-              overflow: 'hidden'
+              overflow: 'visible',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.colors.gray[0]
             }}
-            onClick={() => handleAttachmentClick(attachment)}
+            onClick={() => handleAttachmentClick(attachment, index)}
           >
-            {attachment.type.startsWith('image/') ? (
-              <Image
-                src={attachment.url}
-                alt={attachment.name || 'Topo image'}
-                fit="cover"
-                style={{ width: '100%', height: '100%' }}
-              />
+            {attachment.type === 'application/pdf' ? (
+              <IconFileTypePdf size={getIconSize()} color={theme.colors.red[6]} />
             ) : (
-              <Group
-                h="100%"
-                w="100%"
-                justify="center"
-                bg={theme.colors.gray[0]}
-              >
-                <IconFileTypePdf size={getIconSize()} color={theme.colors.red[6]} />
-              </Group>
+              <IconPhoto size={getIconSize()} color={theme.colors.blue[6]} />
             )}
             
             {canEdit && (
               <ActionIcon
-                variant="filled"
-                color="red"
+                variant="subtle"
+                color="white"
                 size="xs"
                 pos="absolute"
-                top={4}
-                right={4}
+                top={-8}
+                right={-8}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDeleteAttachment(attachment.id);
+                  handleDeleteClick(attachment);
+                }}
+                style={{
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(255, 0, 0, 0.9)',
                 }}
               >
-                <IconTrash size={12} />
+                <IconX size={12} />
               </ActionIcon>
             )}
           </Paper>

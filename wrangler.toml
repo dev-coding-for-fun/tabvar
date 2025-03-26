@@ -64,6 +64,14 @@ pages_build_output_dir = "./build/client"
 ENVIRONMENT = "preview"
 route = "dev.tabvar.org/*"
 
+[[env.preview.r2_buckets]]
+binding = "TABVAR_ISSUES_UPLOADS"
+bucket_name = "tabvar-issues-uploads-dev"
+
+[[env.preview.r2_buckets]]
+binding = "TABVAR_TOPOS"
+bucket_name = "tabvar-topos-dev"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "tabvar_dev"
@@ -74,6 +82,10 @@ database_id = "c4568107-db66-41ed-b673-7c9726126316"
 binding = "TABVAR_ISSUES_UPLOADS"
 bucket_name = "tabvar-issues-uploads"
 
+[[env.production.r2_buckets]]
+binding = "TABVAR_TOPOS"
+bucket_name = "tabvar-topos"
+
 [env.production.vars]
 ENVIRONMENT = "production"
 COOKIE_DOMAIN="tabvar.org"
@@ -81,6 +93,10 @@ GOOGLE_CLIENT_ID="823275884172-dpbp17m92idbn1mruag4j5sdr0brripl.apps.googleuserc
 BASE_URL="https://app.tabvar.org"
 SLOPER_URL="https://www.sloperclimbing.com"
 MAPBOX_STYLE_URL="mapbox://styles/mapbox/outdoors-v12"
+ISSUES_BUCKET_DOMAIN="https://pub-3a963f36901a42da8a02c9e06fce7ca3.r2.dev"
+TOPOS_BUCKET_DOMAIN="https://pub-a978d7aad98f4f118b7dfee11f6d9a3a.r2.dev"
+ISSUES_BUCKET_NAME="tabvar-issues-uploads"
+TOPOS_BUCKET_NAME="tabvar-topos"
 
 [[env.production.d1_databases]]
 binding = "DB"

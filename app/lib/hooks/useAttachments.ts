@@ -1,5 +1,5 @@
 import { useFetcher } from "@remix-run/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface UseAttachmentsOptions {
   onSuccess?: () => void;
@@ -15,6 +15,17 @@ export function useAttachments({ onSuccess, onError }: UseAttachmentsOptions = {
   const fetcher = useFetcher<AttachmentResponse>();
   const [isUploading, setIsUploading] = useState(false);
 
+  useEffect(() => {
+    if (fetcher.data) {
+      setIsUploading(false);
+      if (fetcher.data.success) {
+        onSuccess?.();
+      } else {
+        onError?.(fetcher.data.error || 'Failed to upload attachment');
+      }
+    }
+  }, [fetcher.data, onSuccess, onError]);
+
   const uploadAttachment = async (routeId: number, file: File) => {
     setIsUploading(true);
     try {
@@ -23,17 +34,13 @@ export function useAttachments({ onSuccess, onError }: UseAttachmentsOptions = {
       formData.append('routeId', routeId.toString());
       formData.append('file', file);
 
-      fetcher.submit(formData, { method: 'post' });
-      
-      if (fetcher.data?.success) {
-        onSuccess?.();
-      } else {
-        onError?.(fetcher.data?.error || 'Failed to upload attachment');
-      }
+      fetcher.submit(formData, { 
+        method: 'post',
+        action: window.location.pathname 
+      });
     } catch (error) {
-      onError?.(error instanceof Error ? error.message : 'Failed to upload attachment');
-    } finally {
       setIsUploading(false);
+      onError?.(error instanceof Error ? error.message : 'Failed to upload attachment');
     }
   };
 
@@ -44,13 +51,10 @@ export function useAttachments({ onSuccess, onError }: UseAttachmentsOptions = {
       formData.append('routeId', routeId.toString());
       formData.append('attachmentId', attachmentId.toString());
 
-      fetcher.submit(formData, { method: 'post' });
-      
-      if (fetcher.data?.success) {
-        onSuccess?.();
-      } else {
-        onError?.(fetcher.data?.error || 'Failed to delete attachment');
-      }
+      fetcher.submit(formData, { 
+        method: 'post',
+        action: window.location.pathname 
+      });
     } catch (error) {
       onError?.(error instanceof Error ? error.message : 'Failed to delete attachment');
     }

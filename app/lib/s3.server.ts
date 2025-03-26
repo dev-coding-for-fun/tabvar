@@ -21,6 +21,31 @@ interface UploadFileResult {
   type: string;
 }
 
+async function getFileBuffer(file: File | Blob): Promise<Buffer> {
+  // Try FormData File method first
+  if ('arrayBuffer' in file) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } catch (e) {
+      console.log('arrayBuffer method failed, falling back to stream');
+    }
+  }
+
+  // Fallback to stream method
+  const chunks: Uint8Array[] = [];
+  const stream = file.stream();
+  const reader = stream.getReader();
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  
+  return Buffer.concat(chunks);
+}
+
 /**
  * Uploads a file to Cloudflare R2.
  * @param context The application load context.
@@ -31,34 +56,38 @@ interface UploadFileResult {
  */
 export async function uploadFileToR2(
   context: AppLoadContext,
-  file: File,
+  file: File | Blob,
   bucketName: string,
+  bucketDomain: string,
 ): Promise<UploadFileResult> {
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
+  const buffer = await getFileBuffer(file);
   const client = getS3Client(context);
+
+  // Generate a unique filename if the file object doesn't have a name
+  const fileName = 'name' in file ? file.name : `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  const contentType = file.type || 'application/octet-stream';
 
   const params = {
     Bucket: bucketName,
-    Key: file.name,
+    Key: fileName,
     Body: buffer,
-    ContentType: file.type,
+    ContentType: contentType,
   };
 
   const command = new PutObjectCommand(params);
   await client.send(command);
 
+  const fileUrl = `${bucketDomain}/${fileName}`;
+
   return {
-    url: `/${file.name}`,
-    name: file.name,
-    type: file.type,
+    url: fileUrl,
+    name: fileName,
+    type: contentType,
   };
 }
 
-export async function deleteFromR2(context: AppLoadContext, bucketName: string, url: string) {
+export async function deleteFromR2(context: AppLoadContext, bucketName: string, fileName: string) {
   const client = getS3Client(context);
-  const fileName = url.split('/').pop();
   const params = {
     Bucket: bucketName,
     Key: fileName,

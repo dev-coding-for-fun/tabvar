@@ -10,7 +10,6 @@ import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useRef, useState } from "react";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { deleteFromR2 } from "~/lib/s3.server";
-import { R2_UPLOADS_BUCKET } from "./issues.create";
 import { Issue, Route, User } from "~/lib/models";
 import { RouteSearchResults } from "~/routes/api.search";
 
@@ -126,14 +125,17 @@ async function modifyIssueStatus(context: AppLoadContext, issueId: number, updat
 
 async function deleteIssue(context: AppLoadContext, issueId: number, user: User) {
     const db = getDB(context);
+    const env = context.cloudflare.env as unknown as Env;
     const issue = await db.selectFrom('issue').selectAll()
         .where('id', '=', issueId).executeTakeFirstOrThrow();
     const attachments = await db.selectFrom('issue_attachment')
-        .select(['url'])
+        .select(['url', 'name'])
         .where('issue_id', '=', issueId).execute();
     if (attachments.length > 0) {
         for (const attachment of attachments) {
-            await deleteFromR2(context, R2_UPLOADS_BUCKET, attachment.url);
+            const fileName = attachment.name ?? attachment.url.split('/').pop();
+            if (!fileName) { throw new Error('Invalid attachment filename'); }
+            await deleteFromR2(context, env.ISSUES_BUCKET_NAME, fileName);
         }
     }
     await db.deleteFrom('issue_attachment')
