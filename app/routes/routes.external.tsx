@@ -1,5 +1,5 @@
 import { Button, Code, Container, Group, Loader, Stack, Table, Text, TextInput, Textarea, Title } from "@mantine/core";
-import { ActionFunction, LoaderFunction, json } from "@remix-run/cloudflare";
+import { ActionFunction, LoaderFunction, data } from "@remix-run/cloudflare";
 import { useFetcher } from "@remix-run/react";
 import { User } from "~/lib/models";
 import { useEffect, useState } from "react";
@@ -34,7 +34,11 @@ type OpenBetaResponse = {
     error?: string;
 };
 
-export const action: ActionFunction = async ({ request }) => {
+export const action: ActionFunction = async ({ request, context }) => {
+  const user = await getAuthenticator(context).isAuthenticated(request);
+  if (!user || (user.role !== 'admin' && user.role !== 'member')) {
+    return data({ error: 'Unauthorized' }, { status: 403 });
+  }
     const query = `
 query getMyAreas {
   banff: areas(
@@ -136,9 +140,9 @@ query getMyAreas {
         });
 
         const data = await response.json();
-        return json({ data });
+        return data;
     } catch (error) {
-        return json({ error: (error as Error).message }, { status: 500 });
+        return data({ error: (error as Error).message }, { status: 500 });
     }
 };
 
@@ -147,9 +151,9 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         failureRedirect: "/login",
     });
     if (user.role !== 'admin') {
-        return json({ error: PERMISSION_ERROR }, { status: 403 });
+        return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
-    return json({});
+    return data({});
 }
 
 export default function ExternalRoutes() {
