@@ -11,6 +11,7 @@ export interface RouteSearchResults extends RouteSearch {
 export const loader: LoaderFunction = async ({ request, context }) => {
     const url = new URL(request.url);
     const separateRouteCragSector = url.searchParams.get('separateRouteCragSector') === 'true';
+    const routeOnly = url.searchParams.get('routeOnly') === 'true';
     const limit: number = Number(url.searchParams.get('limit')) || 10;
     const query = url.searchParams.get('query')?.replace(/[^a-zA-Z0-9\s]/g, '') || null;
     if (!query) {
@@ -68,6 +69,22 @@ export const loader: LoaderFunction = async ({ request, context }) => {
             .execute();
         console.log(results);
         return results;
+    }
+    else if (routeOnly) {
+        const routes: RouteSearchResults[] = await db.selectFrom('route_search')
+            .where(sql`route_search`, 'match', `name:${query}*`)
+            .select([sql<number>`rowid`.as('id'),
+                'name',
+                sql<string>`'route'`.as('type'),
+                'sector_name',
+                'crag_name',
+                'grade_yds',
+                'bolt_count',
+                'pitch_count'
+            ])
+            .limit(limit)
+            .execute();
+        return routes;
     }
     else {
         const routes: RouteSearchResults[] = await db.selectFrom('route_search')

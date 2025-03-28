@@ -15,33 +15,34 @@ export const action: ActionFunction = async ({ request, context }) => {
   if (!user || (user.role !== 'admin' && user.role !== 'member')) {
     return data({ error: 'Unauthorized' }, { status: 403 });
   }
+
   const formData = await request.formData();
   const action = formData.get("_action");
-  const routeId = Number(formData.get("routeId"));
+  const routeIds = formData.getAll("routeId").map(id => Number(id));
 
   switch (action) {
     case "upload": {
       const file = formData.get("file") as File;
-      if (!file || !routeId) {
+      if (!file || routeIds.length === 0) {
         return data({ success: false, error: "Missing required fields" }, { status: 400 });
       }
-      return data(await uploadAttachment(context, file, routeId));
+      return data(await uploadAttachment(context, file, routeIds));
     }
 
     case "delete": {
       const attachmentId = Number(formData.get("attachmentId"));
-      if (!attachmentId || !routeId) {
-        return data({ success: false, error: "Missing required fields" }, { status: 400 });
+      if (!attachmentId || routeIds.length !== 1) {
+        return data({ success: false, error: "Missing or invalid route ID" }, { status: 400 });
       }
-      return data(await removeAttachment(context, routeId, attachmentId));
+      return data(await removeAttachment(context, routeIds[0], attachmentId));
     }
 
     case "add": {
       const attachmentId = Number(formData.get("attachmentId"));
-      if (!attachmentId || !routeId) {
+      if (!attachmentId || routeIds.length === 0) {
         return data({ success: false, error: "Missing required fields" }, { status: 400 });
       }
-      return data(await addAttachmentToRoute(context, routeId, attachmentId));
+      return data(await addAttachmentToRoute(context, routeIds, attachmentId));
     }
 
     default:

@@ -22,28 +22,9 @@ interface UploadFileResult {
 }
 
 async function getFileBuffer(file: File | Blob): Promise<Buffer> {
-  // Try FormData File method first
-  if ('arrayBuffer' in file) {
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      return Buffer.from(arrayBuffer);
-    } catch (e) {
-      console.log('arrayBuffer method failed, falling back to stream');
-    }
-  }
-
-  // Fallback to stream method
-  const chunks: Uint8Array[] = [];
-  const stream = file.stream();
-  const reader = stream.getReader();
-  
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  
-  return Buffer.concat(chunks);
+  // Both File and Blob objects have arrayBuffer method
+  const arrayBuffer = await file.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
 /**

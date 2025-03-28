@@ -12,7 +12,7 @@ export interface AttachmentUploadResult {
 export async function uploadAttachment(
   context: AppLoadContext,
   file: File,
-  routeId: number
+  routeIds: number[]
 ): Promise<AttachmentUploadResult> {
   try {
     const env = context.cloudflare.env as unknown as Env;
@@ -30,12 +30,15 @@ export async function uploadAttachment(
       .returning(['id', 'url', 'type', 'name'])
       .executeTakeFirstOrThrow() as TopoAttachment;
 
+    // Create route attachment associations for all route IDs
     await db
       .insertInto('route_attachment')
-      .values({
-        route_id: routeId,
-        attachment_id: attachment.id
-      })
+      .values(
+        routeIds.map(routeId => ({
+          route_id: routeId,
+          attachment_id: attachment.id
+        }))
+      )
       .execute();
 
     return {
@@ -116,31 +119,37 @@ export async function removeAttachment(
 
 export async function addAttachmentToRoute(
   context: AppLoadContext,
-  routeId: number,
+  routeIds: number[],
   attachmentId: number
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const db = getDB(context);
     
-    // Check if the attachment already exists for this route
+    // Get existing route attachments for this attachment
     const existing = await db
       .selectFrom('route_attachment')
-      .where('route_id', '=', routeId)
       .where('attachment_id', '=', attachmentId)
       .select(['route_id'])
-      .executeTakeFirst();
+      .execute();
 
-    if (existing) {
-      return { success: true }; // Already exists, no need to add it again
+    const existingRouteIds = new Set(existing.map(e => e.route_id));
+
+    // Filter out route IDs that already have this attachment
+    const newRouteIds = routeIds.filter(id => !existingRouteIds.has(id));
+
+    if (newRouteIds.length === 0) {
+      return { success: true }; // All routes already have this attachment
     }
 
-    // Add the route attachment association
+    // Add the route attachment associations for new routes
     await db
       .insertInto('route_attachment')
-      .values({
-        route_id: routeId,
-        attachment_id: attachmentId
-      })
+      .values(
+        newRouteIds.map(routeId => ({
+          route_id: routeId,
+          attachment_id: attachmentId
+        }))
+      )
       .execute();
 
     return { success: true };

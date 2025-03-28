@@ -1,5 +1,5 @@
 import { useFetcher } from "@remix-run/react";
-import { SelectProps, Container, Group, Select, Text } from "@mantine/core";
+import { SelectProps, Group, Select, Text } from "@mantine/core";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { RouteSearchResults } from "~/routes/api.search";
 
@@ -10,6 +10,7 @@ interface RouteSearchBoxProps {
     required?: boolean;
     onChange?: (selected: { value: string | null; boltCount: number | null }) => void;
     value: string | null;
+    routeOnly?: boolean;
 }
 
 export type SearchBoxRef = { 
@@ -21,6 +22,8 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
   name,
   required = false,
   onChange = () => { },
+  routeOnly = false,
+  value,
 }, _ref) => {
   const { load, ...fetcher } = useFetcher<RouteSearchResults[]>();
   const [query, setQuery] = useState('');
@@ -53,14 +56,14 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
     const debounceTime = query.length < 2 ? 1000 : 300;
     const handler = setTimeout(() => {
       if (query.trim().length > 1) {
-        load(`/api/search?query=${encodeURIComponent(query)}`);
+        load(`/api/search?query=${encodeURIComponent(query)}&routeOnly=${routeOnly}`);
       }
     }, debounceTime);
 
     return () => {
       clearTimeout(handler);
     };
-  }, [query, load]);
+  }, [query, load, routeOnly]);
 
   useEffect(() => {
     if (fetcher.data) {
@@ -87,26 +90,32 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
   };
 
   return (
-    <Container size="md" p="md">
-      <Select
-        label={label}
-        name={name}
-        data={items.map(item => ({ value: item.id.toString(), label: item.name ?? '' }))}
-        searchable
-        searchValue={query}
-        onSearchChange={handleSearchChange}
-        filter={({ options }) => { return options }}
-        placeholder="Type to search..."
-        nothingFoundMessage="No routes found"
-        clearable
-        renderOption={renderSelectOption}
-        required={required}
-        onChange={handleChange}
-      />
-    </Container>
+    <Select
+      label={label}
+      name={name}
+      data={items.map(item => ({ value: item.id.toString(), label: item.name ?? '' }))}
+      searchable
+      searchValue={query}
+      onSearchChange={handleSearchChange}
+      filter={({ options }) => { return options }}
+      placeholder="Type to search..."
+      nothingFoundMessage="No routes found"
+      clearable
+      renderOption={renderSelectOption}
+      required={required}
+      onChange={handleChange}
+      value={value}
+      maxDropdownHeight={400}
+      styles={{
+        dropdown: {
+          maxWidth: '800px',
+          width: '100%'
+        }
+      }}
+    />
   )
 });
 
 RouteSearchBox.displayName = 'RouteSearchBox';
 
-  export default RouteSearchBox;
+export default RouteSearchBox;
