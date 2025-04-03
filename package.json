@@ -17,6 +17,7 @@
   "dependencies": {
     "@alwaysmeticulous/recorder-loader": "^2.132.0",
     "@aws-sdk/client-s3": "^3.583.0",
+    "@google/generative-ai": "^0.24.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@mantine/core": "^7.17.2",
     "@mantine/dates": "^7.17.2",

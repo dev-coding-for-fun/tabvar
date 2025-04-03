@@ -22,5 +22,6 @@ interface Env {
 	TOPOS_BUCKET_DOMAIN: string;
 	ISSUES_BUCKET_NAME: string;
 	TOPOS_BUCKET_NAME: string;
+	GEMINI_API_KEY: string;
 	DB: D1Database;
 }

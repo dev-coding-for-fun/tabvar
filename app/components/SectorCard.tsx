@@ -1,11 +1,12 @@
 import { Paper, Group, Title, Stack, ActionIcon, MantineTheme, TextInput, Modal, Text, Button, Overlay } from "@mantine/core";
-import { IconPencilPlus, IconArrowsUpDown, IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconPencilPlus, IconArrowsUpDown, IconPencil, IconTrash, IconRobot } from "@tabler/icons-react";
 import { DroppableProvided, DraggableProvided, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { Sector as SectorType, Route } from "~/lib/models";
 import { RouteCard } from "./RouteCard";
 import { RouteEditCard } from "./RouteEditCard";
 import { useState } from "react";
 import { TopoGallery } from "./TopoGallery";
+import { Link } from "@remix-run/react";
 
 interface SectorCardProps {
   sector: SectorType;
@@ -113,15 +114,27 @@ export function SectorCard({
                 {sector.name}
               </Title>
               {canEdit && (
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  title={sector.routes?.length ? "Sector must be empty" : "Delete Sector"}
-                  disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null || sector.routes?.length > 0 || sortingSectors}
-                  onClick={() => onDeleteSector?.(sector.id, sector.name)}
-                >
-                  <IconTrash size={16} />
-                </ActionIcon>
+                <>
+                  <ActionIcon
+                    component={Link}
+                    to={`/topos/importer?sectorId=${sector.id}`}
+                    variant="subtle"
+                    color="gray"
+                    title="Import Data"
+                    disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null || sortingSectors}
+                  >
+                    <IconRobot size={16} />
+                  </ActionIcon>
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    title={sector.routes?.length ? "Sector must be empty" : "Delete Sector"}
+                    disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null || sector.routes?.length > 0 || sortingSectors}
+                    onClick={() => onDeleteSector?.(sector.id, sector.name)}
+                  >
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                </>
               )}
             </Group>
           )}
