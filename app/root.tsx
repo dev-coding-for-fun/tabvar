@@ -10,9 +10,14 @@ import 'mantine-datatable/styles.layer.css';
 import '@mantine/notifications/styles.css';
 import './styles/custom.css';
 import './styles/header.css';
-
 import { ColorSchemeScript, DEFAULT_THEME, MantineProvider, createTheme } from '@mantine/core';
 import { Notifications } from "@mantine/notifications";
+import { LoaderFunction } from "@remix-run/cloudflare";
+import { useLoaderData } from "@remix-run/react";
+import { getAuthenticator } from "~/lib/auth.server";
+import type { User } from "~/lib/models";
+import { UserProvider } from "./lib/hooks/useUser";
+import { EditorMenu } from "./components/EditorMenu";
 
 const theme = createTheme({
   primaryColor: 'blue',
@@ -29,7 +34,14 @@ const theme = createTheme({
   fontFamily: "'Lato', sans-serif",
 })
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export const loader: LoaderFunction = async ({ request, context }) => {
+  const user = await getAuthenticator(context).isAuthenticated(request);
+  return { user };
+};
+
+export default function App() {
+  const { user } = useLoaderData<{ user: User | null }>();
+
   return (
     <html lang="en">
       <head>
@@ -97,15 +109,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           defaultColorScheme="light"
         >
           <Notifications position="top-center" />
-          {children}
+          <UserProvider user={user}>
+            <EditorMenu />
+            <Outlet />
+          </UserProvider>
         </MantineProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
     </html>
   );
-}
-
-export default function App() {
-  return <Outlet />;
 }
