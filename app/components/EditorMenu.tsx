@@ -7,7 +7,7 @@ export function EditorMenu() {
   const user = useUser();
   
   // Only show for admin or member users
-  if (!user || (user.role !== 'admin' && user.role !== 'member')) {
+  if (!user || (user.role !== 'admin')) {
     return null;
   }
 
@@ -23,7 +23,8 @@ export function EditorMenu() {
         transform: 'translateY(-50%)',
         borderTopRightRadius: '8px',
         borderBottomRightRadius: '8px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        zIndex: 1000
       }}
     >
       <Tooltip label="Upload Topos" position="right">
