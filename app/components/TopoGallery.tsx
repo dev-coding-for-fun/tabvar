@@ -10,7 +10,9 @@ import "yet-another-react-lightbox-lite/styles.css";
 
 interface TopoGalleryProps {
   attachments: TopoAttachment[];
-  routeId: number;
+  routeId?: number;
+  sectorId?: number;
+  cragId?: number;
   canEdit?: boolean;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 }
@@ -18,6 +20,8 @@ interface TopoGalleryProps {
 export function TopoGallery({ 
   attachments, 
   routeId,
+  sectorId,
+  cragId,
   canEdit = false, 
   size = 'md'
 }: TopoGalleryProps) {
@@ -47,7 +51,13 @@ export function TopoGallery({
     
     const formData = new FormData();
     formData.append('_action', 'delete');
-    formData.append('routeId', routeId.toString());
+    if (routeId) {
+      formData.append('routeId', routeId.toString());
+    } else if (sectorId) {
+      formData.append('sectorId', sectorId.toString());
+    } else if (cragId) {
+      formData.append('cragId', cragId.toString());
+    }
     formData.append('attachmentId', deleteAttachmentId.toString());
 
     fetcher.submit(formData, { 
@@ -64,7 +74,13 @@ export function TopoGallery({
     try {
       const formData = new FormData();
       formData.append('_action', 'upload');
-      formData.append('routeId', routeId.toString());
+      if (routeId) {
+        formData.append('routeId', routeId.toString());
+      } else if (sectorId) {
+        formData.append('sectorId', sectorId.toString());
+      } else if (cragId) {
+        formData.append('cragId', cragId.toString());
+      }
       formData.append('file', file);
 
       fetcher.submit(formData, { 

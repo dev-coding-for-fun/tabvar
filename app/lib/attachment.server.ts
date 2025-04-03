@@ -12,13 +12,15 @@ export interface AttachmentUploadResult {
 export async function uploadAttachment(
   context: AppLoadContext,
   file: File,
-  routeIds: number[]
+  routeIds: number[],
+  sectorId: number,
+  cragId: number
 ): Promise<AttachmentUploadResult> {
   try {
     const env = context.cloudflare.env as unknown as Env;
     const uploadResult = await uploadFileToR2(context, file, env.TOPOS_BUCKET_NAME, env.TOPOS_BUCKET_DOMAIN);
     const db = getDB(context);
-    
+
     // Create the attachment record
     const attachment = await db
       .insertInto('topo_attachment')
@@ -30,17 +32,35 @@ export async function uploadAttachment(
       .returning(['id', 'url', 'type', 'name'])
       .executeTakeFirstOrThrow() as TopoAttachment;
 
-    // Create route attachment associations for all route IDs
-    await db
-      .insertInto('route_attachment')
-      .values(
-        routeIds.map(routeId => ({
-          route_id: routeId,
+    if (routeIds.length > 0) {
+      await db
+        .insertInto('route_attachment')
+        .values(
+          routeIds.map(routeId => ({
+            route_id: routeId,
+            attachment_id: attachment.id
+          }))
+        )
+        .execute();
+    }
+    else if (sectorId > 0) {
+      await db
+        .insertInto('sector_attachment')
+        .values({
+          sector_id: sectorId,
           attachment_id: attachment.id
-        }))
-      )
-      .execute();
-
+        })
+        .execute();
+    }
+    else if (cragId > 0) {
+      await db
+        .insertInto('crag_attachment')
+        .values({
+          crag_id: cragId,
+          attachment_id: attachment.id
+        })
+        .execute();
+    }
     return {
       success: true,
       attachment
@@ -57,11 +77,35 @@ export async function uploadAttachment(
 export async function removeAttachment(
   context: AppLoadContext,
   routeId: number,
+  sectorId: number,
+  cragId: number,
   attachmentId: number
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const db = getDB(context);
-    
+
+    if (routeId > 0) {
+      await db
+        .deleteFrom('route_attachment')
+        .where('route_id', '=', routeId)
+        .where('attachment_id', '=', attachmentId)
+        .execute();
+    }
+    else if (sectorId > 0) {
+      await db
+        .deleteFrom('sector_attachment')
+        .where('sector_id', '=', sectorId)
+        .where('attachment_id', '=', attachmentId)
+        .execute();
+    }
+    else if (cragId > 0) {
+      await db
+        .deleteFrom('crag_attachment')
+        .where('crag_id', '=', cragId)
+        .where('attachment_id', '=', attachmentId)
+        .execute();
+    }
+
     // Check if attachment is referenced by other entities
     const [routeRefs, sectorRefs, cragRefs] = await Promise.all([
       db.selectFrom('route_attachment')
@@ -79,13 +123,6 @@ export async function removeAttachment(
         .execute()
     ]);
 
-    // Delete the route attachment association
-    await db
-      .deleteFrom('route_attachment')
-      .where('route_id', '=', routeId)
-      .where('attachment_id', '=', attachmentId)
-      .execute();
-
     // Only delete the attachment record and file if it's not referenced elsewhere
     if (routeRefs.length === 0 && sectorRefs.length === 0 && cragRefs.length === 0) {
       const attachment = await db
@@ -97,7 +134,7 @@ export async function removeAttachment(
       const env = context.cloudflare.env as unknown as Env;
       const fileName = attachment.name ?? attachment.url.split('/').pop();
       if (!fileName) { throw new Error('Invalid attachment filename'); }
-      
+
       await deleteFromR2(context, env.TOPOS_BUCKET_NAME, fileName);
 
       // Delete the attachment record
@@ -124,7 +161,7 @@ export async function addAttachmentToRoute(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const db = getDB(context);
-    
+
     // Get existing route attachments for this attachment
     const existing = await db
       .selectFrom('route_attachment')
@@ -160,4 +197,78 @@ export async function addAttachmentToRoute(
       error: error instanceof Error ? error.message : 'Failed to add attachment to route'
     };
   }
-} 
+}
+
+export async function addAttachmentToSector(
+  context: AppLoadContext,
+  sectorId: number,
+  attachmentId: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const db = getDB(context);
+
+    const existing = await db
+      .selectFrom('sector_attachment')
+      .where('attachment_id', '=', attachmentId)
+      .select(['sector_id'])
+      .execute();
+      
+    const existingSectorIds = new Set(existing.map(e => e.sector_id));
+
+    if (existingSectorIds.has(sectorId)) {
+      return { success: true }; // Already has this attachment
+    }
+    
+    await db
+      .insertInto('sector_attachment')
+      .values({
+        sector_id: sectorId,
+        attachment_id: attachmentId
+      })
+      .execute();
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error adding attachment to sector:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to add attachment to sector' };
+  }
+}
+
+export async function addAttachmentToCrag(
+  context: AppLoadContext,
+  cragId: number,
+  attachmentId: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const db = getDB(context);
+
+    const existing = await db
+      .selectFrom('crag_attachment')
+      .where('attachment_id', '=', attachmentId)
+      .select(['crag_id'])
+      .execute();
+
+    const existingCragIds = new Set(existing.map(e => e.crag_id));
+
+    if (existingCragIds.has(cragId)) {
+      return { success: true }; // Already has this attachment
+    }
+
+    await db
+      .insertInto('crag_attachment')
+      .values({
+        crag_id: cragId,
+        attachment_id: attachmentId
+      })
+      .execute();
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error adding attachment to crag:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to add attachment to crag' };
+  }
+}
+
+
+
+

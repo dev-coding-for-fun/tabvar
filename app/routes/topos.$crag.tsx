@@ -13,6 +13,7 @@ import { SectorCard } from "~/components/SectorCard";
 import { createSector, updateSectorName, deleteSector } from "~/lib/sector.server";
 import { createRoute, updateRoute, updateRouteOrder, deleteRoute } from "~/lib/route.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
+import { TopoGallery } from "~/components/TopoGallery";
 
 export const loader: LoaderFunction = async ({ params, context, request }) => {
   const cragName = params.crag;
@@ -428,8 +429,8 @@ export default function CragPage() {
         </Stack>
       </Modal>
 
-      <Stack gap="lg">
-        <Group justify="space-between" gap="xs" mb="xl">
+      <Stack gap="md">
+        <Group justify="space-between" gap="xs">
           <Group gap="xs">
             <ActionIcon
               component={Link}
@@ -495,6 +496,13 @@ export default function CragPage() {
             )}
           </Group>
         </Group>
+
+        <TopoGallery
+          attachments={crag.attachments ?? []}
+          cragId={crag.id}
+          canEdit={canEdit ?? false}
+          size="md"
+        />
 
         <DragDropContext onDragEnd={handleDragEnd}>
           <Droppable droppableId="sectors" type="sector" isDropDisabled={!sortingSectors}>

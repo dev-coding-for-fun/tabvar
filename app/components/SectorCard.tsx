@@ -113,29 +113,12 @@ export function SectorCard({
               >
                 {sector.name}
               </Title>
-              {canEdit && (
-                <>
-                  <ActionIcon
-                    component={Link}
-                    to={`/topos/importer?sectorId=${sector.id}`}
-                    variant="subtle"
-                    color="gray"
-                    title="Import Data"
-                    disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null || sortingSectors}
-                  >
-                    <IconRobot size={16} />
-                  </ActionIcon>
-                  <ActionIcon
-                    variant="subtle"
-                    color="gray"
-                    title={sector.routes?.length ? "Sector must be empty" : "Delete Sector"}
-                    disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null || sector.routes?.length > 0 || sortingSectors}
-                    onClick={() => onDeleteSector?.(sector.id, sector.name)}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                </>
-              )}
+              <TopoGallery
+                attachments={sector.attachments ?? []}
+                sectorId={sector.id}
+                canEdit={canEdit}
+                size="xs"
+              />
             </Group>
           )}
           {canEdit && (         
@@ -157,6 +140,25 @@ export function SectorCard({
                 disabled={editingRouteId !== null || newRouteSectorId !== null || sortingSectors}
               >
                 <IconArrowsUpDown size={16} />
+              </ActionIcon>
+              <ActionIcon
+                component={Link}
+                to={`/topos/importer?sectorId=${sector.id}`}
+                variant="subtle"
+                color="gray"
+                title="Import Data"
+                disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null || sortingSectors}
+              >
+                <IconRobot size={16} />
+              </ActionIcon>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                title={sector.routes?.length ? "Sector must be empty" : "Delete Sector"}
+                disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null || sector.routes?.length > 0 || sortingSectors}
+                onClick={() => onDeleteSector?.(sector.id, sector.name)}
+              >
+                <IconTrash size={16} />
               </ActionIcon>
               <Text size="xs" c="dimmed" title="Sector Order">
                 #{sector.sortOrder ?? '-'}

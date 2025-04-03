@@ -162,6 +162,7 @@ async function loadAttachmentsForSectors(db: ReturnType<typeof getDB>, sectors: 
                 sectors: [],
                 crags: [],
             };
+            attachmentMap.set(result.id, attachment);
         }
     });
 
