@@ -12,6 +12,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, D
 import { SectorCard } from "~/components/SectorCard";
 import { createSector, updateSectorName, deleteSector } from "~/lib/sector.server";
 import { createRoute, updateRoute, updateRouteOrder, deleteRoute } from "~/lib/route.server";
+import { PERMISSION_ERROR } from "~/lib/constants";
 
 export const loader: LoaderFunction = async ({ params, context, request }) => {
   const cragName = params.crag;
@@ -37,12 +38,16 @@ export const loader: LoaderFunction = async ({ params, context, request }) => {
 };
 
 export const action: ActionFunction = async ({ request, context }) => {
-  const formData = await request.formData();
-  const action = formData.get("action")?.toString();
-  const user = await getAuthenticator(context).isAuthenticated(request);
-  if (!user || (user.role !== 'admin' && user.role !== 'member')) {
-    return data({ error: 'Unauthorized' }, { status: 403 });
+  const user = await getAuthenticator(context).isAuthenticated(request, {
+    failureRedirect: "/login",
+  });
+  if (user.role !== 'admin' && user.role !== 'member') {
+    return { error: PERMISSION_ERROR };
   }
+
+  const formData = await request.formData();
+  const action = formData.get("action");
+
   switch (action) {
     case "create_sector": {
       const cragId = formData.get("cragId")?.toString();
