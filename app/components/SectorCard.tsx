@@ -170,89 +170,93 @@ export function SectorCard({
         <Droppable droppableId={sector.id.toString()} type="route" isDropDisabled={reorderingSectorId !== sector.id}>
           {(provided: DroppableProvided) => (
             <Stack gap="xs" ref={provided.innerRef} {...provided.droppableProps}>
-              {newRouteSectorId === sector.id && (
-                <RouteEditCard
-                  route={{
-                    id: -1,
-                    name: "",
-                    sectorId: sector.id,
-                    issues: []
-                  }}
-                  theme={theme}
-                  onCancel={onCancelNewRoute}
-                  isNew={true}
-                />
-              )}
-              {sector.routes?.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((route, index) => {
-                const routeId = typeof route.id === 'string' ? parseInt(route.id, 10) : route.id;
-                return (
-                  <Draggable
-                    key={routeId}
-                    draggableId={routeId.toString()}
-                    index={index}
-                    isDragDisabled={reorderingSectorId !== sector.id}
-                  >
-                    {(provided: DraggableProvided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                        style={{
-                          ...provided.draggableProps.style,
-                          opacity: snapshot.isDragging ? 0.8 : 1,
-                          transform: snapshot.isDragging
-                            ? `${provided.draggableProps.style?.transform} scale(1.02)`
-                            : provided.draggableProps.style?.transform,
-                          cursor: reorderingSectorId === sector.id ? 'row-resize' : 'default'
-                        }}
+              {!sortingSectors && (
+                <>
+                  {newRouteSectorId === sector.id && (
+                    <RouteEditCard
+                      route={{
+                        id: -1,
+                        name: "",
+                        sectorId: sector.id,
+                        issues: []
+                      }}
+                      theme={theme}
+                      onCancel={onCancelNewRoute}
+                      isNew={true}
+                    />
+                  )}
+                  {sector.routes?.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((route, index) => {
+                    const routeId = typeof route.id === 'string' ? parseInt(route.id, 10) : route.id;
+                    return (
+                      <Draggable
+                        key={routeId}
+                        draggableId={routeId.toString()}
+                        index={index}
+                        isDragDisabled={reorderingSectorId !== sector.id}
                       >
-                        <Group gap="xs">
-                          {canEdit && (
-                            <Stack gap={5} miw={30}>
-                              <ActionIcon
-                                variant="subtle"
-                                color="gray"
-                                title="Edit Route"
-                                disabled={editingRouteId === routeId.toString() || reorderingSectorId !== null || sortingSectors}
-                                onClick={() => {
-                                  if (editingRouteId !== null) {
-                                    onCancelEdit();
-                                  }
-                                  onEditClick(routeId);
-                                }}
-                              >
-                                <IconPencil size={16} />
-                              </ActionIcon>
-                              <ActionIcon
-                                variant="subtle"
-                                color="gray"
-                                title="Delete Route"
-                                disabled={editingRouteId === routeId.toString() || reorderingSectorId !== null || sortingSectors}
-                                onClick={() => onDeleteClick(routeId, route.name)}
-                              >
-                                <IconTrash size={16} />
-                              </ActionIcon>
-                            </Stack>
-                          )}
-                          {editingRouteId === routeId.toString() ? (
-                            <RouteEditCard
-                              route={route}
-                              theme={theme}
-                              onCancel={onCancelEdit}
-                            />
-                          ) : (
-                            <RouteCard 
-                              route={route} 
-                              theme={theme} 
-                              canEdit={canEdit}
-                            />
-                          )}
-                        </Group>
-                      </div>
-                    )}
-                  </Draggable>
-                );
-              })}
+                        {(provided: DraggableProvided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            style={{
+                              ...provided.draggableProps.style,
+                              opacity: snapshot.isDragging ? 0.8 : 1,
+                              transform: snapshot.isDragging
+                                ? `${provided.draggableProps.style?.transform} scale(1.02)`
+                                : provided.draggableProps.style?.transform,
+                              cursor: reorderingSectorId === sector.id ? 'row-resize' : 'default'
+                            }}
+                          >
+                            <Group gap="xs">
+                              {canEdit && (
+                                <Stack gap={5} miw={30}>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="gray"
+                                    title="Edit Route"
+                                    disabled={editingRouteId === routeId.toString() || reorderingSectorId !== null || sortingSectors}
+                                    onClick={() => {
+                                      if (editingRouteId !== null) {
+                                        onCancelEdit();
+                                      }
+                                      onEditClick(routeId);
+                                    }}
+                                  >
+                                    <IconPencil size={16} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="gray"
+                                    title="Delete Route"
+                                    disabled={editingRouteId === routeId.toString() || reorderingSectorId !== null || sortingSectors}
+                                    onClick={() => onDeleteClick(routeId, route.name)}
+                                  >
+                                    <IconTrash size={16} />
+                                  </ActionIcon>
+                                </Stack>
+                              )}
+                              {editingRouteId === routeId.toString() ? (
+                                <RouteEditCard
+                                  route={route}
+                                  theme={theme}
+                                  onCancel={onCancelEdit}
+                                />
+                              ) : (
+                                <RouteCard 
+                                  route={route} 
+                                  theme={theme} 
+                                  canEdit={canEdit}
+                                />
+                              )}
+                            </Group>
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                </>
+              )}
               {provided.placeholder}
             </Stack>
           )}
