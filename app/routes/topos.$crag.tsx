@@ -1,7 +1,7 @@
 import { Container, Group, Stack, Text, Title, useMantineTheme, rem, Button, Box, Badge, ActionIcon, Modal } from "@mantine/core";
 import { type LoaderFunction, type ActionFunction, data, redirect } from "@remix-run/cloudflare";
 import { useLoaderData, Link, useSearchParams, useNavigate, useFetcher } from "@remix-run/react";
-import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus } from "@tabler/icons-react";
+import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus, IconRobot } from "@tabler/icons-react";
 import { getDB } from "~/lib/db";
 import { useEffect, useState } from "react";
 import type { Crag, Sector, Route } from "~/lib/models";
@@ -80,6 +80,7 @@ export const action: ActionFunction = async ({ request, context }) => {
       const routeLength = Number(formData.get("routeLength")) ?? null;
       const firstAscentBy = formData.get("firstAscentBy")?.toString() || null;
       const pitchCount = Number(formData.get("pitchCount")) ?? null;
+      const year = Number(formData.get("year")) ?? null;
 
       const newRoute: Partial<Route> = {
         sectorId,
@@ -89,7 +90,8 @@ export const action: ActionFunction = async ({ request, context }) => {
         boltCount,
         routeLength,
         firstAscentBy,
-        pitchCount
+        pitchCount,
+        year
       };
 
       return await createRoute(context, newRoute);
@@ -104,6 +106,7 @@ export const action: ActionFunction = async ({ request, context }) => {
       const routeLength = formData.get("routeLength") ? Number(formData.get("routeLength")) : null;
       const firstAscentBy = formData.get("firstAscentBy")?.toString() || null;
       const pitchCount = formData.get("pitchCount") ? Number(formData.get("pitchCount")) : null;
+      const year = formData.get("year") ? Number(formData.get("year")) : null;
 
       const updatedRoute: Partial<Route> = {
         id:routeId,
@@ -113,7 +116,8 @@ export const action: ActionFunction = async ({ request, context }) => {
         boltCount,
         routeLength,
         firstAscentBy,
-        pitchCount
+        pitchCount,
+        year
       };
 
       return await updateRoute(context, updatedRoute);
@@ -460,6 +464,17 @@ export default function CragPage() {
                   disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null}
                 >
                   <IconArrowsUpDown size={20} />
+                </ActionIcon>
+                <ActionIcon
+                  component={Link}
+                  to={`/topos/importer?cragId=${crag.id}`}
+                  variant="subtle"
+                  color="gray"
+                  size="lg"
+                  title="Import Data"
+                  disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null}
+                >
+                  <IconRobot size={20} />
                 </ActionIcon>
                 <ActionIcon
                   variant="subtle"

@@ -222,7 +222,8 @@ async function loadRoutesForCrag(db: ReturnType<typeof getDB>, crag: Crag, attac
             'longitude',
             'pitch_count as pitchCount',
             'route_built_date as routeBuiltDate',
-            'sort_order as sortOrder'
+            'sort_order as sortOrder',
+            'year',
         ])
         .orderBy('sector_id')
         .execute() as Route[];

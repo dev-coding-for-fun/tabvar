@@ -2,59 +2,8 @@ import { Paper, Stack, Group, Text, rem, Box, Button, MantineTheme } from "@mant
 import { IconFlag } from "@tabler/icons-react";
 import { getGradeColor } from "~/lib/constants";
 import type { Route } from "~/lib/models";
-import { useEffect, useRef, useState } from "react";
 import { TopoGallery } from "./TopoGallery";
 import { useFetcher } from "@remix-run/react";
-
-interface TruncatableDescriptionProps {
-    description: string;
-    fz: string;
-}
-
-const TruncatableDescription: React.FC<TruncatableDescriptionProps> = ({ description, fz }) => {
-    const [expanded, setExpanded] = useState(false);
-    const [isTruncated, setIsTruncated] = useState(false);
-    const textRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!textRef.current) return;
-
-        const checkTruncation = () => {
-            const element = textRef.current;
-            if (element) {
-                setIsTruncated(
-                    element.scrollHeight > element.clientHeight ||
-                    element.scrollWidth > element.clientWidth
-                );
-            }
-        };
-
-        const resizeObserver = new ResizeObserver(checkTruncation);
-        resizeObserver.observe(textRef.current);
-
-        return () => resizeObserver.disconnect();
-    }, []);
-
-    const toggleExpanded = () => setExpanded(!expanded);
-
-    return (
-        <Box>
-            <Text
-                fz={fz}
-                ref={textRef}
-                lineClamp={expanded ? undefined : 3}
-                mb={4}
-            >
-                {description}
-            </Text>
-            {isTruncated && (
-                <Button size="compact-xs" variant="subtle" onClick={toggleExpanded}>
-                    {expanded ? 'Show less' : 'Show more'}
-                </Button>
-            )}
-        </Box>
-    );
-};
 
 interface RouteCardProps {
     route: Route;
@@ -121,7 +70,9 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                             Issue: {route.issues[0].issueType}{route.issues[0].subIssueType ? ` - ${route.issues[0].subIssueType}` : ''}
                         </Text>
                         {route.issues[0].description && (
-                            <TruncatableDescription description={route.issues[0].description} fz="sm" />
+                            <Text size="sm" lineClamp={3}>
+                                {route.issues[0].description}
+                            </Text>
                         )}
                         {route.issues[0].flaggedMessage && (
                             <Text size="sm" c="red.7" fw={500}>
@@ -156,18 +107,25 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                 </Group>
             </Stack>
             {canEdit && (
-                <Text
-                    size="xs"
-                    c="dimmed"
+                <Stack
+                    gap={0}
                     style={{
                         position: 'absolute',
                         right: 8,
                         bottom: 8,
-                        opacity: 0.6
+                        opacity: 0.6,
+                        alignItems: 'flex-end'
                     }}
                 >
-                    #{route.sortOrder ?? '-'}
-                </Text>
+                    {route.year && (
+                        <Text size="xs" c="dimmed">
+                            {route.year}
+                        </Text>
+                    )}
+                    <Text size="xs" c="dimmed">
+                        #{route.sortOrder ?? '-'}
+                    </Text>
+                </Stack>
             )}
         </Paper>
     );

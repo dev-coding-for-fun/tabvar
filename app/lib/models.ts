@@ -49,6 +49,7 @@ export interface Route {
     sortOrder: number | null | undefined;
     status: string | null | undefined;
     createdAt: string | null | undefined;
+    year: number | null | undefined;
 }
 
 export interface Issue {

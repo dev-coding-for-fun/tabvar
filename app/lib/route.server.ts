@@ -25,6 +25,7 @@ export async function createRoute(context: any, route: Partial<Route>): Promise<
                 route_length: route.routeLength,
                 first_ascent_by: route.firstAscentBy,
                 pitch_count: route.pitchCount,
+                year: route.year
             })
             .execute();
 
@@ -50,7 +51,8 @@ export async function updateRoute(context: any, route: Partial<Route>): Promise<
                 bolt_count: route.boltCount,
                 route_length: route.routeLength,
                 first_ascent_by: route.firstAscentBy,
-                pitch_count: route.pitchCount
+                pitch_count: route.pitchCount,
+                year: route.year
             })
             .where('id', '=', route.id)
             .execute();

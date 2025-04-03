@@ -2,58 +2,8 @@ import { Paper, Stack, Group, Text, rem, Box, Button, MantineTheme, TextInput, A
 import { IconFlag, IconCheck, IconX } from "@tabler/icons-react";
 import { CLIMB_STYLES, getGradeColor, getGradesbyStyle } from "~/lib/constants";
 import type { Route } from "~/lib/models";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useFetcher } from "@remix-run/react";
-
-interface TruncatableDescriptionProps {
-    description: string;
-    fz: string;
-}
-
-const TruncatableDescription: React.FC<TruncatableDescriptionProps> = ({ description, fz }) => {
-    const [expanded, setExpanded] = useState(false);
-    const [isTruncated, setIsTruncated] = useState(false);
-    const textRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!textRef.current) return;
-
-        const checkTruncation = () => {
-            const element = textRef.current;
-            if (element) {
-                setIsTruncated(
-                    element.scrollHeight > element.clientHeight ||
-                    element.scrollWidth > element.clientWidth
-                );
-            }
-        };
-
-        const resizeObserver = new ResizeObserver(checkTruncation);
-        resizeObserver.observe(textRef.current);
-
-        return () => resizeObserver.disconnect();
-    }, []);
-
-    const toggleExpanded = () => setExpanded(!expanded);
-
-    return (
-        <Box>
-            <Text
-                fz={fz}
-                ref={textRef}
-                lineClamp={expanded ? undefined : 3}
-                mb={4}
-            >
-                {description}
-            </Text>
-            {isTruncated && (
-                <Button size="compact-xs" variant="subtle" onClick={toggleExpanded}>
-                    {expanded ? 'Show less' : 'Show more'}
-                </Button>
-            )}
-        </Box>
-    );
-};
 
 interface ActionData {
     success: boolean;
@@ -123,7 +73,9 @@ export function RouteEditCard({ route, theme, onCancel, isNew }: RouteEditCardPr
                                 Issue: {route.issues[0].issueType}{route.issues[0].subIssueType ? ` - ${route.issues[0].subIssueType}` : ''}
                             </Text>
                             {route.issues[0].description && (
-                                <TruncatableDescription description={route.issues[0].description} fz="sm" />
+                                <Text size="sm" lineClamp={3}>
+                                    {route.issues[0].description}
+                                </Text>
                             )}
                             {route.issues[0].flaggedMessage && (
                                 <Text size="sm" c="red.7" fw={500}>
@@ -133,7 +85,8 @@ export function RouteEditCard({ route, theme, onCancel, isNew }: RouteEditCardPr
                         </Stack>
                     )}
                     
-                    <Group>
+                    <Group justify="space-between">
+                      <Group>
                         <Select
                             name="climbStyle"
                             defaultValue={route.climbStyle ?? ''}
@@ -172,18 +125,33 @@ export function RouteEditCard({ route, theme, onCancel, isNew }: RouteEditCardPr
                             onChange={(value) => setRouteLength(typeof value === 'number' ? value : undefined)}
                         /><Text size="xs" ml={-12}>Meters ({routeLength ? Math.round(routeLength * 3.28084) : '-'} ft)</Text>
                     </Group>
-                    <Group gap="xs">
-                        <Text size="xs">First Ascent:</Text>
-                        <TextInput
-                            name="firstAscentBy"
-                            defaultValue={route.firstAscentBy ?? ''}
-                            size="xs"
-                            placeholder="First Ascent By"
-                            styles={{ input: { width: '202px' } }}
-                        />
+                        <Group gap={4}>
+                            <Text size="xs">Vintage:</Text>
+                            <NumberInput
+                                name="year"
+                                defaultValue={route.year ?? undefined}
+                                size="xs"
+                                placeholder="Year"
+                                styles={{ input: { width: '60px' } }}
+                                min={1900}
+                                max={new Date().getFullYear()}
+                            />
+                        </Group>
+                    </Group>
+                    <Group gap="xs" justify="space-between">
+                        <Group gap="xs">
+                            <Text size="xs">First Ascent:</Text>
+                            <TextInput
+                                name="firstAscentBy"
+                                defaultValue={route.firstAscentBy ?? ''}
+                                size="xs"
+                                placeholder="First Ascent By"
+                                styles={{ input: { width: '202px' } }}
+                            />
+                        </Group>
                     </Group>
 
-                    <Group justify="flex-end" mt="xs">
+                    <Group justify="flex-end" mt="xs" gap="xs">
                         <ActionIcon
                             variant="subtle"
                             color="red"

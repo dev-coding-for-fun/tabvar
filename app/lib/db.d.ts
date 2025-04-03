@@ -171,6 +171,7 @@ export interface Route {
   sector_name: string | null;
   sort_order: number | null;
   status: string | null;
+  year: number | null;
 }
 
 export interface RouteAttachment {
