@@ -93,6 +93,18 @@ export interface ExternalSectorRef {
   sync_data: Generated<number | null>;
 }
 
+export interface ImportNotes {
+  crag_id: number | null;
+  created_at: Generated<string | null>;
+  id: Generated<number | null>;
+  notes: string | null;
+  other_urls: string | null;
+  route_id: number | null;
+  sector_id: number | null;
+  topo_url: string | null;
+  upload_result: string | null;
+}
+
 export interface Issue {
   approved_at: string | null;
   approved_by_uid: string | null;
@@ -273,6 +285,7 @@ export interface DB {
   external_issue_ref: ExternalIssueRef;
   external_route_ref: ExternalRouteRef;
   external_sector_ref: ExternalSectorRef;
+  import_notes: ImportNotes;
   issue: Issue;
   issue_attachment: IssueAttachment;
   issue_audit_log: IssueAuditLog;

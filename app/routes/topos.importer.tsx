@@ -102,6 +102,15 @@ export default function ToposImporter() {
         <Container size="sm" py="xl">
             <Paper radius="md" p="xl" withBorder>
                 <Stack gap="md">
+                    <Alert
+                        icon={<IconAlertCircle size={16} />}
+                        title="🚧 Under Construction 🚧"
+                        color="red"
+                        variant="light"
+                    >
+                        This feature is still being developed. The AI-powered data import functionality is not yet ready for use.
+                    </Alert>
+
                     <div>
                         <Title order={2}>Import Crag Data</Title>
                         <Text c="dimmed" size="sm">
