@@ -7,7 +7,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { getDB } from "~/lib/db";
 import { Crag, User } from "~/lib/models";
 import { getAuthenticator } from "~/lib/auth.server";
-import { IconMapPinPlus } from "@tabler/icons-react";
+import { IconMapPinPlus, IconEdit } from "@tabler/icons-react";
 
 interface LoaderData {
   crags: Crag[];
@@ -102,10 +102,13 @@ export default function RoutesIndex() {
   const [crags, setCrags] = useState(initialCrags);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newCragName, setNewCragName] = useState('');
+  const [editingCoordinatesId, setEditingCoordinatesId] = useState<number | null>(null);
+  const [coordinateInput, setCoordinateInput] = useState('');
   const fetcher = useFetcher();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const [editingCragId, setEditingCragId] = useState<number | null>(null);
+  const newCragInputRef = useRef<HTMLInputElement>(null);
+  const coordinateInputRef = useRef<HTMLInputElement>(null);
   const [placingCragId, setPlacingCragId] = useState<number | null>(null);
   const markers = useRef<{ [key: number]: mapboxgl.Marker }>({});
   const cragPositions = useRef<{ [key: number]: [number, number] }>({});
@@ -115,6 +118,16 @@ export default function RoutesIndex() {
   useEffect(() => {
     setCrags(initialCrags);
   }, [initialCrags]);
+
+  // Add effect to focus input when modal opens
+  useEffect(() => {
+    if (isCreateDialogOpen) {
+      // Small delay to ensure modal is fully rendered
+      setTimeout(() => {
+        newCragInputRef.current?.focus();
+      }, 50);
+    }
+  }, [isCreateDialogOpen]);
 
   const handleSetOnMap = (cragId: number) => {
     if (!map.current) return;
@@ -194,6 +207,45 @@ export default function RoutesIndex() {
     return marker;
   };
 
+  const handleSaveCoordinates = (cragId: number) => {
+    // Split on any combination of commas, spaces, or tabs
+    const values = coordinateInput.trim().split(/[\s,]+/).filter(Boolean);
+    
+    if (values.length !== 2) return;
+    
+    const [lat, lng] = values.map(n => Number(n.trim()));
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    const formData = new FormData();
+    formData.append('action', 'update_position');
+    formData.append('cragId', cragId.toString());
+    formData.append('latitude', lat.toString());
+    formData.append('longitude', lng.toString());
+    fetcher.submit(formData, { method: 'post' });
+
+    setEditingCoordinatesId(null);
+    setCoordinateInput('');
+  };
+
+  const startEditingCoordinates = (crag: Crag) => {
+    setEditingCoordinatesId(crag.id);
+    if (crag.latitude !== null && crag.longitude !== null) {
+      setCoordinateInput(`${crag.latitude}, ${crag.longitude}`);
+      // Use setTimeout to ensure the input is rendered before focusing
+      setTimeout(() => {
+        if (coordinateInputRef.current) {
+          coordinateInputRef.current.focus();
+          coordinateInputRef.current.select();
+        }
+      }, 50);
+    } else {
+      setCoordinateInput('');
+      setTimeout(() => {
+        coordinateInputRef.current?.focus();
+      }, 50);
+    }
+  };
+
   // Effect for initial map setup and marker creation
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -236,10 +288,10 @@ export default function RoutesIndex() {
           formData.append('longitude', position[0].toString());
           fetcher.submit(formData, { method: 'post' });
         }
-        setEditingCragId(null); // Reset editing state after saving
+        setEditingCoordinatesId(null); // Reset editing state after saving
         setPlacingCragId(null); // Reset placing state after saving
       } else {
-        setEditingCragId(cragId); // Set this crag as the one being edited
+        setEditingCoordinatesId(cragId); // Set this crag as the one being edited
       }
       
       // Remove existing marker
@@ -278,6 +330,7 @@ export default function RoutesIndex() {
             value={newCragName}
             onChange={(e) => setNewCragName(e.target.value)}
             placeholder="Enter crag name"
+            ref={newCragInputRef}
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -315,6 +368,7 @@ export default function RoutesIndex() {
             <Table.Th>Name</Table.Th>
             <Table.Th>Latitude</Table.Th>
             <Table.Th>Longitude</Table.Th>
+            {canEdit && <Table.Th></Table.Th>}
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -337,8 +391,50 @@ export default function RoutesIndex() {
                   )}
                 </Group>
               </Table.Td>
-              <Table.Td>{crag.latitude?.toFixed(4)}</Table.Td>
-              <Table.Td>{crag.longitude?.toFixed(4)}</Table.Td>
+              {editingCoordinatesId === crag.id ? (
+                <Table.Td colSpan={2}>
+                  <Group gap="xs">
+                    <TextInput
+                      placeholder="latitude, longitude"
+                      value={coordinateInput}
+                      onChange={(e) => setCoordinateInput(e.target.value)}
+                      style={{ width: '300px' }}
+                      ref={coordinateInputRef}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleSaveCoordinates(crag.id);
+                        } else if (e.key === 'Escape') {
+                          setEditingCoordinatesId(null);
+                          setCoordinateInput('');
+                        }
+                      }}
+                    />
+                    <Button size="xs" onClick={() => handleSaveCoordinates(crag.id)}>Save</Button>
+                    <Button size="xs" variant="subtle" onClick={() => {
+                      setEditingCoordinatesId(null);
+                      setCoordinateInput('');
+                    }}>Cancel</Button>
+                  </Group>
+                </Table.Td>
+              ) : (
+                <>
+                  <Table.Td>{crag.latitude?.toFixed(4)}</Table.Td>
+                  <Table.Td>{crag.longitude?.toFixed(4)}</Table.Td>
+                </>
+              )}
+              {canEdit && (
+                <Table.Td>
+                  {editingCoordinatesId !== crag.id && (
+                    <ActionIcon
+                      variant="subtle"
+                      onClick={() => startEditingCoordinates(crag)}
+                      title="Edit Coordinates"
+                    >
+                      <IconEdit size={16} />
+                    </ActionIcon>
+                  )}
+                </Table.Td>
+              )}
             </Table.Tr>
           ))}
         </Table.Tbody>
