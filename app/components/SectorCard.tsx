@@ -1,12 +1,13 @@
 import { Paper, Group, Title, Stack, ActionIcon, MantineTheme, TextInput, Modal, Text, Button, Overlay } from "@mantine/core";
-import { IconPencilPlus, IconArrowsUpDown, IconPencil, IconTrash, IconRobot } from "@tabler/icons-react";
+import { IconPencilPlus, IconArrowsUpDown, IconPencil, IconTrash, IconRobot, IconArrowFork } from "@tabler/icons-react";
 import { DroppableProvided, DraggableProvided, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { Sector as SectorType, Route } from "~/lib/models";
 import { RouteCard } from "./RouteCard";
 import { RouteEditCard } from "./RouteEditCard";
 import { useState } from "react";
 import { TopoGallery } from "./TopoGallery";
-import { Link } from "@remix-run/react";
+import { Link, useFetcher } from "@remix-run/react";
+import { CragPicker } from "./CragPicker";
 
 interface SectorCardProps {
   sector: SectorType;
@@ -45,6 +46,8 @@ export function SectorCard({
 }: SectorCardProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [sectorName, setSectorName] = useState(sector.name);
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const moveFetcher = useFetcher();
 
   const handleNameSubmit = () => {
     if (onSectorNameChange && sectorName !== sector.name) {
@@ -53,8 +56,31 @@ export function SectorCard({
     setIsEditingName(false);
   };
 
+  const handleMoveSector = (targetCragId: string) => {
+    const formData = new FormData();
+    formData.append('action', 'move_sector');
+    formData.append('sectorId', sector.id.toString());
+    formData.append('targetCragId', targetCragId);
+
+    moveFetcher.submit(formData, { method: 'post' });
+    setIsMoveModalOpen(false);
+  };
+
   return (
     <>
+      <Modal
+        opened={isMoveModalOpen}
+        onClose={() => setIsMoveModalOpen(false)}
+        title={`Move "${sector.name}" to Another Crag`}
+        size="sm"
+      >
+        <CragPicker
+          currentCragId={sector.cragId!}
+          onSelect={handleMoveSector}
+          onCancel={() => setIsMoveModalOpen(false)}
+        />
+      </Modal>
+
       {reorderingSectorId !== null && reorderingSectorId !== sector.id && (
         <Overlay
           fixed
@@ -140,6 +166,15 @@ export function SectorCard({
                 disabled={editingRouteId !== null || newRouteSectorId !== null || sortingSectors}
               >
                 <IconArrowsUpDown size={16} />
+              </ActionIcon>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                title="Move to Another Crag"
+                disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null || sortingSectors}
+                onClick={() => setIsMoveModalOpen(true)}
+              >
+                <IconArrowFork size={16} />
               </ActionIcon>
               <ActionIcon
                 component={Link}

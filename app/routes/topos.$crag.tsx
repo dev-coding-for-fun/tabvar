@@ -72,6 +72,23 @@ export const action: ActionFunction = async ({ request, context }) => {
       return await updateSectorName(context, parseInt(sectorId), name);
     }
 
+    case "move_sector": {
+      const sectorId = formData.get("sectorId")?.toString();
+      const targetCragId = formData.get("targetCragId")?.toString();
+
+      if (!sectorId || !targetCragId) {
+        return { success: false, error: "Missing required fields" };
+      }
+
+      const db = getDB(context);
+      await db.updateTable('sector')
+        .set({ crag_id: parseInt(targetCragId) })
+        .where('id', '=', parseInt(sectorId))
+        .execute();
+
+      return { success: true };
+    }
+
     case "update_crag_name": {
       const cragId = formData.get("cragId")?.toString();
       const name = formData.get("name")?.toString();
