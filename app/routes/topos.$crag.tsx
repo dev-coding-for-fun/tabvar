@@ -1,4 +1,4 @@
-import { Container, Group, Stack, Text, Title, useMantineTheme, rem, Button, Box, Badge, ActionIcon, Modal } from "@mantine/core";
+import { Container, Group, Stack, Text, Title, useMantineTheme, rem, Button, Box, Badge, ActionIcon, Modal, TextInput } from "@mantine/core";
 import { type LoaderFunction, type ActionFunction, data, redirect } from "@remix-run/cloudflare";
 import { useLoaderData, Link, useSearchParams, useNavigate, useFetcher } from "@remix-run/react";
 import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus, IconRobot } from "@tabler/icons-react";
@@ -70,6 +70,23 @@ export const action: ActionFunction = async ({ request, context }) => {
       }
 
       return await updateSectorName(context, parseInt(sectorId), name);
+    }
+
+    case "update_crag_name": {
+      const cragId = formData.get("cragId")?.toString();
+      const name = formData.get("name")?.toString();
+
+      if (!cragId || !name) {
+        return { success: false, error: "Missing required fields" };
+      }
+
+      const db = getDB(context);
+      await db.updateTable('crag')
+        .set({ name })
+        .where('id', '=', parseInt(cragId))
+        .execute();
+
+      return { success: true };
     }
 
     case "delete_sector": {
@@ -186,15 +203,19 @@ export default function CragPage() {
   const [deleteRouteName, setDeleteRouteName] = useState<string>("");
   const [sortingSectors, setSortingSectors] = useState(false);
   const [deleteCragModalOpen, setDeleteCragModalOpen] = useState(false);
+  const [isEditingCragName, setIsEditingCragName] = useState(false);
+  const [cragName, setCragName] = useState(crag.name);
   const deleteFetcher = useFetcher();
   const sectorNameFetcher = useFetcher();
   const sectorCreateFetcher = useFetcher();
   const sectorDeleteFetcher = useFetcher();
   const deleteCragFetcher = useFetcher();
+  const cragNameFetcher = useFetcher();
 
   // Update local state when server data changes
   useEffect(() => {
     setCrag(initialCrag);
+    setCragName(initialCrag.name);
   }, [initialCrag]);
 
   const handleEditClick = (routeId: number) => {
@@ -395,6 +416,24 @@ export default function CragPage() {
     deleteCragFetcher.submit(formData, { method: 'post' });
   };
 
+  const handleCragNameSubmit = () => {
+    if (cragName !== crag.name) {
+      // Optimistically update the UI
+      setCrag(prevCrag => ({
+        ...prevCrag,
+        name: cragName
+      }));
+
+      // Send update request to server
+      const formData = new FormData();
+      formData.append('action', 'update_crag_name');
+      formData.append('cragId', crag.id.toString());
+      formData.append('name', cragName);
+      cragNameFetcher.submit(formData, { method: 'post' });
+    }
+    setIsEditingCragName(false);
+  };
+
   return (
     <Container size="xl" py="xl">
       <Modal
@@ -442,9 +481,39 @@ export default function CragPage() {
             >
               <IconArrowBack size={20} />
             </ActionIcon>
-            <Title order={1}>
-              {crag.name}
-            </Title>
+            {canEdit && isEditingCragName ? (
+              <TextInput
+                value={cragName}
+                onChange={(event) => setCragName(event.currentTarget.value)}
+                onBlur={handleCragNameSubmit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCragNameSubmit();
+                  } else if (e.key === 'Escape') {
+                    setCragName(crag.name);
+                    setIsEditingCragName(false);
+                  }
+                }}
+                size="xl"
+                styles={{
+                  input: {
+                    fontSize: 'var(--mantine-font-size-h1)',
+                    fontWeight: 'bold'
+                  }
+                }}
+                autoFocus
+              />
+            ) : (
+              <Title 
+                order={1}
+                style={{ 
+                  cursor: canEdit ? 'pointer' : 'default' 
+                }} 
+                onClick={() => canEdit && setIsEditingCragName(true)}
+              >
+                {crag.name}
+              </Title>
+            )}
             {crag.statsPublicIssueCount && (
               <Badge circle color="red" size="lg" variant="filled">
                 {crag.statsPublicIssueCount}
