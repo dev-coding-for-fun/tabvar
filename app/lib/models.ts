@@ -52,6 +52,18 @@ export interface Route {
     year: number | null | undefined;
 }
 
+export interface ImportNotes {
+    id: number;
+    cragId: number | null | undefined;
+    sectorId: number | null | undefined;
+    routeId: number | null | undefined;
+    createdAt: string | null | undefined;
+    notes: string | null | undefined;
+    otherUrls: string | null | undefined;
+    topoUrl: string | null | undefined;
+    uploadResult: string | null | undefined;
+}
+
 export interface Issue {
     routeName: string | number | readonly string[] | undefined;
     id: number;
