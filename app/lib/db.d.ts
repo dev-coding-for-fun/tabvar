@@ -9,15 +9,9 @@ export interface _CfKV {
   value: Buffer | null;
 }
 
-export interface Area {
-  crag_id: number | null;
-  created_at: Generated<string>;
-  data_source: string | null;
-  id: Generated<number>;
-  latitude: number | null;
-  longitude: number | null;
-  name: string;
-  sloper_sector_id: number | null;
+export interface _CfMETADATA {
+  key: number | null;
+  value: Buffer | null;
 }
 
 export interface AttachmentAuditLog {
@@ -37,7 +31,6 @@ export interface AttachmentAuditLog {
 
 export interface Crag {
   created_at: Generated<string | null>;
-  has_sectors: Generated<number>;
   id: Generated<number>;
   latitude: number | null;
   longitude: number | null;
@@ -96,6 +89,7 @@ export interface ExternalSectorRef {
 export interface ImportNotes {
   crag_id: number | null;
   created_at: Generated<string | null>;
+  download_result: string | null;
   id: Generated<number | null>;
   notes: string | null;
   other_urls: string | null;
@@ -276,7 +270,7 @@ export interface UserInvite {
 
 export interface DB {
   _cf_KV: _CfKV;
-  area: Area;
+  _cf_METADATA: _CfMETADATA;
   attachment_audit_log: AttachmentAuditLog;
   crag: Crag;
   crag_attachment: CragAttachment;

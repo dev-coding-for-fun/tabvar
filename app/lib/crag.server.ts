@@ -287,7 +287,6 @@ async function loadCrag(context: AppLoadContext, identifier: number | string): P
             'name',
             'latitude',
             'longitude',
-            'has_sectors as hasSectors',
             'stats_active_issue_count as statsActiveIssueCount',
             'stats_issue_flagged as statsIssueFlagged',
             'stats_public_issue_count as statsPublicIssueCount',

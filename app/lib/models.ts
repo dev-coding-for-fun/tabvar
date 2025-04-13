@@ -3,7 +3,6 @@ export interface Crag {
     name: string;
     latitude: number | null | undefined;
     longitude: number | null | undefined;
-    hasSectors: boolean | null | undefined;
     sectors: Sector[];
     attachments?: TopoAttachment[];
     createdAt: string | null | undefined;
@@ -61,6 +60,7 @@ export interface ImportNotes {
     notes: string | null | undefined;
     otherUrls: string | null | undefined;
     topoUrl: string | null | undefined;
+    downloadResult: string | null | undefined;
     uploadResult: string | null | undefined;
 }
 
