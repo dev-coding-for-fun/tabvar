@@ -106,25 +106,25 @@ export async function removeAttachment(
         .execute();
     }
 
-    // Check if attachment is referenced by other entities
-    const [routeRefs, sectorRefs, cragRefs] = await Promise.all([
-      db.selectFrom('route_attachment')
-        .where('attachment_id', '=', attachmentId)
-        .where('route_id', '!=', routeId)
-        .select(['route_id'])
-        .execute(),
-      db.selectFrom('sector_attachment')
-        .where('attachment_id', '=', attachmentId)
-        .select(['sector_id'])
-        .execute(),
-      db.selectFrom('crag_attachment')
-        .where('attachment_id', '=', attachmentId)
-        .select(['crag_id'])
-        .execute()
-    ]);
+    // Check if attachment is referenced by any other entities
+    const remainingRefs = await db
+      .selectFrom('route_attachment')
+      .where('attachment_id', '=', attachmentId)
+      .select('attachment_id')
+      .union(
+        db.selectFrom('sector_attachment')
+          .where('attachment_id', '=', attachmentId)
+          .select('attachment_id')
+      )
+      .union(
+        db.selectFrom('crag_attachment')
+          .where('attachment_id', '=', attachmentId)
+          .select('attachment_id')
+      )
+      .execute();
 
-    // Only delete the attachment record and file if it's not referenced elsewhere
-    if (routeRefs.length === 0 && sectorRefs.length === 0 && cragRefs.length === 0) {
+    // Only delete the attachment record and file if it's not referenced anywhere
+    if (remainingRefs.length === 0) {
       const attachment = await db
         .selectFrom('topo_attachment')
         .where('id', '=', attachmentId)
