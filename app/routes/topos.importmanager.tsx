@@ -297,30 +297,25 @@ export default function ImportManager() {
                             {
                                 accessor: 'id',
                                 title: 'ID',
-                                width: 80,
                             },
                             {
                                 accessor: 'objectName',
                                 title: 'Object',
-                                width: 200,
                             },
                             {
                                 accessor: 'createdAt',
                                 title: 'Created',
-                                width: 150,
                                 render: ({ createdAt }) => 
                                     createdAt ? format(new Date(createdAt), 'MMM d, yyyy') : '-'
                             },
                             {
                                 accessor: 'notes',
                                 title: 'Notes',
-                                width: 200,
                                 render: ({ notes }) => notes || '-'
                             },
                             {
                                 accessor: 'topoUrl',
                                 title: 'Topo URL',
-                                width: 300,
                                 render: (note) => (
                                     <Group gap="xs" wrap="nowrap">
                                         <Tooltip label="Download and attach">
@@ -357,15 +352,43 @@ export default function ImportManager() {
                                 )
                             },
                             {
+                                accessor: 'otherUrls',
+                                title: 'Other URLs',
+                                render: ({ otherUrls }) => {
+                                    if (!otherUrls) return '-';
+                                    const urls = otherUrls.split(',').map(url => url.trim()).filter(Boolean);
+                                    return (
+                                        <Stack gap={0}>
+                                            {urls.map((url, index) => (
+                                                <Link
+                                                    key={index}
+                                                    to={url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{
+                                                        maxWidth: '230px',
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        color: 'inherit',
+                                                        textDecoration: 'none'
+                                                    }}
+                                                >
+                                                    {url}
+                                                </Link>
+                                            ))}
+                                        </Stack>
+                                    );
+                                }
+                            },
+                            {
                                 accessor: 'downloadResult',
                                 title: 'Download Status',
-                                width: 150,
                                 render: ({ downloadResult }) => getStatusBadge(downloadResult)
                             },
                             {
                                 accessor: 'uploadResult',
                                 title: 'Upload Status',
-                                width: 150,
                                 render: ({ uploadResult }) => getStatusBadge(uploadResult)
                             }
                         ]}
