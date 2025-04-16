@@ -1,13 +1,14 @@
 import { Badge, Container, Group, Select, SelectProps, Stack, Text, Title, Tooltip } from "@mantine/core";
 import { LoaderFunction } from "@remix-run/cloudflare";
 import { Link, useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
-import { Crag, Issue, IssueAttachment, User } from "~/lib/models";
+import { Crag, IssueWithDetails, User } from "~/lib/models";
 import { DataTable } from "mantine-datatable";
 import { getDB } from "~/lib/db";
 import { IconCheck, IconChevronRight, IconFlag } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { showNotification } from "@mantine/notifications";
 import { getAuthenticator } from "~/lib/auth.server";
+import { sql } from "kysely";
 
 export const loader: LoaderFunction = async ({ context, request }) => {
         const user = await getAuthenticator(context).isAuthenticated(request, {
@@ -19,8 +20,8 @@ export const loader: LoaderFunction = async ({ context, request }) => {
         .select([
             'crag.id',
             'crag.name',
-            (user.role) ? 'crag.stats_active_issue_count' : 'crag.stats_public_issue_count',
-            'crag.stats_issue_flagged',
+            'crag.stats_public_issue_count as statsPublicIssueCount',
+            (user.role && user.role !== 'anonymous') ? 'crag.stats_active_issue_count as statsActiveIssueCount' : sql.lit(null).as('statsActiveIssueCount'),
         ]).orderBy([(user.role) ? 'crag.stats_active_issue_count desc' : 'crag.stats_public_issue_count desc', 'crag.name'])
         .execute();
     return { crags: crags, user: user };
@@ -30,14 +31,14 @@ export default function IssuesIndex() {
     const [searchParams] = useSearchParams();
     const { crags, user } = useLoaderData<{ crags: Crag[], user: User; }>();
     const fetcher = useFetcher();
-    const [issues, setIssues] = useState<Issue[]>([]);
+    const [issues, setIssues] = useState<IssueWithDetails[]>([]);
     const [selectedCrag, setSelectedCrag] = useState<{ id: string | null; name: string | null }>({ id: null, name: null });
     const cragSelectRef = useRef<HTMLInputElement>(null);
     const fz = "sm";
 
     useEffect(() => {
         if (fetcher.data) {
-            setIssues(fetcher.data as Issue[]);
+            setIssues(fetcher.data as IssueWithDetails[]);
         }
     }, [fetcher.data]);
 
@@ -57,14 +58,14 @@ export default function IssuesIndex() {
 
     const renderSelectOption: SelectProps['renderOption'] = ({ option, checked }) => {
         const crag = crags.find(crag => crag.id?.toString() === option.value);
-        let issueCount: number = 0;
-        if (crag?.statsActiveIssueCount !== undefined) issueCount = Number(crag?.statsActiveIssueCount);
-        if (crag?.statsPublicIssueCount !== undefined) issueCount = Number(crag?.statsPublicIssueCount);
+        const issueCount = crag?.statsPublicIssueCount ?? 0;
+        const unmoderatedIssueCount = (crag?.statsActiveIssueCount) ? crag.statsActiveIssueCount - issueCount : 0;
         return (
             <Group flex="1" gap="xs">
                 {checked && <IconChevronRight />}
                 {option.label}
-                {issueCount > 0 && <Badge circle color="red">{crags.find(crag => crag.id?.toString() === option.value)?.statsActiveIssueCount}</Badge>}
+                {issueCount > 0 && <Badge circle color="red">{issueCount}</Badge>}
+                {unmoderatedIssueCount > 0 && <Badge circle color="blue">{unmoderatedIssueCount}</Badge>}
             </Group>
         )
     };
@@ -106,18 +107,18 @@ export default function IssuesIndex() {
                     highlightOnHover
                     minHeight={150}
                     noRecordsText={selectedCrag.id ? `No issues found at ${selectedCrag.name}.` : "Select a crag to search for issues."}
-                    records={issues}
+                    records={issues as IssueWithDetails[]}
                     columns={[
                         {
-                            accessor: "route_name",
+                            accessor: "routeName", 
                             render: (record) =>
                                 <Group>
                                     {(record.isFlagged) && (
                                         <Tooltip position="top" withArrow label={record.flaggedMessage} fz={fz}>
                                                 <IconFlag fill="red" color="red" />                                  
                                         </Tooltip>)}
-                                    <Text>{record.route?.name}</Text>
-                                    <Badge size="xs" color="sector-color">{record.route?.sectorName}</Badge>
+                                    <Text>{record.routeName}</Text>
+                                    <Badge size="xs" color="sector-color">{record.sectorName}</Badge>
                                 </Group>,
                         },
                         {
@@ -128,13 +129,13 @@ export default function IssuesIndex() {
                         },
                         {
                             accessor: "description",
-                            render: ({ description }) =>
-                                description?.split("\n").map((line, index) => <p key={index}>{line}</p>) || null,
+                            render: (record) =>
+                                record.description?.split("\n").map((line: string, index: number) => <p key={index}>{line}</p>) || null,
                         },
                         {
                             accessor: "status",
                             render: (record) =>
-                                <Badge size="md" color={`status-${record.status.toLowerCase().trim()}`}>{record.status}</Badge>,
+                                <Badge size="xs" color={`status-${record.status.toLowerCase().trim()}`}>{record.status}</Badge>,
                         },
                     ]}
 

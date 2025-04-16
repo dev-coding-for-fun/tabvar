@@ -376,7 +376,7 @@ export default function RoutesIndex() {
             <Table.Tr key={crag.id.toString()}>
               <Table.Td>
                 <Group gap="xs">
-                  <Link to={`/topos/${encodeURIComponent(crag.name)}`} style={{ textDecoration: 'none' }}>
+                  <Link to={`/topos/${crag.id}`} style={{ textDecoration: 'none' }}>
                     <Anchor>{crag.name}</Anchor>
                   </Link>
                   {canEdit && (!crag.latitude || !crag.longitude) && (

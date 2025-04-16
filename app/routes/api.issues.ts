@@ -1,5 +1,7 @@
 import { LoaderFunction } from '@remix-run/cloudflare'; // assuming Remix is being used
+import { sql } from 'kysely';
 import { getDB } from '~/lib/db';
+import { IssueWithDetails } from '~/lib/models';
 
 
 export const loader: LoaderFunction = async ({ request, context }) => {
@@ -9,7 +11,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         throw new Response("Crag ID is required", { status: 400 });
     }
     const db = getDB(context);
-    const issues = await db
+    const issues : IssueWithDetails[] = await db
         .selectFrom('issue')
         .innerJoin('route', 'issue.route_id', 'route.id')
         .innerJoin('sector', 'route.sector_id', 'sector.id')
@@ -17,14 +19,15 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         .where('crag.id', '=', cragId)
         .select([
             'issue.id',
-            'route.name as route_name',
-            'route.sector_name',
-            'route.crag_name',
-            'issue_type',
-            'sub_issue_type',
+            'issue.route_id as routeId',
+            'route.name as routeName',
+            'route.sector_name as sectorName',
+            'route.crag_name as cragName',
+            'issue.issue_type as issueType',
+            'issue.sub_issue_type as subIssueType',
             'issue.description',
-            'issue.is_flagged',
-            'issue.flagged_message',
+            sql<boolean>`CAST(issue.is_flagged AS BOOLEAN)`.as('isFlagged'),
+            'issue.flagged_message as flaggedMessage',
             'issue.status'])
         .execute();
     return issues;

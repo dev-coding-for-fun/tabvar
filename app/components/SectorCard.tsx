@@ -25,6 +25,7 @@ interface SectorCardProps {
   onDeleteClick: (routeId: number, routeName: string) => void;
   onSectorNameChange?: (sectorId: number, newName: string) => void;
   onDeleteSector?: (sectorId: number, sectorName: string) => void;
+  id?: string;
 }
 
 export function SectorCard({
@@ -42,7 +43,8 @@ export function SectorCard({
   onCancelNewRoute,
   onDeleteClick,
   onSectorNameChange,
-  onDeleteSector
+  onDeleteSector,
+  id,
 }: SectorCardProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [sectorName, setSectorName] = useState(sector.name);
@@ -92,6 +94,7 @@ export function SectorCard({
       <Paper
         shadow="sm"
         p="md"
+        radius="md"
         withBorder
         style={{
           backgroundColor: theme.colors.gray[1],
@@ -102,6 +105,7 @@ export function SectorCard({
           borderWidth: sortingSectors ? '2px' : undefined,
           cursor: sortingSectors ? 'row-resize' : 'default'
         }}
+        id={id}
       >
         <Group justify="space-between" mb="md">
           {canEdit && isEditingName ? (

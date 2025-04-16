@@ -1,11 +1,11 @@
 import { Container, Group, Stack, Text, Title, useMantineTheme, rem, Button, Box, Badge, ActionIcon, Modal, TextInput } from "@mantine/core";
 import { type LoaderFunction, type ActionFunction, data, redirect } from "@remix-run/cloudflare";
-import { useLoaderData, Link, useSearchParams, useNavigate, useFetcher } from "@remix-run/react";
+import { useLoaderData, Link, useSearchParams, useNavigate, useFetcher, useLocation } from "@remix-run/react";
 import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus, IconRobot } from "@tabler/icons-react";
 import { getDB } from "~/lib/db";
 import { useEffect, useState } from "react";
 import type { Crag, Sector, Route } from "~/lib/models";
-import { loadCragByName, deleteCrag } from "~/lib/crag.server";
+import { loadCragByName, loadCragById, deleteCrag } from "~/lib/crag.server";
 import { getAuthenticator } from "~/lib/auth.server";
 import type { User } from "~/lib/models";
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from '@hello-pangea/dnd';
@@ -16,15 +16,16 @@ import { PERMISSION_ERROR } from "~/lib/constants";
 import { TopoGallery } from "~/components/TopoGallery";
 
 export const loader: LoaderFunction = async ({ params, context, request }) => {
-  const cragName = params.crag;
+  const cragId = parseInt(params.crag ?? "");
   const user = await getAuthenticator(context).isAuthenticated(request);
 
-  if (!cragName) {
-    throw new Response("Crag name is required", { status: 400 });
+  if (!cragId) {
+    throw new Response("Crag identifier is required", { status: 400 });
   }
 
   try {
-    const crag: Crag = await loadCragByName(context, cragName);
+    let crag: Crag;
+    crag = await loadCragById(context, cragId);
     
     //bring any untitled sectors to the top
     const untitledSectors = crag.sectors?.filter(sector => sector.name?.startsWith("Untitled Sector"))
@@ -213,6 +214,7 @@ export default function CragPage() {
   const canEdit = user && (user.role === 'admin' || user.role === 'member');
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const editingRouteId = searchParams.get('editroute');
   const [reorderingSectorId, setReorderingSectorId] = useState<number | null>(null);
   const [newRouteSectorId, setNewRouteSectorId] = useState<number | null>(null);
@@ -228,6 +230,19 @@ export default function CragPage() {
   const sectorDeleteFetcher = useFetcher();
   const deleteCragFetcher = useFetcher();
   const cragNameFetcher = useFetcher();
+
+  // Handle anchor navigation
+  useEffect(() => {
+    if (location.hash) {
+      const element = document.getElementById(location.hash.substring(1));
+      if (element) {
+        // Add a small delay to ensure the page has rendered
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
+    }
+  }, [location.hash, crag]);
 
   // Update local state when server data changes
   useEffect(() => {
@@ -630,6 +645,7 @@ export default function CragPage() {
                           onDeleteClick={handleDeleteClick}
                           onSectorNameChange={handleSectorNameChange}
                           onDeleteSector={handleDeleteSector}
+                          id={`sector-${sector.id}`}
                         />
                       </div>
                     )}

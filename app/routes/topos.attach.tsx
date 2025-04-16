@@ -310,7 +310,7 @@ export default function ToposAttach() {
                       name="routeId"
                       onChange={(value) => handleRouteSelect(index, value)}
                       value={null}
-                      routeOnly={true}
+                      searchMode="routesOnly"
                       ref={el => searchBoxRefs.current[index] = el}
                     />
                   </Form>

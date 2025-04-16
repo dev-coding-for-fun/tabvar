@@ -161,6 +161,7 @@ export interface Route {
   alt_names: string | null;
   bolt_count: number | null;
   climb_style: string | null;
+  crag_id: number | null;
   crag_name: string | null;
   created_at: Generated<string | null>;
   first_ascent_by: string | null;
@@ -187,11 +188,14 @@ export interface RouteAttachment {
 }
 
 export interface RouteSearch {
+  alt_names: string | null;
   bolt_count: string | null;
+  crag_id: string | null;
   crag_name: string | null;
   grade_yds: string | null;
   name: string | null;
   pitch_count: string | null;
+  sector_id: string | null;
   sector_name: string | null;
 }
 

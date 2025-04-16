@@ -1,4 +1,4 @@
-import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput } from "@mantine/core";
+import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput, ActionIcon } from "@mantine/core";
 import { ActionFunction, AppLoadContext, LoaderFunction, data } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { DataTable, DataTableColumn } from "mantine-datatable";
@@ -10,8 +10,8 @@ import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useRef, useState } from "react";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { deleteFromR2 } from "~/lib/s3.server";
-import { Issue, Route, User } from "~/lib/models";
-import { RouteSearchResults } from "~/routes/api.search";
+import { Issue, Route, User, RouteSearchResults } from "~/lib/models";
+
 
 const StatusActions: React.FC<{
     status: string,
@@ -33,34 +33,117 @@ const StatusActions: React.FC<{
         case "In Moderation":
             return (
                 <Group gap={4} justify="right" wrap="nowrap">
-                    <Button size="compact-xs" leftSection={<IconRubberStamp style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("accept")}>Accept Issue</Button>
-                    <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("archive")}>Delete</Button>
+                    <Tooltip label="Accept Issue">
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="lg"
+                            onClick={() => handleStatusChange("accept")}
+                        >
+                            <IconRubberStamp size={20} />
+                        </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Delete">
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="lg"
+                            onClick={() => handleStatusChange("archive")}
+                        >
+                            <IconArchive size={20} />
+                        </ActionIcon>
+                    </Tooltip>
                 </Group>
             );
         case "Reported":
         case "Viewed":
             return (
                 <Group gap={4} justify="right" wrap="nowrap">
-                    <Button size="compact-xs" leftSection={<IconCheck style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("complete")}>Mark as Done</Button>
-                    <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("archive")}>Delete</Button>
+                    <Tooltip label="Mark as Done">
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="lg"
+                            onClick={() => handleStatusChange("complete")}
+                        >
+                            <IconCheck size={20} />
+                        </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Delete">
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="lg"
+                            onClick={() => handleStatusChange("archive")}
+                        >
+                            <IconArchive size={20} />
+                        </ActionIcon>
+                    </Tooltip>
                 </Group>
             );
         case "Completed":
             return (
                 <Group gap={4} justify="right" wrap="nowrap">
-                    <Button size="compact-xs" leftSection={<IconArrowBack style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("revert")}>Revert</Button>
-                    <Button size="compact-xs" leftSection={<IconArchive style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("archive")}>Delete</Button>
+                    <Tooltip label="Revert">
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="lg"
+                            onClick={() => handleStatusChange("revert")}
+                        >
+                            <IconArrowBack size={20} />
+                        </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Delete">
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="lg"
+                            onClick={() => handleStatusChange("archive")}
+                        >
+                            <IconArchive size={20} />
+                        </ActionIcon>
+                    </Tooltip>
                 </Group>
             );
         case "Archived":
             return (
                 <Group gap={4} justify="right" wrap="nowrap">
-                    <Button size="compact-xs" leftSection={<IconArrowBack style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("restore")}>Restore</Button>
-                    <Button size="compact-xs" color={'red'} leftSection={<IconFileX style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("delete")}>Destroy</Button>
+                    <Tooltip label="Restore">
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="lg"
+                            onClick={() => handleStatusChange("restore")}
+                        >
+                            <IconArrowBack size={20} />
+                        </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Destroy">
+                        <ActionIcon
+                            variant="subtle"
+                            color="red"
+                            size="lg"
+                            onClick={() => handleStatusChange("delete")}
+                        >
+                            <IconFileX size={20} />
+                        </ActionIcon>
+                    </Tooltip>
                 </Group>
             );
         default:
-            return (<Button size="compact-xs" leftSection={<IconArrowBack style={{ width: rem(14), height: rem(14) }} />} onClick={() => handleStatusChange("restore")}>Fix Status</Button>);
+            return (
+                <Tooltip label="Fix Status">
+                    <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        size="lg"
+                        onClick={() => handleStatusChange("restore")}
+                    >
+                        <IconArrowBack size={20} />
+                    </ActionIcon>
+                </Tooltip>
+            );
     }
 };
 
@@ -345,6 +428,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
             routeId: row.route_id,
             route,
             issueType: row.issue_type,
+            subIssueType: row.sub_issue_type,
             status: row.status,
             lastStatus: row.last_status ?? undefined,
             description: row.description ?? undefined,
@@ -432,7 +516,7 @@ export default function IssuesManager() {
         if (searchFetcher.data && searchQuery.length > 1) {
             const searchResults = searchFetcher.data;
             const matchingIssues = issues.filter(issue => 
-                searchResults.some(route => issue.routeId === route.id)
+                searchResults.some(route => issue.routeId === route.routeId)
             );
             setFilteredIssues(matchingIssues);
         } else if (searchQuery.length <= 1) {
@@ -447,16 +531,19 @@ export default function IssuesManager() {
                 lastStatus={record.lastStatus ?? null}
                 issueId={Number(record.id)}
             />
-            <Button
-                size="compact-xs"
-                leftSection={<IconEdit style={{ width: rem(14), height: rem(14) }} />}
-                onClick={() => {
-                    setOpenIssue(record);
-                    open();
-                }}
-            >
-                Edit
-            </Button>
+            <Tooltip label="Edit">
+                <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="lg"
+                    onClick={() => {
+                        setOpenIssue(record);
+                        open();
+                    }}
+                >
+                    <IconEdit size={20} />
+                </ActionIcon>
+            </Tooltip>
         </Group>
     );
 
@@ -503,7 +590,7 @@ export default function IssuesManager() {
                             textAlign: "right",
                         },
                         {
-                            accessor: "route_name",
+                            accessor: "route.name",
                             render: (record) =>
                                 <Group gap={4}>
                                     {record.isFlagged && (
@@ -518,10 +605,10 @@ export default function IssuesManager() {
                                 </Group>
                         },
                         {
-                            accessor: "issue_type",
+                            accessor: "issueType",
                         },
                         {
-                            accessor: "sub_issue_type",
+                            accessor: "subIssueType",
                         },
                         {
                             accessor: "description",
@@ -549,7 +636,8 @@ export default function IssuesManager() {
                         {
                             accessor: "status",
                             render: (record) =>
-                                <Badge size="md" color={`status-${record.status.toLowerCase().replace(" ", "-")}`}>{record.status}</Badge>,
+                                <Badge size="xs" color={`status-${record.status.toLowerCase().replace(" ", "-")}`}>{record.status}</Badge>,
+                            width: '114px',
                         },
                         {
                             accessor: "actions",
