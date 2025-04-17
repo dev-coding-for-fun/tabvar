@@ -172,7 +172,7 @@ export default function RoutesIndex() {
     return `
       <div style="text-align: center;">
         <h3 style="margin-bottom: 8px;">${crag.name}</h3>
-        <a href="/topos/${encodeURIComponent(crag.name)}" style="color: #228BE6; text-decoration: none; display: block; margin-bottom: 8px;">
+        <a href="/topos/${encodeURIComponent(crag.id)}" style="color: #228BE6; text-decoration: none; display: block; margin-bottom: 8px;">
           View Routes
         </a>
         ${(user?.role === 'admin' || user?.role === 'member') ? `
