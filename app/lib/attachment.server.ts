@@ -270,5 +270,32 @@ export async function addAttachmentToCrag(
 }
 
 
+export async function getAllAttachments(context: AppLoadContext): Promise<{ id: number; name: string | null; url: string }[]> {
+  const db = getDB(context);
+  return db
+    .selectFrom("topo_attachment")
+    .select(["id", "name", "url"]) // Select only needed fields
+    .execute();
+}
+
+
+export async function updateAttachmentRecord(
+  context: AppLoadContext,
+  id: number,
+  newName: string,
+  newUrl: string
+): Promise<void> {
+  const db = getDB(context);
+  await db
+    .updateTable("topo_attachment")
+    .set({
+      name: newName,
+      url: newUrl,
+    })
+    .where("id", "=", id)
+    .execute();
+}
+
+
 
 
