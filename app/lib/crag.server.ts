@@ -182,7 +182,7 @@ async function loadAttachmentsForSectors(db: ReturnType<typeof getDB>, sectors: 
 }
 
 async function loadAttachmentsForCrag(db: ReturnType<typeof getDB>, crag: Crag): Promise<void> {
-    const attachments = await db
+    const attachmentData = await db
         .selectFrom('crag_attachment')
         .innerJoin('topo_attachment', 'crag_attachment.attachment_id', 'topo_attachment.id')
         .where('crag_id', '=', crag.id)
@@ -193,22 +193,23 @@ async function loadAttachmentsForCrag(db: ReturnType<typeof getDB>, crag: Crag):
             'name',
             'topo_attachment.created_at as createdAt'
         ])
-        .execute() as TopoAttachment[];
+        .execute();
+
+    // Initialize properly
+    const attachments: TopoAttachment[] = attachmentData.map(data => ({
+        ...data, // Spread fetched data (id, url, type, name, createdAt)
+        routes: [], // Initialize explicitly
+        sectors: [], // Initialize explicitly
+        crags: [crag] // Initialize explicitly
+    }));
 
     crag.attachments = attachments;
-    attachments.forEach(attachment => {
-        attachment.crags = [crag];
-        attachment.routes = [];
-        attachment.sectors = [];
-    });
 }
 
-
-
 async function loadRoutesForCrag(db: ReturnType<typeof getDB>, crag: Crag, attachmentMap: Map<number, TopoAttachment>): Promise<void> {
-    const routes = await db
+    const routeData = await db
         .selectFrom('route')
-        .where('sector_id', 'in', crag.sectors.map(sector => sector.id))
+        .where('crag_id', '=', crag.id)
         .select([
             'id',
             'name',
@@ -229,22 +230,29 @@ async function loadRoutesForCrag(db: ReturnType<typeof getDB>, crag: Crag, attac
             'year',
         ])
         .orderBy('sector_id')
-        .execute() as Route[];
+        .execute();
 
-    // Populate routes using sequential scan
+    // Map to Route objects and initialize attachments immediately
+    const routes: Route[] = routeData.map(data => ({
+        ...data,
+        issues: [],
+        attachments: [], 
+    }));
+
+    // Populate routes using sequential scan (no need to initialize attachments inside)
     let routeIndex = 0;
     crag.sectors.forEach(sector => {
         sector.routes = [];
         while (routeIndex < routes.length && routes[routeIndex].sectorId === sector.id) {
             const route = routes[routeIndex];
             route.sector = sector;
-            route.attachments = [];
             sector.routes.push(route);
             routeIndex++;
         }
     });
+
     await loadAttachmentsForRoutes(db, routes, attachmentMap);
-    await loadIssuesForCrag(db, crag);
+    await loadIssuesForCrag(db, crag); // Ensure issues are loaded onto the mapped routes
 }
 
 async function loadSectorsForCrag(db: ReturnType<typeof getDB>, crag: Crag): Promise<void> {
