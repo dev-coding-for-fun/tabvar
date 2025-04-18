@@ -198,6 +198,8 @@ async function loadAttachmentsForCrag(db: ReturnType<typeof getDB>, crag: Crag):
     crag.attachments = attachments;
     attachments.forEach(attachment => {
         attachment.crags = [crag];
+        attachment.routes = [];
+        attachment.sectors = [];
     });
 }
 

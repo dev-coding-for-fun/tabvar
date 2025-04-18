@@ -106,15 +106,64 @@ export function TopoGallery({
     }));
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOverGallery = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDropOnGallery = (e: React.DragEvent) => {
     e.preventDefault();
-    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-    console.log('Dropped attachment:', data);
+    e.stopPropagation();
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+
+      if (data.type === 'attachment' && data.id) {
+        const attachmentId = data.id;
+
+        const isSelfDrop = attachments.some(att => att.id === attachmentId);
+        if (isSelfDrop) {
+           console.log("Attempted to drop attachment onto its own gallery group.");
+           return;
+        }
+
+        const formData = new FormData();
+        formData.append('_action', 'add');
+        formData.append('attachmentId', attachmentId.toString());
+
+        if (routeId) {
+          formData.append('routeId', routeId.toString());
+        } else if (sectorId) {
+          formData.append('sectorId', sectorId.toString());
+        } else if (cragId) {
+          formData.append('cragId', cragId.toString());
+        } else {
+          console.error("Drop target (gallery group) has no associated ID (cragId, sectorId, or routeId).");
+          notifications.show({
+            title: 'Error',
+            message: 'Could not link attachment: Target ID missing.',
+            color: 'red'
+          });
+          return;
+        }
+
+        console.log('Linking attachment (dropped on group):', attachmentId, 'to', { routeId, sectorId, cragId });
+        fetcher.submit(formData, {
+          method: 'post',
+          action: '/api/attachments'
+        });
+
+      } else {
+        console.warn('Dropped item (on group) is not a valid attachment.', data);
+      }
+    } catch (error) {
+      console.error('Error handling drop on group:', error);
+       notifications.show({
+        title: 'Error',
+        message: 'Failed to process dropped item.',
+        color: 'red'
+      });
+    }
   };
 
   const getIconSize = () => {
@@ -164,7 +213,14 @@ export function TopoGallery({
         </Stack>
       </Modal>
 
-      <Group gap="xs" wrap="nowrap" pos="relative">
+      <Group
+        gap="xs"
+        wrap="nowrap"
+        pos="relative"
+        onDrop={handleDropOnGallery}
+        onDragOver={handleDragOverGallery}
+        style={{ minHeight: getPreviewSize(), minWidth: getPreviewSize(), padding: '2px' }}
+      >
         <LoadingOverlay visible={fetcher.state !== 'idle'} />
         
         {attachments.map((attachment, index) => (
@@ -174,8 +230,6 @@ export function TopoGallery({
             radius="sm"
             draggable
             onDragStart={(e) => handleDragStart(e, attachment)}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
             style={{
               width: getPreviewSize(),
               height: getPreviewSize(),

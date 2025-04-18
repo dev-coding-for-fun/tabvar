@@ -330,7 +330,7 @@ export default function CragPage() {
     });
   };
 
-  const handleDragEnd = async (result: DropResult) => {
+  const handleReorderDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
 
     // Handle sector reordering
@@ -605,7 +605,7 @@ export default function CragPage() {
           size="md"
         />
 
-        <DragDropContext onDragEnd={handleDragEnd}>
+        <DragDropContext onDragEnd={handleReorderDragEnd}>
           <Droppable droppableId="sectors" type="sector" isDropDisabled={!sortingSectors}>
             {(provided: DroppableProvided) => (
               <Stack gap="md" ref={provided.innerRef} {...provided.droppableProps}>

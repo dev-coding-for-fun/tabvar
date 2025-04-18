@@ -41,16 +41,25 @@ export const action: ActionFunction = async ({ request, context }) => {
 
     case "add": {
       const attachmentId = Number(formData.get("attachmentId"));
+      const routeIds = formData.getAll("routeId").map(id => Number(id));
+      const sectorId = Number(formData.get("sectorId")) || 0;
+      const cragId = Number(formData.get("cragId")) || 0;
+
       if (!attachmentId || (routeIds.length === 0 && sectorId === 0 && cragId === 0)) {
-        return data({ success: false, error: "Missing required fields" }, { status: 400 });
+        return data({ success: false, error: "Missing required fields for add" }, { status: 400 });
       }
 
-      if (routeIds.length > 0)
-      return data(await addAttachmentToRoute(context, routeIds, attachmentId));
-      else if (sectorId > 0)
+      if (routeIds.length > 0) {
+        return data(await addAttachmentToRoute(context, routeIds, attachmentId));
+      } 
+      if (sectorId > 0) {
         return data(await addAttachmentToSector(context, sectorId, attachmentId));
-      else if (cragId > 0)
+      } 
+      if (cragId > 0) {
         return data(await addAttachmentToCrag(context, cragId, attachmentId));
+      }
+
+      return data({ success: false, error: "Invalid attachment target" }, { status: 400 });
     }
 
     default:

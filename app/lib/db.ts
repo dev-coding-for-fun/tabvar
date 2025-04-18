@@ -56,6 +56,9 @@ export function getDB(context: AppLoadContext) {
         console.log(event.query.sql)
         console.log(event.query.parameters)
       }
+      if (event.level === 'error') {
+        console.error(event.error)
+      }
     } 
   });
 }
