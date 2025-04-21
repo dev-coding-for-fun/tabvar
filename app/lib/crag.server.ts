@@ -241,8 +241,9 @@ async function loadRoutesForCrag(db: ReturnType<typeof getDB>, crag: Crag, attac
 
     // Populate routes using sequential scan (no need to initialize attachments inside)
     let routeIndex = 0;
-    crag.sectors.forEach(sector => {
-        sector.routes = [];
+    // Create a copy of sectors sorted by ID for efficient route assignment
+    const sectorsSortedById = [...crag.sectors].sort((a, b) => a.id - b.id);
+    sectorsSortedById.forEach(sector => {
         while (routeIndex < routes.length && routes[routeIndex].sectorId === sector.id) {
             const route = routes[routeIndex];
             route.sector = sector;
@@ -277,6 +278,7 @@ async function loadSectorsForCrag(db: ReturnType<typeof getDB>, crag: Crag): Pro
     sectors.forEach(sector => {
         sector.crag = crag;
         sector.attachments = [];
+        sector.routes = [];
     });
 
     // Load attachments for sectors
