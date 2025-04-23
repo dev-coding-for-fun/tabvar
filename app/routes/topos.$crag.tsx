@@ -121,7 +121,8 @@ export const action: ActionFunction = async ({ request, context }) => {
       const routeLength = Number(formData.get("routeLength")) ?? null;
       const firstAscentBy = formData.get("firstAscentBy")?.toString() || null;
       const pitchCount = Number(formData.get("pitchCount")) ?? null;
-      const year = Number(formData.get("year")) ?? null;
+      const parsedYear = Number(formData.get("year"));
+      const year = (typeof parsedYear === 'number' && !isNaN(parsedYear) && parsedYear > 0) ? parsedYear : null;
 
       const newRoute: Partial<Route> = {
         sectorId,
@@ -147,7 +148,8 @@ export const action: ActionFunction = async ({ request, context }) => {
       const routeLength = formData.get("routeLength") ? Number(formData.get("routeLength")) : null;
       const firstAscentBy = formData.get("firstAscentBy")?.toString() || null;
       const pitchCount = formData.get("pitchCount") ? Number(formData.get("pitchCount")) : null;
-      const year = formData.get("year") ? Number(formData.get("year")) : null;
+      const parsedYear = Number(formData.get("year"));
+      const year = (typeof parsedYear === 'number' && !isNaN(parsedYear) && parsedYear > 0) ? parsedYear : null;
       const notes = formData.get("notes")?.toString() || null;
 
       const updatedRoute: Partial<Route> = {
