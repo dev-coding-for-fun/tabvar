@@ -206,7 +206,11 @@ export function SectorCard({
           )}
         </Group>
 
-        <Droppable droppableId={sector.id.toString()} type="route" isDropDisabled={reorderingSectorId !== sector.id}>
+        <Droppable 
+          droppableId={sector.id.toString()} 
+          type="route" 
+          isDropDisabled={reorderingSectorId === null}
+        >
           {(provided: DroppableProvided) => (
             <Stack gap="xs" ref={provided.innerRef} {...provided.droppableProps}>
               {!sortingSectors && (

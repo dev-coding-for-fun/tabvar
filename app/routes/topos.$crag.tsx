@@ -164,6 +164,27 @@ export const action: ActionFunction = async ({ request, context }) => {
       return await updateRoute(context, updatedRoute);
     }
 
+    case "move_route": {
+      const routeId = Number(formData.get("routeId")) ?? null;
+      const destinationSectorId = Number(formData.get("destinationSectorId")) ?? null;
+
+      if (!routeId || !destinationSectorId) {
+        return { success: false, error: "Missing required fields for route move" };
+      }
+
+      const db = getDB(context);
+      try {
+        await db.updateTable('route')
+          .set({ sector_id: destinationSectorId })
+          .where('id', '=', routeId)
+          .executeTakeFirstOrThrow(); // Use executeTakeFirstOrThrow for better error handling if route doesn't exist
+        return { success: true };
+      } catch (error: any) {
+        console.error("Error moving route:", error);
+        return { success: false, error: error.message || "Failed to move route" };
+      }
+    }
+
     case "update_route_order": {
       const sectorId = Number(formData.get("sectorId")) ?? null;
       const routesData = JSON.parse(formData.get("routes")?.toString() ?? "[]");
@@ -324,36 +345,151 @@ export default function CragPage() {
       sortOrder: index + 1
     }))));
 
-    await fetch(window.location.pathname, {
+    fetch(window.location.pathname, {
       method: 'POST',
       body: formData
     });
   };
 
+  const handleRouteMove = async (
+    sourceSectorId: number,
+    destinationSectorId: number,
+    sourceIndex: number,
+    destinationIndex: number,
+    routeId: number
+  ) => {
+    let movedRoute: Route | undefined;
+    let sourceRoutes: Route[] = [];
+    let destinationRoutes: Route[] = [];
+
+    // Optimistically update the UI
+    const updatedSectors = crag.sectors.map(s => {
+      if (s.id === sourceSectorId) {
+        sourceRoutes = [...(s.routes || [])];
+        [movedRoute] = sourceRoutes.splice(sourceIndex, 1);
+        return { ...s, routes: sourceRoutes.map((route, index) => ({ ...route, sortOrder: index + 1 })) };
+      }
+      if (s.id === destinationSectorId) {
+        destinationRoutes = [...(s.routes || [])];
+      }
+      return s; // Return other sectors unchanged for now
+    });
+
+    if (!movedRoute) {
+      console.error("Moved route not found!");
+      return; 
+    }
+
+    // Add the moved route to the destination sector's routes
+    destinationRoutes.splice(destinationIndex, 0, { ...movedRoute, sectorId: destinationSectorId });
+
+    // Final state update
+    setCrag(prevCrag => ({
+      ...prevCrag,
+      sectors: prevCrag.sectors.map(s => {
+        if (s.id === sourceSectorId) {
+          return { ...s, routes: sourceRoutes.map((route, index) => ({ ...route, sortOrder: index + 1 })) };
+        }
+        if (s.id === destinationSectorId) {
+          return { ...s, routes: destinationRoutes.map((route, index) => ({ ...route, sortOrder: index + 1 })) };
+        }
+        return s;
+      })
+    }));
+
+    // --- Backend Updates ---
+
+    // 1. Update the route's sectorId using the new move_route action
+    const moveRouteFormData = new FormData();
+    moveRouteFormData.append('action', 'move_route');
+    moveRouteFormData.append('routeId', routeId.toString());
+    moveRouteFormData.append('destinationSectorId', destinationSectorId.toString());
+
+    // Consider using a fetcher for this
+    await fetch(window.location.pathname, {
+      method: 'POST',
+      body: moveRouteFormData
+    });
+
+    // 2. Update sort order in the source sector
+    const sourceOrderFormData = new FormData();
+    sourceOrderFormData.append('action', 'update_route_order');
+    sourceOrderFormData.append('sectorId', sourceSectorId.toString());
+    sourceOrderFormData.append('routes', JSON.stringify(sourceRoutes.map((route, index) => ({
+      id: route.id,
+      sortOrder: index + 1
+    }))));
+    // Consider using a fetcher for this
+    await fetch(window.location.pathname, {
+      method: 'POST',
+      body: sourceOrderFormData
+    });
+
+    // 3. Update sort order in the destination sector
+    const destOrderFormData = new FormData();
+    destOrderFormData.append('action', 'update_route_order');
+    destOrderFormData.append('sectorId', destinationSectorId.toString());
+    destOrderFormData.append('routes', JSON.stringify(destinationRoutes.map((route, index) => ({
+      id: route.id,
+      sortOrder: index + 1
+    }))));
+    // Consider using a fetcher for this
+    await fetch(window.location.pathname, {
+      method: 'POST',
+      body: destOrderFormData
+    });
+  };
+
   const handleReorderDragEnd = async (result: DropResult) => {
-    if (!result.destination) return;
+    const { source, destination, type } = result;
+
+    // Dropped outside the list or no destination
+    if (!destination) {
+      return;
+    }
 
     // Handle sector reordering
-    if (result.type === 'sector') {
+    if (type === 'sector') {
+      if (source.index === destination.index) return; // No change
       await handleSectorReorder(
         [...crag.sectors],
-        result.source.index,
-        result.destination.index
+        source.index,
+        destination.index
       );
       return;
     }
 
-    // Handle route reordering
-    const sectorId = parseInt(result.source.droppableId);
-    const sector = crag.sectors?.find(s => s.id === sectorId);
-    if (!sector || !sector.routes) return;
+    // Handle route movement (reorder within sector or move between sectors)
+    if (type === 'route') {
+      const sourceSectorId = parseInt(source.droppableId);
+      const destinationSectorId = parseInt(destination.droppableId);
+      const routeId = parseInt(result.draggableId);
 
-    await handleRouteReorder(
-      sectorId,
-      [...sector.routes],
-      result.source.index,
-      result.destination.index
-    );
+      // Reordering within the same sector
+      if (sourceSectorId === destinationSectorId) {
+        if (source.index === destination.index) return; // No change
+
+        const sector = crag.sectors?.find(s => s.id === sourceSectorId);
+        if (!sector || !sector.routes) return;
+
+        await handleRouteReorder(
+          sourceSectorId,
+          [...sector.routes],
+          source.index,
+          destination.index
+        );
+      }
+      // Moving route to a different sector
+      else {
+        await handleRouteMove(
+          sourceSectorId,
+          destinationSectorId,
+          source.index,
+          destination.index,
+          routeId
+        );
+      }
+    }
   };
 
   const handleDeleteClick = (routeId: number, routeName: string) => {
