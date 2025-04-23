@@ -1,4 +1,4 @@
-import { Paper, Stack, Group, Text, rem, Box, Button, MantineTheme, TextInput, ActionIcon, Select, NumberInput } from "@mantine/core";
+import { Paper, Stack, Group, Text, rem, Box, Button, MantineTheme, TextInput, ActionIcon, Select, NumberInput, Textarea } from "@mantine/core";
 import { IconFlag, IconCheck, IconX } from "@tabler/icons-react";
 import { CLIMB_STYLES, getGradeColor, getGradesbyStyle } from "~/lib/constants";
 import type { Route } from "~/lib/models";
@@ -150,6 +150,17 @@ export function RouteEditCard({ route, theme, onCancel, isNew }: RouteEditCardPr
                             />
                         </Group>
                     </Group>
+
+                    <Textarea
+                      name="notes"
+                      label="Notes"
+                      placeholder="Add any relevant notes..."
+                      defaultValue={route.notes ?? ''}
+                      size="xs"
+                      minRows={2}
+                      autosize
+                      mt="xs"
+                    />
 
                     <Group justify="flex-end" mt="xs" gap="xs">
                         <ActionIcon

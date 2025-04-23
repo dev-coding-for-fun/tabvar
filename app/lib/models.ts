@@ -50,6 +50,7 @@ export interface Route {
     status?: string | null;
     createdAt?: string | null;
     year?: number | null;
+    notes?: string | null;
 }
 
 export interface RouteSearchResults {

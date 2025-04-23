@@ -148,6 +148,7 @@ export const action: ActionFunction = async ({ request, context }) => {
       const firstAscentBy = formData.get("firstAscentBy")?.toString() || null;
       const pitchCount = formData.get("pitchCount") ? Number(formData.get("pitchCount")) : null;
       const year = formData.get("year") ? Number(formData.get("year")) : null;
+      const notes = formData.get("notes")?.toString() || null;
 
       const updatedRoute: Partial<Route> = {
         id:routeId,
@@ -158,7 +159,8 @@ export const action: ActionFunction = async ({ request, context }) => {
         routeLength,
         firstAscentBy,
         pitchCount,
-        year
+        year,
+        notes
       };
 
       return await updateRoute(context, updatedRoute);

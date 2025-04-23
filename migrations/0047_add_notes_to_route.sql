@@ -1,0 +1,2 @@
+-- Migration number: 0047 	 2025-04-23T02:23:18.235Z
+ALTER TABLE "Route" ADD COLUMN notes TEXT;

@@ -171,6 +171,7 @@ export interface Route {
   latitude: number | null;
   longitude: number | null;
   name: string;
+  notes: string | null;
   pitch_count: number | null;
   route_built_date: string | null;
   route_length: number | null;
