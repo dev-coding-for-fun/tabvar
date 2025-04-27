@@ -35,7 +35,8 @@ export const action: ActionFunction = async ({ request, context }) => {
     failureRedirect: "/login",
   });
   const formData = await request.formData();
-  const routeId = formData.get("route")?.toString() ?? '';
+  const routeParts = (formData.get("route")?.toString() ?? '').split(':');
+  const routeId = (routeParts.length > 1 && routeParts[0] === 'route') ? routeParts[1] : '';
   const issueType = formData.get("issueType")?.toString() ?? '';
   const subIssueType = formData.get("subIssueType")?.toString() ?? '';
   const notes = formData.get("notes")?.toString() ?? '';
