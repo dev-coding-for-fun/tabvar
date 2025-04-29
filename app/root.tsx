@@ -9,6 +9,7 @@ import {
 import '@mantine/core/styles.layer.css';
 import 'mantine-datatable/styles.layer.css';
 import '@mantine/notifications/styles.css';
+import '@mantine/tiptap/styles.css';
 import './styles/custom.css';
 import './styles/header.css';
 import { ColorSchemeScript, DEFAULT_THEME, MantineProvider, createTheme, Group } from '@mantine/core';

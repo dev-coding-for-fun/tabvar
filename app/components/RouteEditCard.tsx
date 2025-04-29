@@ -4,6 +4,7 @@ import { CLIMB_STYLES, getGradeColor, getGradesbyStyle } from "~/lib/constants";
 import type { Route } from "~/lib/models";
 import { useEffect, useState } from "react";
 import { useFetcher } from "@remix-run/react";
+import { ConfiguredRichTextEditor } from "./ConfiguredRichTextEditor";
 
 interface ActionData {
     success: boolean;
@@ -39,94 +40,35 @@ export function RouteEditCard({ route, theme, onCancel, isNew }: RouteEditCardPr
                 withBorder
                 style={{
                     borderLeft: `${rem(6)} solid ${getGradeColor(route.gradeYds ?? '')}`,
-                    flex: 1,
+                    flex: 1
                 }}
             >
-                <Stack gap={2}>
-                    <Group justify="space-between">
+                <Stack gap="sm">
+                    <Group justify="space-between" wrap="nowrap">
                         <Group gap="xs">
-                            {route.issues && route.issues.length > 0 && (
-                                <IconFlag size={18} style={{ color: theme.colors.red[6] }} />
-                            )}
                             <TextInput
                                 name="name"
                                 defaultValue={route.name}
                                 size="xs"
                                 placeholder="Route Name"
-                                styles={{ input: { fontSize: 'var(--mantine-font-size-sm)' } }}
-                                style={{ flex: 1 }}
+                                styles={{ 
+                                    input: { fontSize: 'var(--mantine-font-size-sm)' },
+                                    root: { minWidth: rem(300) }
+                                }}
+                            />
+                            <Select
+                                name="gradeYds"
+                                defaultValue={route.gradeYds ?? ''}
+                                size="xs"
+                                data={["?"].concat(availableGrades)}
+                                placeholder="Grade"
+                                styles={{ 
+                                    input: { fontSize: 'var(--mantine-font-size-sm)', width: '80px', textAlign: 'right' },
+                                    root: { flexShrink: 0 }
+                                }}
                             />
                         </Group>
-                        <Select
-                            name="gradeYds"
-                            defaultValue={route.gradeYds ?? ''}
-                            size="xs"
-                            data={availableGrades}
-                            placeholder="Grade"
-                            styles={{ input: { fontSize: 'var(--mantine-font-size-sm)', width: '80px', textAlign: 'right' } }}
-                        />
-                    </Group>
-                    
-                    {route.issues && route.issues.length > 0 && (
-                        <Stack gap="xs">
-                            <Text size="sm" c="red" fw={500}>
-                                Issue: {route.issues[0].issueType}{route.issues[0].subIssueType ? ` - ${route.issues[0].subIssueType}` : ''}
-                            </Text>
-                            {route.issues[0].description && (
-                                <Text size="sm" lineClamp={3}>
-                                    {route.issues[0].description}
-                                </Text>
-                            )}
-                            {route.issues[0].flaggedMessage && (
-                                <Text size="sm" c="red.7" fw={500}>
-                                    ⚠️ Safety Notice: {route.issues[0].flaggedMessage}
-                                </Text>
-                            )}
-                        </Stack>
-                    )}
-                    
-                    <Group justify="space-between">
-                      <Group>
-                        <Select
-                            name="climbStyle"
-                            defaultValue={route.climbStyle ?? ''}
-                            size="xs"
-                            data={[""].concat(CLIMB_STYLES)}
-                            placeholder="Style"
-                            styles={{ input: { width: '110px' } }}
-                            onChange={(value) => {
-                                setClimbStyle(value ?? '');
-                                setAvailableGrades(getGradesbyStyle(value ?? ''));
-                            }}
-                        />
-                        <NumberInput
-                            name="boltCount" 
-                            defaultValue={route.boltCount ?? undefined}
-                            size="xs"
-                            placeholder="Bolts"
-                            styles={{ input: { width: '50px' } }}
-                            min={0}
-                        /><Text size="xs" ml={-12}>Bolts</Text>
-                        <NumberInput
-                            name="pitchCount"
-                            defaultValue={route.pitchCount ?? undefined}
-                            size="xs"
-                            placeholder="#"
-                            styles={{ input: { width: '50px' } }}
-                            min={1}
-                        /><Text size="xs" ml={-12}>Pitches</Text>
-                        <NumberInput
-                            name="routeLength"
-                            defaultValue={route.routeLength ?? undefined}
-                            size="xs"
-                            placeholder="Length (m)"
-                            styles={{ input: { width: '80px' } }}
-                            min={0}
-                            onChange={(value) => setRouteLength(typeof value === 'number' ? value : undefined)}
-                        /><Text size="xs" ml={-12}>Meters ({routeLength ? Math.round(routeLength * 3.28084) : '-'} ft)</Text>
-                    </Group>
-                        <Group gap={4}>
-                            <Text size="xs">Vintage:</Text>
+                        <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
                             <NumberInput
                                 name="year"
                                 defaultValue={route.year ?? undefined}
@@ -136,29 +78,70 @@ export function RouteEditCard({ route, theme, onCancel, isNew }: RouteEditCardPr
                                 min={1900}
                                 max={new Date().getFullYear()}
                             />
+                            {route.sortOrder != null && (
+                                <Text size="xs" c="dimmed">
+                                    #{route.sortOrder}
+                                </Text>
+                            )}
                         </Group>
                     </Group>
-                    <Group gap="xs" justify="space-between">
-                        <Group gap="xs">
-                            <Text size="xs">First Ascent:</Text>
-                            <TextInput
-                                name="firstAscentBy"
-                                defaultValue={route.firstAscentBy ?? ''}
+                    
+                    <Group justify="space-between">
+                        <Group>
+                            <Select
+                                name="climbStyle"
+                                defaultValue={route.climbStyle ?? ''}
                                 size="xs"
-                                placeholder="First Ascent By"
-                                styles={{ input: { width: '202px' } }}
+                                data={[""].concat(CLIMB_STYLES)}
+                                placeholder="Style"
+                                styles={{ input: { width: '110px' } }}
+                                onChange={(value) => {
+                                    setClimbStyle(value ?? '');
+                                    setAvailableGrades(getGradesbyStyle(value ?? ''));
+                                }}
                             />
+                            <NumberInput
+                                name="boltCount" 
+                                defaultValue={route.boltCount ?? undefined}
+                                size="xs"
+                                placeholder="Bolts"
+                                styles={{ input: { width: '50px' } }}
+                                min={0}
+                            /><Text size="xs" ml={-12}>Bolts</Text>
+                            <NumberInput
+                                name="pitchCount"
+                                defaultValue={route.pitchCount ?? undefined}
+                                size="xs"
+                                placeholder="#"
+                                styles={{ input: { width: '50px' } }}
+                                min={1}
+                            /><Text size="xs" ml={-12}>Pitches</Text>
+                            <NumberInput
+                                name="routeLength"
+                                defaultValue={route.routeLength ?? undefined}
+                                size="xs"
+                                placeholder="Length (m)"
+                                styles={{ input: { width: '80px' } }}
+                                min={0}
+                                onChange={(value) => setRouteLength(typeof value === 'number' ? value : undefined)}
+                            /><Text size="xs" ml={-12}>Meters ({routeLength ? Math.round(routeLength * 3.28084) : '-'} ft)</Text>
+                            
+                            <Group gap="xs" wrap="nowrap">
+                                <Text size="xs">FA:</Text>
+                                <TextInput
+                                    name="firstAscentBy"
+                                    defaultValue={route.firstAscentBy ?? ''}
+                                    size="xs"
+                                    placeholder="First Ascent By"
+                                    styles={{ input: { width: '160px' } }}
+                                />
+                            </Group>
                         </Group>
                     </Group>
-
-                    <Textarea
+                    
+                    <ConfiguredRichTextEditor
                       name="notes"
-                      label="Notes"
-                      placeholder="Add any relevant notes..."
-                      defaultValue={route.notes ?? ''}
-                      size="xs"
-                      minRows={2}
-                      autosize
+                      initialContent={route.notes ?? ''}
                       mt="xs"
                     />
 

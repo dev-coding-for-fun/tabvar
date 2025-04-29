@@ -1,9 +1,10 @@
-import { Paper, Stack, Group, Text, rem, Box, Button, MantineTheme, Flex } from "@mantine/core";
+import { Paper, Stack, Group, Text, rem, Box, Button, MantineTheme, Flex, Badge, Grid } from "@mantine/core";
 import { IconFlag } from "@tabler/icons-react";
-import { getGradeColor } from "~/lib/constants";
+import { getGradeColor, getClimbStyleColorName } from "~/lib/constants";
 import type { Route } from "~/lib/models";
 import { TopoGallery } from "./TopoGallery";
 import { useFetcher } from "@remix-run/react";
+import { RichTextViewer } from "./RichTextViewer";
 
 interface RouteCardProps {
     route: Route;
@@ -49,93 +50,90 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                 position: 'relative'
             }}
         >
-            <Stack gap={2}>
-                {/* Row 1: Name/Issues and Grade */}
-                <Group justify="space-between" wrap="nowrap">
-                    <Stack gap={2} style={{ flexShrink: 1 }}>
-                        <Group gap="xs" wrap="nowrap">
-                          {route.issues.length > 0 && (
-                              <IconFlag size={18} style={{ color: theme.colors.red[6], flexShrink: 0 }} />
-                          )}
-                          <Text size="md" fw={500} truncate="end">
-                              {route.name}
-                          </Text>
-                          <TopoGallery
-                              attachments={route.attachments ?? []}
-                              routeId={route.id}
-                              canEdit={canEdit}
-                              size="xs"
-                          />
-                        </Group>
-                        {/* Issues moved below main content */}
-                    </Stack>
-                    <Text size="md" c="dimmed" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        {route.gradeYds}
-                    </Text>
-                </Group>
-
-                {/* Row 2: Details, Notes, Gallery */}
-                <Group mt={4} align="flex-end" gap="md" grow wrap="nowrap">
-                    {/* Column 1: Climb Details & FA */}
-                    <Stack gap={2} style={{ flexBasis: '45%', minWidth: '150px' }}>
-                        <Text size="xs" c="dimmed">
-                            {route.climbStyle}
-                            {route.boltCount ? ` • ${route.boltCount} bolts` : ''}
-                            {route.pitchCount && route.pitchCount > 1 ? ` • ${route.pitchCount} pitches` : ''}
-                            {route.routeLength ? ` • ${route.routeLength}m (${Math.round(route.routeLength * 3.28084)}ft)` : ''}
+            {canEdit && (route.year != null || route.sortOrder != null) && ( 
+                <Text size="xs" c="dimmed" style={{ position: 'absolute', top: rem(4), right: rem(8) }}>
+                    {route.year}
+                    {route.year != null && route.sortOrder != null ? ' • ' : ''}
+                    {route.sortOrder != null ? `#${route.sortOrder}` : ''}
+                </Text>
+            )}
+            <Grid gutter="xs">
+                {/* Row 1: Name, Grade, Topos */}
+                <Grid.Col span="auto">
+                    <Group gap="xs" wrap="nowrap">
+                        <Text size="md" fw={500} truncate="end">
+                            {route.name}
                         </Text>
-
-                        {/* FA info back to simple Text */}
-                        {route.firstAscentBy && (
-                            <Text size="xs" c="dimmed" fs="italic">
-                                First Ascent: {route.firstAscentBy}
+                        {route.gradeYds && (
+                        <Badge color={getGradeColor(route.gradeYds)} variant="light" size="lg">
+                            {route.gradeYds}
+                        </Badge>
+                        )}
+                        <TopoGallery
+                            attachments={route.attachments ?? []}
+                            routeId={route.id}
+                            canEdit={canEdit}
+                            size="xs"
+                        />
+                    </Group>
+                </Grid.Col>
+                
+                {/* Row 2: Details - Simplified, removed nested grid */}
+                <Grid.Col span={12}>
+                    <Group gap="xs" wrap="nowrap">
+                        {route.climbStyle && (
+                            <Badge 
+                                color={getClimbStyleColorName(route.climbStyle)}
+                                variant="light"
+                                size="sm"
+                            >
+                                {route.climbStyle}
+                            </Badge>
+                        )}
+                        {(route.boltCount || (route.pitchCount && route.pitchCount > 1) || route.routeLength || route.firstAscentBy) && (
+                             <Text size="sm" c="dimmed">
+                                {route.climbStyle && (route.boltCount || (route.pitchCount && route.pitchCount > 1) || route.routeLength || route.firstAscentBy) ? `  •  ` : ''}
+                                {route.boltCount ? `${route.boltCount} bolts` : ''}
+                                {route.boltCount && (route.pitchCount && route.pitchCount > 1) ? `  •  ` : ''}{route.pitchCount && route.pitchCount > 1 ? `${route.pitchCount} pitches` : ''}
+                                {((route.boltCount || (route.pitchCount && route.pitchCount > 1)) && route.routeLength) ? `  •  ` : ''}{route.routeLength ? `${route.routeLength}m (${Math.round(route.routeLength * 3.28084)}ft)` : ''}
+                                {((route.boltCount || (route.pitchCount && route.pitchCount > 1) || route.routeLength) && route.firstAscentBy) ? `  •  ` : ''}{route.firstAscentBy ? `FA: ${route.firstAscentBy}` : ''}
                             </Text>
                         )}
-                    </Stack>
+                    </Group>
+                </Grid.Col>
 
-                    {/* Column 2: Notes */}
-                    {route.notes && (
-                        <Stack gap={2} style={{ flexBasis: '45%', minWidth: '150px' }}>
-                            <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                                {route.notes}
-                            </Text>
-                        </Stack>
-                    )}
-
-                    {/* Column 3: Admin Info (Year, SortOrder) - Re-added */}
-                    {canEdit && (
-                      <Stack gap={0} align="flex-end" style={{ flexBasis: '10%', minWidth: '40px' }}>
-                        {route.year && (
-                          <Text size="xs" c="dimmed">
-                              {route.year}
-                          </Text>
-                        )}
-                        <Text size="xs" c="dimmed">
-                            #{route.sortOrder ?? '-'}
-                        </Text>
-                      </Stack>
-                    )}
-                </Group>
-
-                {/* Issues Display (below main content) */}
+                {/* Row 3: Issues Display */}
                 {route.issues.length > 0 && (
-                    <Stack gap="xs" mt="sm">
-                        <Text size="sm" c="red" fw={500}>
-                            Issue: {route.issues[0].issueType}{route.issues[0].subIssueType ? ` - ${route.issues[0].subIssueType}` : ''}
-                        </Text>
-                        {route.issues[0].description && (
-                            <Text size="sm" lineClamp={3}>
-                                {route.issues[0].description}
-                            </Text>
-                        )}
-                        {route.issues[0].flaggedMessage && (
-                            <Text size="sm" c="red.7" fw={500}>
-                                ⚠️ Safety Notice: {route.issues[0].flaggedMessage}
-                            </Text>
-                        )}
-                    </Stack>
+                    <Grid.Col span={12} mt="xs">
+                        <Stack gap="xs">
+                            <Group gap="xs" wrap="nowrap">
+                                <IconFlag size={18} style={{ color: theme.colors.red[6], flexShrink: 0 }} />
+                                <Badge 
+                                    color="red" 
+                                    variant="light"
+                                    title={route.issues[0].description ?? undefined}
+                                >
+                                    {route.issues[0].issueType}{route.issues[0].subIssueType ? ` - ${route.issues[0].subIssueType}` : ''}
+                                </Badge>
+                            </Group>
+                            {route.issues[0].flaggedMessage && (
+                                <Text size="sm" c="red.7" fw={500}>
+                                    ⚠️ Safety Notice: {route.issues[0].flaggedMessage}
+                                </Text>
+                            )}
+                        </Stack>
+                    </Grid.Col>
                 )}
-            </Stack>
+                
+                {/* Row 4: Notes (Moved Here) */}
+                {route.notes && (
+                    <Grid.Col span={12} mt="xs">
+                        <Box style={{ fontSize: theme.fontSizes.sm }}>
+                            <RichTextViewer content={route.notes} />
+                        </Box>
+                    </Grid.Col>
+                )}
+            </Grid>
         </Paper>
     );
 } 

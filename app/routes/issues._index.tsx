@@ -1,4 +1,4 @@
-import { Badge, Container, Group, Select, SelectProps, Stack, Text, Title, Tooltip } from "@mantine/core";
+import { Badge, Container, Group, Select, SelectProps, Stack, Text, Title, Tooltip, Anchor } from "@mantine/core";
 import { LoaderFunction } from "@remix-run/cloudflare";
 import { Link, useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
 import { Crag, IssueWithDetails, User } from "~/lib/models";
@@ -74,7 +74,12 @@ export default function IssuesIndex() {
         <Container size="xl" p="md">
 
             <Stack>
-                <Title order={1}>Route Issues</Title>
+                <Group gap="xs" mb="md" align="center">
+                    <Title order={1}>Route Issues</Title>
+                    <Anchor component={Link} to="/topos" ml="md">
+                        🗺️ Climbing Areas
+                    </Anchor>
+                </Group>
                 <Stack gap="xs">
                     <Link to={`/issues/create`}>➕ Submit New Issue</Link>
                     {(user.role === 'admin' || user.role === "member") && (

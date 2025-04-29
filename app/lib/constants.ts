@@ -4,7 +4,7 @@ export const YDS_GRADES = ['5.0', '5.1', '5.2', '5.3', '5.4', '5.5', '5.6', '5.7
 export const ICE_GRADES = ['WI1', 'WI2', 'WI3', 'WI4', 'WI5', 'WI6', 'WI7', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M15', 'M16'];
 export const BOULDER_GRADES = ['V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11', 'V12', 'V13', 'V14', 'V15', 'V16'];
 export const AID_GRADES = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6'];
-export const CLIMB_STYLES = ['Sport', 'Trad', 'Boulder', 'Mixed Rock', 'Mixed Ice', 'Ice', 'Aid'];
+export const CLIMB_STYLES = ['Sport', 'Trad', 'Boulder', 'Ice/Mixed', 'Aid'];
 
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
@@ -35,13 +35,50 @@ export function getLabelFromValue<T extends { value: string, label: string }[]>(
 export function getGradeColor(grade: string | null): string {
     if (!grade) return 'var(--mantine-color-yellow-5)';
     
-    const numericGrade = parseFloat(grade.replace('5.', ''));
+    // Remove any trailing '-' or '+' before parsing
+    const cleanGrade = grade.replace(/[-+]/g, '');
+    const numericGrade = parseFloat(cleanGrade.replace('5.', ''));
     
     if (numericGrade <= 10.4) return 'var(--mantine-color-green-6)';    // 5.0-5.10d
     if (numericGrade <= 11.4) return 'var(--mantine-color-blue-7)';     // 5.11a-5.11d
     if (numericGrade <= 12.4) return 'var(--mantine-color-dark-7)';     // 5.12a-5.12d
     if (numericGrade > 12.4) return 'var(--mantine-color-red-7)';     // 5.13a+
-    return 'var(--mantine-color-yellow-5)';                             // everything else
+    return 'var(--mantine-color-gray-5)';                             // everything else
+}
+
+export function getClimbStyleColor(style: string): string {
+    switch (style) {
+        case 'Sport':
+            return 'var(--mantine-color-pink-2)';
+        case 'Trad':
+            return 'var(--mantine-color-yellow-2)';
+        case 'Boulder':
+            return 'var(--mantine-color-lime-2)';
+        case 'Ice/Mixed':
+            return 'var(--mantine-color-blue-2)';
+        case 'Aid':
+            return 'var(--mantine-color-violet-2)';
+        default:
+            return 'var(--mantine-color-gray-2)';
+    }
+}
+
+// New function to get the Mantine color name for the style
+export function getClimbStyleColorName(style: string): string {
+    switch (style) {
+        case 'Sport':
+            return 'grape';
+        case 'Trad':
+            return 'yellow';
+        case 'Boulder':
+            return 'lime';
+        case 'Ice/Mixed':
+            return 'blue';
+        case 'Aid':
+            return 'violet';
+        default:
+            return 'gray';
+    }
 }
 
 export type IssueType = typeof issueTypes[number]['value'];

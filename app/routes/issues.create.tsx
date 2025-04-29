@@ -197,7 +197,6 @@ export default function CreateIssue() {
           value={selectedRoute}
           ref={searchBoxRef}
         />
-        <Button variant="subtle" size="compact-sm" onClick={() => setRouteModalOpened(true)}>➕ New Route</Button>
         <Space h="sm" />
         <Stack>
           <Radio.Group
@@ -260,10 +259,6 @@ export default function CreateIssue() {
           </Group>
         </Stack>
       </Form>
-      <RouteDetailsModal
-        opened={routeModalOpened}
-        onClose={() => setRouteModalOpened(false)}
-      />
     </Container>
   )
 }

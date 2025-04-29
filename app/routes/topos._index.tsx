@@ -345,8 +345,11 @@ export default function RoutesIndex() {
         </Stack>
       </Modal>
 
-      <Group gap="xs" mb="md">
+      <Group gap="xs" mb="md" align="center">
         <Title order={1}>Climbing Areas</Title>
+        <Anchor component={Link} to="/issues" ml="md">
+          ⚠️ Route Issues
+        </Anchor>
         {canEdit && (
           <ActionIcon
             variant="subtle"

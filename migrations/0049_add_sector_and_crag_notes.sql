@@ -1,0 +1,3 @@
+-- Migration number: 0049 	 2025-04-28T15:58:36.878Z
+ALTER TABLE "Sector" ADD COLUMN notes TEXT;
+ALTER TABLE "Crag" ADD COLUMN notes TEXT;

@@ -1,4 +1,4 @@
-import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput, ActionIcon } from "@mantine/core";
+import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput, ActionIcon, Anchor } from "@mantine/core";
 import { ActionFunction, AppLoadContext, LoaderFunction, data } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { DataTable, DataTableColumn } from "mantine-datatable";
@@ -186,11 +186,20 @@ async function modifyIssue(context: AppLoadContext, issueId: number, updates: Pa
 
 async function modifyIssueStatus(context: AppLoadContext, issueId: number, updates: Partial<Omit<Issue, "id" | "created_at">>, user: User) {
     const db = getDB(context);
-    updates.lastModified = new Date().toISOString();
+    // Fetch the current issue state *before* updating for the audit log
     const issue = await db.selectFrom('issue').selectAll()
         .where('id', '=', issueId).executeTakeFirstOrThrow();
+
     await db.updateTable('issue')
-        .set(updates)
+        .set({
+            status: updates.status,
+            last_status: updates.lastStatus,
+            approved_at: updates.approvedAt,
+            approved_by_uid: updates.approvedByUid,
+            archived_at: updates.archivedAt,
+            archived_by_uid: updates.archivedByUid,
+            last_modified: new Date().toISOString(),
+        })
         .where('id', '=', issueId)
         .execute();
 
@@ -554,7 +563,12 @@ export default function IssuesManager() {
     return (
         <Container size="xl">
             <Stack>
-                <Title id="title" order={1}>Route Issues</Title>
+                <Group gap="xs" mb="md" align="center">
+                    <Title id="title" order={1}>Route Issues</Title>
+                    <Anchor component={Link} to="/topos" ml="md">
+                        🗺️ Climbing Areas
+                    </Anchor>
+                </Group>
                 <Stack gap="xs">
                     <Link to={`/issues/create`}>➕ Submit New Issue</Link>
                     {(user.role === 'admin' || user.role === "member") && (
