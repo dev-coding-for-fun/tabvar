@@ -1,13 +1,20 @@
-import { Paper, Group, Title, Stack, ActionIcon, MantineTheme, TextInput, Modal, Text, Button, Overlay } from "@mantine/core";
-import { IconPencilPlus, IconArrowsUpDown, IconPencil, IconTrash, IconRobot, IconArrowFork } from "@tabler/icons-react";
+import { Paper, Group, Title, Stack, ActionIcon, MantineTheme, TextInput, Modal, Text, Button, Overlay, Box } from "@mantine/core";
+import { IconPencilPlus, IconArrowsUpDown, IconPencil, IconTrash, IconRobot, IconArrowFork, IconEdit, IconSquarePlus, IconCheck, IconX } from "@tabler/icons-react";
 import { DroppableProvided, DraggableProvided, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { Sector as SectorType, Route } from "~/lib/models";
 import { RouteCard } from "./RouteCard";
 import { RouteEditCard } from "./RouteEditCard";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TopoGallery } from "./TopoGallery";
 import { Link, useFetcher } from "@remix-run/react";
 import { CragPicker } from "./CragPicker";
+import { RichTextViewer } from "./RichTextViewer";
+import { ConfiguredRichTextEditor } from "./ConfiguredRichTextEditor";
+
+interface ActionResponse {
+  success: boolean;
+  error?: string;
+}
 
 interface SectorCardProps {
   sector: SectorType;
@@ -50,6 +57,14 @@ export function SectorCard({
   const [sectorName, setSectorName] = useState(sector.name);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const moveFetcher = useFetcher();
+  const [isEditingSectorNotes, setIsEditingSectorNotes] = useState(false);
+  const sectorNotesFetcher = useFetcher<ActionResponse>();
+
+  useEffect(() => {
+    if (sectorNotesFetcher.state === 'idle' && sectorNotesFetcher.data?.success) {
+      setIsEditingSectorNotes(false);
+    }
+  }, [sectorNotesFetcher.state, sectorNotesFetcher.data]);
 
   const handleNameSubmit = () => {
     if (onSectorNameChange && sectorName !== sector.name) {
@@ -107,7 +122,7 @@ export function SectorCard({
         }}
         id={id}
       >
-        <Group justify="space-between" mb="md">
+        <Group justify="space-between" mb="sm">
           {canEdit && isEditingName ? (
             <TextInput
               value={sectorName}
@@ -205,6 +220,71 @@ export function SectorCard({
             </Group>
           )}
         </Group>
+
+        <Box mb="md">
+          {isEditingSectorNotes ? (
+            <sectorNotesFetcher.Form method="post">
+              <input type="hidden" name="action" value="update_sector_notes" />
+              <input type="hidden" name="sectorId" value={sector.id.toString()} />
+              <ConfiguredRichTextEditor
+                name="notes"
+                initialContent={sector.notes ?? ''}
+                mt="xs"
+              />
+              <Group justify="flex-end" mt="xs" gap="xs">
+                <ActionIcon
+                  variant="subtle"
+                  color="red"
+                  onClick={() => setIsEditingSectorNotes(false)}
+                  title="Cancel"
+                >
+                  <IconX size={16} />
+                </ActionIcon>
+                <ActionIcon
+                  variant="subtle"
+                  color="green"
+                  type="submit"
+                  title="Save Notes"
+                  loading={sectorNotesFetcher.state !== 'idle'}
+                >
+                  <IconCheck size={16} />
+                </ActionIcon>
+              </Group>
+            </sectorNotesFetcher.Form>
+          ) : (
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              {sector.notes ? (
+                <Box 
+                  style={{ 
+                    flexGrow: 1, 
+                    cursor: canEdit && !sortingSectors ? 'pointer' : 'default',
+                    fontSize: 'var(--mantine-font-size-sm)',
+                    '& h3': {
+                       fontSize: theme.headings.sizes.h3.fontSize, 
+                       marginTop: theme.spacing.sm,
+                       marginBottom: theme.spacing.xs,
+                    }
+                  }} 
+                  onClick={canEdit && !sortingSectors ? () => setIsEditingSectorNotes(true) : undefined}
+                >
+                  <RichTextViewer content={sector.notes} />
+                </Box>
+              ) : (
+                canEdit && !sortingSectors && (
+                  <Button 
+                    leftSection={<IconSquarePlus size={16} />} 
+                    variant="subtle" 
+                    color="gray" 
+                    onClick={() => setIsEditingSectorNotes(true)}
+                    disabled={sortingSectors || reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null}
+                  >
+                      Add Notes
+                  </Button>
+                )
+              )}
+            </Group>
+          )}
+        </Box>
 
         <Droppable 
           droppableId={sector.id.toString()} 

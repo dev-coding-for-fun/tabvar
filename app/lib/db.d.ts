@@ -35,6 +35,7 @@ export interface Crag {
   latitude: number | null;
   longitude: number | null;
   name: string;
+  notes: string | null;
   stats_active_issue_count: number | null;
   stats_issue_flagged: number | null;
   stats_public_issue_count: number | null;
@@ -228,6 +229,7 @@ export interface Sector {
   latitude: number | null;
   longitude: number | null;
   name: string;
+  notes: string | null;
   sort_order: number | null;
 }
 

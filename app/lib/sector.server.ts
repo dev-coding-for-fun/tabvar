@@ -1,5 +1,6 @@
+import type { AppLoadContext } from "@remix-run/cloudflare";
 import { getDB } from "./db";
-import type { Sector } from "./models";
+import type { Route, Sector } from "./models";
 
 export async function createSector(context: any, cragId: number, name: string = "Untitled Sector") {
   try {
@@ -38,6 +39,26 @@ export async function updateSectorName(context: any, sectorId: number, name: str
     return { success: true };
   } catch (error) {
     return { success: false, error: "Failed to update sector name" };
+  }
+}
+
+export async function updateSectorNotes(context: AppLoadContext, sectorId: number, notes: string | null): Promise<{ success: boolean; error?: string }> {
+  try {
+    const db = getDB(context);
+
+    if (!sectorId) {
+      return { success: false, error: "Sector ID is required" };
+    }
+
+    await db.updateTable('sector')
+      .set({ notes: notes })
+      .where('id', '=', sectorId)
+      .executeTakeFirstOrThrow();
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error updating sector notes:", error);
+    return { success: false, error: error.message || "Failed to update sector notes" };
   }
 }
 

@@ -9,6 +9,7 @@ export interface Crag {
     statsActiveIssueCount?: number | null;
     statsIssueFlagged?: number | null;
     statsPublicIssueCount?: number | null;
+    notes?: string | null;
 }
 
 export interface Sector {
@@ -22,6 +23,7 @@ export interface Sector {
     longitude?: number | null;
     sortOrder?: number | null;
     createdAt?: string | null;
+    notes?: string | null;
 }
 
 export interface Route {

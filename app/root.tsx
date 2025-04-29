@@ -36,6 +36,12 @@ const theme = createTheme({
     'status-archived': DEFAULT_THEME.colors.red,
   },
   fontFamily: "'Lato', sans-serif",
+  headings: {
+    fontFamily: "'Lato', sans-serif",
+    sizes: {
+      h3: { fontSize: 'var(--mantine-font-size-md)' }
+    }
+  }
 })
 
 export const loader: LoaderFunction = async ({ request, context }) => {

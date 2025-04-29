@@ -269,6 +269,7 @@ async function loadSectorsForCrag(db: ReturnType<typeof getDB>, crag: Crag): Pro
             'latitude',
             'longitude',
             'sort_order as sortOrder',
+            'notes',
         ])
         .orderBy('sort_order')
         .orderBy('id')
@@ -300,6 +301,7 @@ async function loadCrag(context: AppLoadContext, identifier: number | string): P
             'name',
             'latitude',
             'longitude',
+            'notes',
             'stats_active_issue_count as statsActiveIssueCount',
             'stats_issue_flagged as statsIssueFlagged',
             'stats_public_issue_count as statsPublicIssueCount',

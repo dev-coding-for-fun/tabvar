@@ -1,7 +1,7 @@
 import { Container, Group, Stack, Text, Title, useMantineTheme, rem, Button, Box, Badge, ActionIcon, Modal, TextInput } from "@mantine/core";
 import { type LoaderFunction, type ActionFunction, data, redirect } from "@remix-run/cloudflare";
 import { useLoaderData, Link, useSearchParams, useNavigate, useFetcher, useLocation } from "@remix-run/react";
-import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus, IconRobot } from "@tabler/icons-react";
+import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus, IconRobot, IconEdit, IconCheck, IconX, IconSquarePlus } from "@tabler/icons-react";
 import { getDB } from "~/lib/db";
 import { useEffect, useState } from "react";
 import type { Crag, Sector, Route } from "~/lib/models";
@@ -10,10 +10,18 @@ import { getAuthenticator } from "~/lib/auth.server";
 import type { User } from "~/lib/models";
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from '@hello-pangea/dnd';
 import { SectorCard } from "~/components/SectorCard";
-import { createSector, updateSectorName, deleteSector } from "~/lib/sector.server";
+import { createSector, updateSectorName, deleteSector, updateSectorNotes } from "~/lib/sector.server";
 import { createRoute, updateRoute, updateRouteOrder, deleteRoute } from "~/lib/route.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { TopoGallery } from "~/components/TopoGallery";
+import { RichTextViewer } from "~/components/RichTextViewer";
+import { ConfiguredRichTextEditor } from "~/components/ConfiguredRichTextEditor";
+
+// Define a type for action responses
+interface ActionResponse { 
+  success: boolean; 
+  error?: string; 
+}
 
 export const loader: LoaderFunction = async ({ params, context, request }) => {
   const cragId = parseInt(params.crag ?? "");
@@ -105,6 +113,40 @@ export const action: ActionFunction = async ({ request, context }) => {
         .execute();
 
       return { success: true };
+    }
+
+    case "update_crag_notes": {
+      const cragId = Number(formData.get("cragId")) ?? null;
+      const notes = formData.get("notes")?.toString() || null;
+
+      if (!cragId) {
+        return { success: false, error: "Crag ID is required" };
+      }
+
+      const db = getDB(context);
+      try {
+        await db.updateTable('crag')
+          .set({ notes: notes })
+          .where('id', '=', cragId)
+          .executeTakeFirstOrThrow();
+        return { success: true };
+      } catch (error: any) {
+        console.error("Error updating crag notes:", error);
+        return { success: false, error: error.message || "Failed to update crag notes" };
+      }
+    }
+
+    case "update_sector_notes": {
+      if (user.role !== 'admin' && user.role !== 'member') {
+        return { success: false, error: PERMISSION_ERROR };
+      }
+      const sectorId = Number(formData.get("sectorId")) ?? null;
+      const notes = formData.get("notes")?.toString() || null;
+
+      if (!sectorId) {
+          return { success: false, error: "Sector ID is required" };
+      }
+      return await updateSectorNotes(context, sectorId, notes);
     }
 
     case "delete_sector": {
@@ -255,6 +297,8 @@ export default function CragPage() {
   const sectorDeleteFetcher = useFetcher();
   const deleteCragFetcher = useFetcher();
   const cragNameFetcher = useFetcher();
+  const [isEditingCragNotes, setIsEditingCragNotes] = useState(false);
+  const cragNotesFetcher = useFetcher<ActionResponse>();
 
   // Handle anchor navigation
   useEffect(() => {
@@ -274,6 +318,13 @@ export default function CragPage() {
     setCrag(initialCrag);
     setCragName(initialCrag.name);
   }, [initialCrag]);
+
+  // Add useEffect to handle fetcher state for notes
+  useEffect(() => {
+    if (cragNotesFetcher.state === 'idle' && cragNotesFetcher.data?.success) {
+      setIsEditingCragNotes(false);
+    }
+  }, [cragNotesFetcher.state, cragNotesFetcher.data]);
 
   const handleEditClick = (routeId: number) => {
     setSearchParams(
@@ -640,7 +691,7 @@ export default function CragPage() {
         </Stack>
       </Modal>
 
-      <Stack gap="md">
+      <Stack gap="xs">
         <Group justify="space-between" gap="xs">
           <Group gap="xs">
             <ActionIcon
@@ -744,6 +795,67 @@ export default function CragPage() {
           canEdit={canEdit ?? false}
           size="md"
         />
+
+        {/* --- Crag Notes Section --- */}
+        <Box>
+          {isEditingCragNotes ? (
+            <cragNotesFetcher.Form method="post">
+              <input type="hidden" name="action" value="update_crag_notes" />
+              <input type="hidden" name="cragId" value={crag.id.toString()} />
+              <ConfiguredRichTextEditor
+                name="notes"
+                initialContent={crag.notes ?? ''}
+                mt="xs"
+              />
+              <Group justify="flex-end" mt="xs" gap="xs">
+                <ActionIcon
+                  variant="subtle"
+                  color="red"
+                  onClick={() => setIsEditingCragNotes(false)}
+                  title="Cancel"
+                >
+                  <IconX size={16} />
+                </ActionIcon>
+                <ActionIcon
+                  variant="subtle"
+                  color="green"
+                  type="submit"
+                  title="Save Notes"
+                  loading={cragNotesFetcher.state !== 'idle'}
+                >
+                  <IconCheck size={16} />
+                </ActionIcon>
+              </Group>
+            </cragNotesFetcher.Form>
+          ) : (
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              {crag.notes ? (
+                <Box 
+                  style={{ 
+                    flexGrow: 1, 
+                    cursor: canEdit ? 'pointer' : 'default', 
+                    fontSize: 'var(--mantine-font-size-sm)'
+                  }} 
+                  onClick={canEdit ? () => setIsEditingCragNotes(true) : undefined}
+                >
+                  <RichTextViewer content={crag.notes} />
+                </Box>
+              ) : (
+                canEdit && (
+                    <Button 
+                      leftSection={<IconSquarePlus size={16} />} 
+                      variant="subtle" 
+                      color="gray" 
+                      onClick={() => setIsEditingCragNotes(true)}
+                    >
+                        Add Notes
+                    </Button>
+                )
+              )}
+            </Group>
+          )}
+        </Box>
+        {/* --- End Crag Notes Section --- */}
 
         <DragDropContext onDragEnd={handleReorderDragEnd}>
           <Droppable droppableId="sectors" type="sector" isDropDisabled={!sortingSectors}>
