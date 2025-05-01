@@ -56,7 +56,7 @@ const IssueDetailsModal: React.FC<IssueDetailsModalProps> = ({
                 <Stack>
                     <TextInput
                         label="Route"
-                        value={issue.routeName}
+                        value={issue.route?.name ?? ''}
                         readOnly
                     />
 
