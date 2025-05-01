@@ -141,6 +141,7 @@ export default function IssuesIndex() {
                             accessor: "status",
                             render: (record) =>
                                 <Badge size="xs" color={`status-${record.status.toLowerCase().trim()}`}>{record.status}</Badge>,
+                            width: '114px',
                         },
                     ]}
 
