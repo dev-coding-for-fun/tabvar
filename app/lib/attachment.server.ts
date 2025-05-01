@@ -131,13 +131,25 @@ export async function removeAttachment(
         .select(['url', 'name'])
         .executeTakeFirstOrThrow();
 
-      const env = context.cloudflare.env as unknown as Env;
-      const fileName = attachment.name ?? attachment.url.split('/').pop();
-      if (!fileName) { throw new Error('Invalid attachment filename'); }
+      // Check if any other topo_attachment records use the same URL
+      const anotherAttachmentWithSameUrl = await db
+        .selectFrom('topo_attachment')
+        .where('url', '=', attachment.url)
+        .where('id', '!=', attachmentId) // Exclude the current one
+        .select('id')
+        .limit(1) // Optimization: We only need to know if at least one exists
+        .executeTakeFirst();
 
-      await deleteFromR2(context, env.TOPOS_BUCKET_NAME, fileName);
+      // Only delete the file from R2 if no other attachments use this URL
+      if (!anotherAttachmentWithSameUrl) {
+        const env = context.cloudflare.env as unknown as Env;
+        const fileName = attachment.name ?? attachment.url.split('/').pop();
+        if (!fileName) { throw new Error('Invalid attachment filename'); }
 
-      // Delete the attachment record
+        await deleteFromR2(context, env.TOPOS_BUCKET_NAME, fileName);
+      }
+
+      // Delete the attachment record itself
       await db
         .deleteFrom('topo_attachment')
         .where('id', '=', attachmentId)
