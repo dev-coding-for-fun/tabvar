@@ -1,7 +1,7 @@
-import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput, ActionIcon, Anchor } from "@mantine/core";
+import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput, ActionIcon, Anchor, SegmentedControl } from "@mantine/core";
 import { ActionFunction, AppLoadContext, LoaderFunction, data } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher, Link } from "@remix-run/react";
-import { DataTable, DataTableColumn } from "mantine-datatable";
+import { DataTable, type DataTableColumn, type DataTableSortStatus } from "mantine-datatable";
 import { getDB } from "~/lib/db";
 import { getAuthenticator } from "~/lib/auth.server";
 import { IconArchive, IconArrowBack, IconCheck, IconClick, IconEdit, IconFileX, IconFlag, IconRubberStamp } from "@tabler/icons-react";
@@ -10,7 +10,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useRef, useState } from "react";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { deleteFromR2 } from "~/lib/s3.server";
-import { Issue, Route, User, RouteSearchResults } from "~/lib/models";
+import { Issue, Route, User, RouteSearchResults, type IssueAttachment } from "~/lib/models";
 
 
 const StatusActions: React.FC<{
@@ -506,32 +506,87 @@ const TruncatableDescription: React.FC<{ description: string, fz: string }> = ({
     );
 };
 
+const statusFilterOptions = ['All', 'Public', 'In Moderation', 'Complete', 'Archived'];
+
 export default function IssuesManager() {
     const { issues, user } = useLoaderData<{ issues: Issue[]; user: User; }>();
     const [opened, { open, close }] = useDisclosure(false);
     const [openIssue, setOpenIssue] = useState<Issue>();
     const [selectedResult, setSelectedResult] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [filteredIssues, setFilteredIssues] = useState<Issue[]>(issues);
+    const [displayIssues, setDisplayIssues] = useState<Issue[]>(issues);
+    const [baseFilteredIssues, setBaseFilteredIssues] = useState<Issue[]>(issues);
     const searchFetcher = useFetcher<RouteSearchResults[]>();
+    const [sortStatus, setSortStatus] = useState<DataTableSortStatus<Issue>>({ columnAccessor: 'id', direction: 'asc' });
+    const [statusFilter, setStatusFilter] = useState<string>(statusFilterOptions[0]);
     const [imageOverlay, setImageOverlay] = useState<{ isOpen: boolean; url: string }>({
         isOpen: false,
         url: "",
     });
     const fz = "sm";
 
-    // Effect to handle search results and filter issues
     useEffect(() => {
+        let filtered = [...issues];
+
         if (searchFetcher.data && searchQuery.length > 1) {
             const searchResults = searchFetcher.data;
-            const matchingIssues = issues.filter(issue => 
+            filtered = filtered.filter(issue =>
                 searchResults.some(route => issue.routeId === route.routeId)
             );
-            setFilteredIssues(matchingIssues);
-        } else if (searchQuery.length <= 1) {
-            setFilteredIssues(issues);
+        } else if (searchQuery.length > 1 && !searchFetcher.data && searchFetcher.state === 'idle') {
+            filtered = [];
         }
-    }, [searchFetcher.data, searchQuery, issues]);
+
+        const lowerCaseStatusFilter = statusFilter.toLowerCase();
+        if (lowerCaseStatusFilter !== 'all') {
+            filtered = filtered.filter(issue => {
+                const lowerCaseStatus = issue.status.toLowerCase();
+                switch (lowerCaseStatusFilter) {
+                    case 'public':
+                        return lowerCaseStatus === 'reported' || lowerCaseStatus === 'viewed';
+                    case 'in moderation':
+                        return lowerCaseStatus === 'in moderation';
+                    case 'complete':
+                        return lowerCaseStatus === 'completed';
+                    case 'archived':
+                        return lowerCaseStatus === 'archived';
+                    default:
+                        return true;
+                }
+            });
+        } else {
+            filtered = filtered.filter(issue => issue.status.toLowerCase() !== 'archived');
+        }
+
+        setBaseFilteredIssues(filtered);
+
+    }, [issues, searchQuery, searchFetcher.data, searchFetcher.state, statusFilter]);
+
+    useEffect(() => {
+        const data = [...baseFilteredIssues];
+        const { columnAccessor, direction } = sortStatus;
+
+        data.sort((a, b) => {
+            let valueA: any;
+            let valueB: any;
+
+            if (columnAccessor === 'route.name') {
+                valueA = a.route?.name?.toLowerCase() ?? '';
+                valueB = b.route?.name?.toLowerCase() ?? '';
+            } else {
+                const accessor = columnAccessor as Exclude<keyof Issue, 'route'>; 
+                valueA = a[accessor];
+                valueB = b[accessor];
+            }
+
+            const comparison = 
+                typeof valueA === 'number' && typeof valueB === 'number' ? valueA - valueB :
+                String(valueA ?? '').localeCompare(String(valueB ?? ''));
+
+            return direction === 'asc' ? comparison : -comparison;
+        });
+        setDisplayIssues(data);
+    }, [baseFilteredIssues, sortStatus]);
 
     const renderActions: DataTableColumn<Issue>['render'] = (record: Issue) => (
         <Group gap={4} justify="right" wrap="nowrap">
@@ -577,6 +632,7 @@ export default function IssuesManager() {
                 </Stack>
 
                 <TextInput
+                    mt="md"
                     placeholder="Filter by route, sector, or crag..."
                     value={searchQuery}
                     onChange={(event) => {
@@ -585,27 +641,52 @@ export default function IssuesManager() {
                         if (query.length > 1) {
                             searchFetcher.load(`/api/search?query=${encodeURIComponent(query)}&limit=500`);
                         } else {
-                            setFilteredIssues(issues);
+                            setBaseFilteredIssues(issues.filter(issue => {
+                                const lowerCaseStatusFilter = statusFilter.toLowerCase();
+                                if (lowerCaseStatusFilter !== 'all') {
+                                    const lowerCaseStatus = issue.status.toLowerCase();
+                                    switch (lowerCaseStatusFilter) {
+                                        case 'public': return lowerCaseStatus === 'reported' || lowerCaseStatus === 'viewed';
+                                        case 'in moderation': return lowerCaseStatus === 'in moderation';
+                                        case 'complete': return lowerCaseStatus === 'completed';
+                                        case 'archived': return lowerCaseStatus === 'archived';
+                                        default: return true;
+                                    }
+                                } else {
+                                    return issue.status.toLowerCase() !== 'archived';
+                                }
+                            }));
                         }
                     }}
                 />
 
+                <SegmentedControl
+                    mt="xs"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    data={statusFilterOptions}
+                />
+
                 <DataTable<Issue>
+                    sortStatus={sortStatus}
+                    onSortStatusChange={setSortStatus}
                     withTableBorder
                     borderRadius="sm"
                     fz={fz}
                     withColumnBorders
                     striped
                     highlightOnHover
-                    records={filteredIssues}
+                    records={displayIssues}
                     columns={[
                         {
                             accessor: "id",
+                            sortable: true,
                             textAlign: "right",
                         },
                         {
                             accessor: "route.name",
-                            render: (record) =>
+                            sortable: true,
+                            render: (record: Issue) =>
                                 <Group gap={4}>
                                     {record.isFlagged && (
                                         <Tooltip position="top" withArrow label={record.flaggedMessage} fz={fz}>
@@ -620,19 +701,20 @@ export default function IssuesManager() {
                         },
                         {
                             accessor: "issueType",
+                            sortable: true,
                         },
                         {
                             accessor: "subIssueType",
                         },
                         {
                             accessor: "description",
-                            render: (record) => <TruncatableDescription fz={fz} description={record.description || ''} />,
+                            render: (record: Issue) => <TruncatableDescription fz={fz} description={record.description || ''} />,
                         },
                         {
                             accessor: "Images",
-                            render: (record) => (
+                            render: (record: Issue) => (
                                 <Group gap={2}>
-                                    {record.attachments?.map((attachment) => (
+                                    {record.attachments?.map((attachment: IssueAttachment) => (
                                         <Image
                                             key={attachment.name}
                                             src={attachment.url}
@@ -651,7 +733,8 @@ export default function IssuesManager() {
                             accessor: "status",
                             render: (record) =>
                                 <Badge size="xs" color={`status-${record.status.toLowerCase().replace(" ", "-")}`}>{record.status}</Badge>,
-                            width: '114px',
+                            width: '150px',
+                            sortable: true,
                         },
                         {
                             accessor: "actions",
