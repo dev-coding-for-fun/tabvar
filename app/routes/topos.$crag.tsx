@@ -165,6 +165,7 @@ export const action: ActionFunction = async ({ request, context }) => {
       const pitchCount = Number(formData.get("pitchCount")) ?? null;
       const parsedYear = Number(formData.get("year"));
       const year = (typeof parsedYear === 'number' && !isNaN(parsedYear) && parsedYear > 0) ? parsedYear : null;
+      const notes = formData.get("notes")?.toString() || null;
 
       const newRoute: Partial<Route> = {
         sectorId,
@@ -175,7 +176,8 @@ export const action: ActionFunction = async ({ request, context }) => {
         routeLength,
         firstAscentBy,
         pitchCount,
-        year
+        year,
+        notes
       };
 
       return await createRoute(context, newRoute);
