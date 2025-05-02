@@ -64,6 +64,7 @@ export const action: ActionFunction = async ({ request, context }) => {
       sub_issue_type: subIssueType,
       description: notes,
       status: "In Moderation",
+      last_modified: new Date().toISOString(),
     })
     .returning('id')
     .executeTakeFirstOrThrow();
