@@ -47,7 +47,12 @@ export async function uploadFileToR2(
   // Generate a unique filename if the file object doesn't have a name, otherwise decode the provided name
   const originalName = 'name' in file ? file.name : `${Date.now()}-${Math.random().toString(36).substring(7)}`;
   const decodedFileName = decodeURIComponent(originalName); // Decode potential URL encoding
-  const contentType = file.type || 'application/octet-stream';
+
+  // Determine content type, specifically handling GPX files
+  let contentType = file.type || 'application/octet-stream';
+  if (decodedFileName.toLowerCase().endsWith('.gpx')) {
+    contentType = 'application/gpx+xml';
+  }
 
   const params = {
     Bucket: bucketName,

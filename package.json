@@ -25,6 +25,7 @@
     "@mantine/hooks": "^7.17.2",
     "@mantine/notifications": "^7.17.2",
     "@mantine/tiptap": "^7.17.2",
+    "@mapbox/togeojson": "^0.16.2",
     "@remix-run/cloudflare": "^2.16.0",
     "@remix-run/cloudflare-pages": "^2.16.0",
     "@remix-run/cloudflare-workers": "^2.9.2",

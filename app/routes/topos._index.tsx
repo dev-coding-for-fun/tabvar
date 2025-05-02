@@ -8,11 +8,10 @@ import { getDB } from "~/lib/db";
 import { Crag, User } from "~/lib/models";
 import { getAuthenticator } from "~/lib/auth.server";
 import { IconMapPinPlus, IconEdit } from "@tabler/icons-react";
+import { useMapboxContext } from "~/contexts/MapboxContext";
 
 interface LoaderData {
   crags: Crag[];
-  mapboxAccessToken: string;
-  mapboxStyleUrl: string;
   user: User | null;
 }
 
@@ -82,23 +81,14 @@ export const loader: LoaderFunction = async ({ context, request }) => {
     .orderBy("name", "asc")
     .execute();
   
-  const mapboxAccessToken = context.cloudflare.env.MAPBOX_ACCESS_TOKEN;
-  const mapboxStyleUrl = context.cloudflare.env.MAPBOX_STYLE_URL;
   const user = await getAuthenticator(context).isAuthenticated(request);
 
-  if (!mapboxAccessToken) {
-    throw new Error("Mapbox access token is not configured");
-  }
-
-  if (!mapboxStyleUrl) {
-    throw new Error("Mapbox style URL is not configured");
-  }
-
-  return { crags, mapboxAccessToken, mapboxStyleUrl, user };
+  return { crags, user };
 };
 
 export default function RoutesIndex() {
-  const { crags: initialCrags, mapboxAccessToken, mapboxStyleUrl, user } = useLoaderData<LoaderData>();
+  const { crags: initialCrags, user } = useLoaderData<LoaderData>();
+  const { mapboxAccessToken, mapboxStyleUrl } = useMapboxContext();
   const [crags, setCrags] = useState(initialCrags);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newCragName, setNewCragName] = useState('');
@@ -249,6 +239,13 @@ export default function RoutesIndex() {
   // Effect for initial map setup and marker creation
   useEffect(() => {
     if (!mapContainer.current) return;
+    
+    // Check if context values are available
+    if (!mapboxAccessToken || !mapboxStyleUrl) {
+      console.error("Mapbox context not available in RoutesIndex");
+      // Optionally display an error to the user or disable map functionality
+      return; 
+    }
 
     mapboxgl.accessToken = mapboxAccessToken;
     
