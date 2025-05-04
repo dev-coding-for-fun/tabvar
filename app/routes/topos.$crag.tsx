@@ -284,7 +284,8 @@ export default function CragPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const editingRouteId = searchParams.get('editroute');
+  const editingRouteIdFromParams = searchParams.get('editroute');
+  const [localEditingRouteId, setLocalEditingRouteId] = useState<string | null>(editingRouteIdFromParams);
   const [reorderingSectorId, setReorderingSectorId] = useState<number | null>(null);
   const [newRouteSectorId, setNewRouteSectorId] = useState<number | null>(null);
   const [deleteRouteId, setDeleteRouteId] = useState<number | null>(null);
@@ -321,6 +322,16 @@ export default function CragPage() {
     setCragName(initialCrag.name);
   }, [initialCrag]);
 
+  // Sync local editing state with URL search params
+  useEffect(() => {
+    const paramId = searchParams.get('editroute');
+    if (paramId !== localEditingRouteId) {
+      setLocalEditingRouteId(paramId);
+    }
+  // Only run when searchParams change externally or on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   // Add useEffect to handle fetcher state for notes
   useEffect(() => {
     if (cragNotesFetcher.state === 'idle' && cragNotesFetcher.data?.success) {
@@ -329,18 +340,16 @@ export default function CragPage() {
   }, [cragNotesFetcher.state, cragNotesFetcher.data]);
 
   const handleEditClick = (routeId: number) => {
-    setSearchParams(
-      { editroute: routeId.toString() },
-      { preventScrollReset: true, replace: true }
-    );
+    const routeIdStr = routeId.toString();
+    setLocalEditingRouteId(routeIdStr);
+    searchParams.set('editroute', routeIdStr);
+    setSearchParams(searchParams, { preventScrollReset: true, replace: true });
   };
 
   const handleCancelEdit = () => {
+    setLocalEditingRouteId(null);
     searchParams.delete('editroute');
-    setSearchParams(
-      searchParams,
-      { preventScrollReset: true, replace: true }
-    );
+    setSearchParams(searchParams, { preventScrollReset: true, replace: true });
   };
 
   const handleNewRoute = (sectorId: number) => {
@@ -761,7 +770,7 @@ export default function CragPage() {
                   size="lg"
                   title={sortingSectors ? "Save Order" : "Sort Sectors"}
                   onClick={() => setSortingSectors(!sortingSectors)}
-                  disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null}
+                  disabled={reorderingSectorId !== null || localEditingRouteId !== null || newRouteSectorId !== null}
                 >
                   <IconArrowsUpDown size={20} />
                 </ActionIcon>
@@ -772,7 +781,7 @@ export default function CragPage() {
                   color="gray"
                   size="lg"
                   title="Import Data"
-                  disabled={reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null}
+                  disabled={reorderingSectorId !== null || localEditingRouteId !== null || newRouteSectorId !== null}
                 >
                   <IconRobot size={20} />
                 </ActionIcon>
@@ -782,7 +791,7 @@ export default function CragPage() {
                   size="lg"
                   title="Delete Crag"
                   onClick={() => setDeleteCragModalOpen(true)}
-                  disabled={crag.sectors?.length > 0 || reorderingSectorId !== null || editingRouteId !== null || newRouteSectorId !== null}
+                  disabled={crag.sectors?.length > 0 || reorderingSectorId !== null || localEditingRouteId !== null || newRouteSectorId !== null}
                 >
                   <IconTrash size={20} />
                 </ActionIcon>
@@ -887,7 +896,7 @@ export default function CragPage() {
                           sector={sector}
                           theme={theme}
                           canEdit={!!canEdit}
-                          editingRouteId={editingRouteId}
+                          editingRouteId={localEditingRouteId}
                           reorderingSectorId={reorderingSectorId}
                           newRouteSectorId={newRouteSectorId}
                           sortingSectors={sortingSectors}
