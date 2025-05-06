@@ -38,7 +38,7 @@ export const action: ActionFunction = async ({ request, context }) => {
   const fileIndex = formData.get("fileIndex")?.toString();
 
   const user = await getAuthenticator(context).isAuthenticated(request);
-  if (!user || (user.role !== 'admin' && user.role !== 'member')) {
+  if (!user || (user.role !== 'admin' && user.role !== 'super')) {
     return data({ success: false, error: "Unauthorized" }, { status: 403 });
   }
 

@@ -51,7 +51,7 @@ export const action: ActionFunction = async ({ request, context }) => {
   const user = await getAuthenticator(context).isAuthenticated(request, {
     failureRedirect: "/login",
   });
-  if (user.role !== 'admin' && user.role !== 'member') {
+  if (user.role !== 'admin' && user.role !== 'super') {
     return { error: PERMISSION_ERROR };
   }
 
@@ -137,7 +137,7 @@ export const action: ActionFunction = async ({ request, context }) => {
     }
 
     case "update_sector_notes": {
-      if (user.role !== 'admin' && user.role !== 'member') {
+      if (user.role !== 'admin' && user.role !== 'super') {
         return { success: false, error: PERMISSION_ERROR };
       }
       const sectorId = Number(formData.get("sectorId")) ?? null;
@@ -280,7 +280,7 @@ export default function CragPage() {
   const { crag: initialCrag, user } = useLoaderData<{ crag: Crag; user: User | null }>();
   const [crag, setCrag] = useState(initialCrag);
   const theme = useMantineTheme();
-  const canEdit = user && (user.role === 'admin' || user.role === 'member');
+  const canEdit = user && (user.role === 'admin' || user.role === 'super');
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
