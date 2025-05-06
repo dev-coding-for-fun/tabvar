@@ -13,6 +13,7 @@ import {
 } from "@mantine/core";
 import { IconDownload, IconAlertCircle } from "@tabler/icons-react";
 import { getDB } from "~/lib/db";
+import { RequirePermission } from "~/components/RequirePermission";
 
 type ActionData = { error?: string; success?: true };
 
@@ -99,60 +100,62 @@ export default function ToposImporter() {
     const { name, type } = useLoaderData<LoaderData>();
 
     return (
-        <Container size="sm" py="xl">
-            <Paper radius="md" p="xl" withBorder>
-                <Stack gap="md">
-                    <Alert
-                        icon={<IconAlertCircle size={16} />}
-                        title="🚧 Under Construction 🚧"
-                        color="red"
-                        variant="light"
-                    >
-                        This feature is still being developed. The AI-powered data import functionality is not yet ready for use.
-                    </Alert>
+        <RequirePermission access="admin">
+            <Container size="sm" py="xl">
+                <Paper radius="md" p="xl" withBorder>
+                    <Stack gap="md">
+                        <Alert
+                            icon={<IconAlertCircle size={16} />}
+                            title="🚧 Under Construction 🚧"
+                            color="red"
+                            variant="light"
+                        >
+                            This feature is still being developed. The AI-powered data import functionality is not yet ready for use.
+                        </Alert>
 
-                    <div>
-                        <Title order={2}>Import Crag Data</Title>
-                        <Text c="dimmed" size="sm">
-                            Importing data for {type === 'crag' ? 'Crag' : 'Sector'}: {name}
-                        </Text>
-                    </div>
+                        <div>
+                            <Title order={2}>Import Crag Data</Title>
+                            <Text c="dimmed" size="sm">
+                                Importing data for {type === 'crag' ? 'Crag' : 'Sector'}: {name}
+                            </Text>
+                        </div>
 
-                    <Form method="post">
-                        <Stack gap="md">
-                            <TextInput
-                                label="Source URL"
-                                name="url"
-                                placeholder="https://example.com/crag"
-                                required
-                                description="Enter the URL of the page containing the crag data"
-                            />
+                        <Form method="post">
+                            <Stack gap="md">
+                                <TextInput
+                                    label="Source URL"
+                                    name="url"
+                                    placeholder="https://example.com/crag"
+                                    required
+                                    description="Enter the URL of the page containing the crag data"
+                                />
 
-                            {actionData?.error && (
-                                <Alert
-                                    icon={<IconAlertCircle size={16} />}
-                                    title="Error"
-                                    color="red"
+                                {actionData?.error && (
+                                    <Alert
+                                        icon={<IconAlertCircle size={16} />}
+                                        title="Error"
+                                        color="red"
+                                        variant="light"
+                                    >
+                                        {actionData.error}
+                                    </Alert>
+                                )}
+
+                                <Button
+                                    type="submit"
+                                    loading={state === "submitting"}
+                                    leftSection={<IconDownload size={16} />}
                                     variant="light"
+                                    color="blue"
+                                    size="md"
                                 >
-                                    {actionData.error}
-                                </Alert>
-                            )}
-
-                            <Button
-                                type="submit"
-                                loading={state === "submitting"}
-                                leftSection={<IconDownload size={16} />}
-                                variant="light"
-                                color="blue"
-                                size="md"
-                            >
-                                {state === "submitting" ? "Fetching..." : "Fetch Data"}
-                            </Button>
-                        </Stack>
-                    </Form>
-                </Stack>
-            </Paper>
-        </Container>
+                                    {state === "submitting" ? "Fetching..." : "Fetch Data"}
+                                </Button>
+                            </Stack>
+                        </Form>
+                    </Stack>
+                </Paper>
+            </Container>
+        </RequirePermission>
     );
 }
