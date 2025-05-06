@@ -1,7 +1,7 @@
 import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Space, Stack, Textarea, Title, rem } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
-import { ActionFunction, data, redirect } from "@remix-run/cloudflare";
+import { ActionFunction, data, LoaderFunction, redirect } from "@remix-run/cloudflare";
 import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
 import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
@@ -14,6 +14,13 @@ import { uploadFileToR2 } from "~/lib/s3.server";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; //5 MB
 type IssueType = keyof typeof subIssuesByType;
+
+export const loader: LoaderFunction = async ({ request, context }) => {
+  await getAuthenticator(context).isAuthenticated(request, {
+    failureRedirect: "/login",
+  });
+  return null; // User is authenticated, return null or any necessary data
+};
 
 const validateRoute = (routeId: string) => {
   if (!routeId) {
