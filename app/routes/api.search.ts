@@ -89,6 +89,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                     sql<string>`bolt_count`.as('boltCount'),
                     sql<string>`pitch_count`.as('pitchCount')
                 ])
+                .orderBy(sql`rank`)
                 .limit(limit)
                 .execute();
             return results;
@@ -109,6 +110,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                     sql<string>`bolt_count`.as('boltCount'),
                     sql<string>`pitch_count`.as('pitchCount')
                 ])
+                .orderBy(sql`rank`)
                 .limit(limit)
                 .execute();
             return results;
