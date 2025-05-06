@@ -17,7 +17,7 @@ interface LoaderData {
 
 export const action: ActionFunction = async ({ context, request }) => {
   const user = await getAuthenticator(context).isAuthenticated(request);
-  if (!user || (user.role !== 'admin' && user.role !== 'member')) {
+  if (!user || (user.role !== 'admin' && user.role !== 'super')) {
     return data({ error: 'Unauthorized' }, { status: 403 });
   }
 
@@ -102,7 +102,7 @@ export default function RoutesIndex() {
   const [placingCragId, setPlacingCragId] = useState<number | null>(null);
   const markers = useRef<{ [key: number]: mapboxgl.Marker }>({});
   const cragPositions = useRef<{ [key: number]: [number, number] }>({});
-  const canEdit = user && (user.role === 'admin' || user.role === 'member');
+  const canEdit = user && (user.role === 'admin' || user.role === 'super');
 
   // Update local state when server data changes
   useEffect(() => {
@@ -165,7 +165,7 @@ export default function RoutesIndex() {
         <a href="/topos/${encodeURIComponent(crag.id)}" style="color: #228BE6; text-decoration: none; display: block; margin-bottom: 8px;">
           View Routes
         </a>
-        ${(user?.role === 'admin' || user?.role === 'member') ? `
+        ${(user?.role === 'admin' || user?.role === 'super') ? `
           <a href="#" onclick="window.handleMovePin(${cragId}, ${isMovable}); return false;" style="color: #228BE6; text-decoration: none;">
             ${isMovable ? 'Save Position' : 'Move Pin'}
           </a>
