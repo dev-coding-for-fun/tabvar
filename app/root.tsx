@@ -35,6 +35,7 @@ import { EditorMenu } from "./components/EditorMenu";
 import RouteSearchBox from "./components/routeSearchBox";
 import { useCallback, useRef } from "react";
 import { MapboxProvider } from "./contexts/MapboxContext";
+import GlobalBanner from "./components/GlobalBanner";
 
 const theme = createTheme({
   primaryColor: 'blue',
@@ -226,7 +227,7 @@ export default function App() {
                     )}
                   </div>
                 </header>
-
+                <GlobalBanner />
                 <Box style={{ flexGrow: 1 }}>
                   <EditorMenu />
                   <Outlet />

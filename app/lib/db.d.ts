@@ -256,6 +256,7 @@ export interface TopoAttachment {
 export interface User {
   avatar_url: string | null;
   created_at: Generated<string | null>;
+  disclaimer_ack_date: string | null;
   display_name: string | null;
   email: string | null;
   email_verified: number | null;

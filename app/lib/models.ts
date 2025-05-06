@@ -131,6 +131,7 @@ export interface User {
     providerId?: string | null;
     role?: string | null;
     createdAt?: string | null;
+    disclaimerAckDate?: string | null;
 }
 
 export interface UserInvite {
