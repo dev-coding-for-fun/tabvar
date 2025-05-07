@@ -85,7 +85,7 @@ export default function App() {
   const navigate = useNavigate();
   const searchBoxRef = useRef<{ reset: () => void }>(null);
   const [drawerOpened, { toggle: toggleDrawer, close: closeDrawer }] = useDisclosure(false);
-  const isMobile = useMediaQuery(`(max-width: ${rem(1100)})`);
+  const isMobile = useMediaQuery('(max-width: 1100px)', true, { getInitialValueInEffect: false });
 
   const handleSearchSelect = useCallback((selected: { value: string | null; boltCount: number | null }) => {
     if (selected.value) {
