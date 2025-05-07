@@ -46,7 +46,9 @@ export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
                     'provider_id as providerId', 
                     'avatar_url as avatarUrl', 
                     'role', 
-                    'created_at as createdAt'])
+                    'created_at as createdAt',
+                    'disclaimer_ack_date as disclaimerAckDate'
+                ])
                 .where('uid', '=', id)
                 .executeTakeFirst();
             if (!user) {
@@ -73,7 +75,9 @@ export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
                         'provider_id as providerId', 
                         'avatar_url as avatarUrl', 
                         'role', 
-                        'created_at as createdAt'])
+                        'created_at as createdAt',
+                        'disclaimer_ack_date as disclaimerAckDate'
+                    ])
                     .executeTakeFirstOrThrow();
             }
             await db.insertInto('signin_event')
