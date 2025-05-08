@@ -37,27 +37,6 @@ export function TopoGallery({
 
   const imageAttachments = attachments.filter(attachment => attachment.type.startsWith('image/'));
 
-  const handleAttachmentClick = (attachment: TopoAttachment, index: number) => {
-    if (attachment.type.startsWith('image/')) {
-      const imageIndex = imageAttachments.findIndex(img => img.id === attachment.id);
-      setSelectedImageIndex(imageIndex);
-    } else if (attachment.type === 'application/pdf') {
-      const url = attachment.url.startsWith('http') ? attachment.url : `https://${attachment.url}`;
-      window.open(url, '_blank');
-    } else if (attachment.type === 'application/gpx+xml') {
-      if (mapboxAccessToken && mapboxStyleUrl) {
-        setSelectedGpxAttachment(attachment);
-        setIsGpxModalOpen(true);
-      } else {
-        notifications.show({
-          title: 'Map Unavailable',
-          message: 'Map configuration is missing.',
-          color: 'orange'
-        });
-      }
-    }
-  };
-
   const handleDeleteClick = (attachment: TopoAttachment) => {
     setDeleteAttachmentId(attachment.id);
   };
@@ -287,55 +266,88 @@ export function TopoGallery({
       >
         <LoadingOverlay visible={fetcher.state !== 'idle'} />
         
-        {attachments.map((attachment, index) => (
-          <Paper
-            key={attachment.id}
-            pos="relative"
-            radius="sm"
-            draggable
-            onDragStart={(e) => handleDragStart(e, attachment)}
-            style={{
-              width: getPreviewSize(),
-              height: getPreviewSize(),
-              cursor: 'grab',
-              overflow: 'visible',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: theme.colors.gray[0]
-            }}
-            onClick={() => handleAttachmentClick(attachment, index)}
-          >
-            {attachment.type === 'application/gpx+xml' ? (
-              <IconRoute size={getIconSize()} color={theme.colors.green[6]} />
-            ) : attachment.type === 'application/pdf' ? (
-              <IconFileTypePdf size={getIconSize()} color={theme.colors.red[6]} />
-            ) : (
-              <IconPhoto size={getIconSize()} color={theme.colors.blue[6]} />
-            )}
-            
-            {canEdit && (
-              <ActionIcon
-                variant="subtle"
-                color="white"
-                size="xs"
-                pos="absolute"
-                top={-8}
-                right={-8}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteClick(attachment);
-                }}
-                style={{
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(255, 0, 0, 0.9)',
-                }}
-              >
-                <IconX size={12} />
-              </ActionIcon>
-            )}
-          </Paper>
-        ))}
+        {attachments.map((attachment, index) => {
+          const attachmentUrl = attachment.url.startsWith('http') ? attachment.url : `https://${attachment.url}`;
+          const type = attachment.type;
+
+          return (
+            <Paper
+              key={attachment.id}
+              component="a"
+              href={attachmentUrl}
+              target="_blank" 
+              rel="noopener noreferrer"
+              pos="relative"
+              radius="sm"
+              draggable
+              onDragStart={(e: React.DragEvent) => handleDragStart(e, attachment)}
+              style={{
+                width: getPreviewSize(),
+                height: getPreviewSize(),
+                cursor: 'pointer',
+                overflow: 'visible',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: theme.colors.gray[0],
+                textDecoration: 'none',
+              }}
+              onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                if (type.startsWith('image/')) {
+                  e.preventDefault();
+                  const imageIndex = imageAttachments.findIndex(img => img.id === attachment.id);
+                  setSelectedImageIndex(imageIndex);
+                } else if (type === 'application/gpx+xml') {
+                  e.preventDefault();
+                  if (mapboxAccessToken && mapboxStyleUrl) {
+                    setSelectedGpxAttachment(attachment);
+                    setIsGpxModalOpen(true);
+                  } else {
+                    notifications.show({
+                      title: 'Map Unavailable',
+                      message: 'Map configuration is missing.',
+                      color: 'orange'
+                    });
+                  }
+                }
+                // For PDF and all other types, do nothing here,
+                // allow default <a> tag behavior (target="_blank" will open new tab)
+              }}
+            >
+              {type.startsWith('image/') ? (
+                <IconPhoto size={getIconSize()} color={theme.colors.blue[6]} />
+              ) : type === 'application/gpx+xml' ? (
+                <IconRoute size={getIconSize()} color={theme.colors.green[6]} />
+              ) : type === 'application/pdf' ? (
+                <IconFileTypePdf size={getIconSize()} color={theme.colors.red[6]} />
+              ) : (
+                <IconPaperclip size={getIconSize()} color={theme.colors.gray[6]} /> // Default icon
+              )}
+              
+              {canEdit && (
+                <ActionIcon
+                  variant="subtle"
+                  color="white"
+                  size="xs"
+                  pos="absolute"
+                  top={-8}
+                  right={-8}
+                  onClick={(e: React.MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDeleteClick(attachment);
+                  }}
+                  style={{
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(255, 0, 0, 0.9)',
+                  }}
+                >
+                  <IconX size={12} />
+                </ActionIcon>
+              )}
+            </Paper>
+          );
+        })}
 
         {canEdit && (
           <FileButton
