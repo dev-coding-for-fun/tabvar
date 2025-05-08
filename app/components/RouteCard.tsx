@@ -39,6 +39,7 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
 
     return (
         <Paper
+            id={`route-${route.id}`}
             p="xs"
             withBorder
             onDragOver={handleDragOver}
