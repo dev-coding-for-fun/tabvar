@@ -115,9 +115,17 @@ export default function UsersIndex() {
     const { users, invites, error } = useLoaderData<{ users: User[]; invites: UserInvite[]; error?: string }>();
     const actionData = useActionData<{ success?: boolean; message?: string }>();
     const submit = useSubmit();
-    const [isOpen, { close, toggle }] = useDisclosure(false);
+    const [openedPopoverUid, setOpenedPopoverUid] = useState<string | null>(null);
     const [selectedRole, setSelectedRole] = useState<string | null>("");
     useErrorNotification(error);
+
+    const togglePopover = (uid: string) => {
+        setOpenedPopoverUid(prev => (prev === uid ? null : uid));
+    };
+
+    const closePopover = () => {
+        setOpenedPopoverUid(null);
+    };
 
     const handleRoleSave = (uid: string | undefined) => {
         const formData = new FormData();
@@ -125,7 +133,7 @@ export default function UsersIndex() {
         formData.append('uid', uid ?? "");
         formData.append('role', selectedRole ?? "");
         submit(formData, { method: 'post' });
-        close();
+        closePopover();
     };
 
     useEffect(() => {
@@ -171,8 +179,8 @@ export default function UsersIndex() {
                 position="bottom"
                 withArrow
                 withinPortal
-                opened={isOpen}
-                onClose={close}
+                opened={openedPopoverUid === record.uid}
+                onClose={closePopover}
                 trapFocus
             ><Popover.Target>
                     <ActionIcon
@@ -181,7 +189,10 @@ export default function UsersIndex() {
                         color="indigo"
                         onClick={(e) => {
                             e.preventDefault();
-                            toggle();
+                            e.stopPropagation(); // Prevent row click event if any
+                            if (record.uid) {
+                                togglePopover(record.uid);
+                            }
                         }}
                     >
                         <IconSquareKey size={16} />

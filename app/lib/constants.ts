@@ -120,5 +120,6 @@ export const subIssuesByType: Record<IssueType, SubIssueType[]> = {
 export const userRoles = [
     { value: 'admin', label: 'Admin' },
     { value: 'member', label: 'Member' },
+    { value: 'super', label: 'Superuser' },
 ] as const;
 
