@@ -1,5 +1,5 @@
 import { useFetcher } from "@remix-run/react";
-import { SelectProps, Group, Select, Text, Badge, Stack } from "@mantine/core";
+import { SelectProps, Group, Select, Text, Badge, Stack, Box } from "@mantine/core";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { RouteSearchResults } from "~/lib/models";
 
@@ -71,31 +71,136 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
     const getTypeBadge = (type: string) => {
       switch (type) {
         case 'route':
-          return <Badge size="xs" variant="light" color="blue">Route</Badge>;
+          return <Badge size="xs" variant="light" color="blue" style={{ flexShrink: 0 }}>Route</Badge>;
         case 'sector':
-          return <Badge size="xs" variant="light" color="green">Sector</Badge>;
+          return <Badge size="xs" variant="light" color="green" style={{ flexShrink: 0 }}>Sector</Badge>;
         case 'crag':
-          return <Badge size="xs" variant="light" color="orange">Crag</Badge>;
+          return <Badge size="xs" variant="light" color="orange" style={{ flexShrink: 0 }}>Crag</Badge>;
         default:
           return null;
       }
     };
 
-    return (
-      <Group gap="xs" wrap="nowrap" align="flex-start">
+    // Common wrapper for all item types
+    const ItemWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+      <Group gap="xs" wrap="nowrap" align="flex-start" style={{ width: '100%' }}>
         {getTypeBadge(item.type)}
-        <Text size="sm" fw={500} style={{ flexShrink: 0 }}>{getItemDisplayName(item)}</Text>
-        {item.type === 'route' && (
-          <Group gap="xs" wrap="nowrap" style={{ flex: 1, justifyContent: 'flex-end' }}>
-            {item.gradeYds && <Badge size="xs" variant="outline">{item.gradeYds}</Badge>}
-            {item.sectorName && <Text size="xs" opacity={0.7}>{item.sectorName}</Text>}
-            {item.cragName && <Text size="xs" opacity={0.7}>{item.cragName}</Text>}
-          </Group>
-        )}
-        {item.type === 'sector' && item.cragName && (
-          <Text size="xs" opacity={0.7} style={{ flex: 1, textAlign: 'right' }}>{item.cragName}</Text>
-        )}
+        {children}
       </Group>
+    );
+    
+    if (item.type === 'route') {
+      return (
+        <ItemWrapper>
+          <Box style={{ flexGrow: 1, minWidth: 0 }}>
+            {/* Mobile Layout for Route */}
+            <Stack
+              gap="xs"
+              hiddenFrom="sm"
+            >
+              <Group wrap="wrap" gap="xs" align="flex-start">
+                <Text size="sm" fw={500} lineClamp={1} title={getItemDisplayName(item)} style={{ flexGrow: 1, minWidth: '50px' /* Allow some space before wrapping grade */ }}>
+                  {getItemDisplayName(item)}
+                </Text>
+                {item.gradeYds && (
+                  <Badge size="xs" variant="outline" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {item.gradeYds}
+                  </Badge>
+                )}
+              </Group>
+              {(item.sectorName || item.cragName) && (
+                <Group gap="xs" wrap="nowrap">
+                  {item.sectorName && <Text size="xs" opacity={0.7}>{item.sectorName}</Text>}
+                  {item.cragName && <Text size="xs" opacity={0.7}>{item.cragName}</Text>}
+                </Group>
+              )}
+            </Stack>
+
+            {/* Desktop Layout for Route */}
+            <Group
+              wrap="nowrap"
+              justify="space-between"
+              align="flex-start"
+              visibleFrom="sm"
+              style={{
+                flexGrow: 1,
+              }}
+            >
+              {/* Left part: Route Name + Grade */}
+              <Group 
+                wrap="nowrap" 
+                gap="xs" 
+                align="center"
+                style={{ flexGrow: 1, minWidth: 0, marginRight: 'var(--mantine-spacing-xs)' }}
+              >
+                <Text 
+                  size="sm" 
+                  fw={500} 
+                  lineClamp={1} 
+                  title={getItemDisplayName(item)} 
+                  style={{ minWidth: 0 }}
+                >
+                  {getItemDisplayName(item)}
+                </Text>
+                {item.gradeYds && (
+                  <Badge 
+                    size="xs" 
+                    variant="outline" 
+                    style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                  >
+                    {item.gradeYds}
+                  </Badge>
+                )}
+              </Group>
+
+              {/* Right part: Sector + Crag (only if they exist) */}
+              {(item.sectorName || item.cragName) && (
+                <Group 
+                  wrap="nowrap" 
+                  gap="xs" 
+                  style={{ flexShrink: 0 }}
+                  align="center"
+                >
+                  {item.sectorName && <Text size="xs" opacity={0.7}>{item.sectorName}</Text>}
+                  {item.cragName && <Text size="xs" opacity={0.7}>{item.cragName}</Text>}
+                </Group>
+              )}
+            </Group>
+          </Box>
+        </ItemWrapper>
+      );
+    }
+
+    if (item.type === 'sector') {
+      return (
+        <ItemWrapper>
+          <Text size="sm" fw={500} lineClamp={1} title={getItemDisplayName(item)} style={{ flexGrow: 1, minWidth: 0 }}>
+            {getItemDisplayName(item)}
+          </Text>
+          {item.cragName && (
+            <Text size="xs" opacity={0.7} lineClamp={1} title={item.cragName} style={{ flexShrink: 0, marginLeft: 'var(--mantine-spacing-xs)' }}>
+              {item.cragName}
+            </Text>
+          )}
+        </ItemWrapper>
+      );
+    }
+
+    if (item.type === 'crag') {
+      return (
+        <ItemWrapper>
+          <Text size="sm" fw={500} lineClamp={1} title={getItemDisplayName(item)} style={{ flexGrow: 1, minWidth: 0 }}>
+            {getItemDisplayName(item)}
+          </Text>
+        </ItemWrapper>
+      );
+    }
+
+    // Fallback for unknown type (should not happen with current data structure)
+    return (
+      <ItemWrapper>
+        <Text size="sm">{getItemDisplayName(item)}</Text>
+      </ItemWrapper>
     );
   };
 
@@ -164,14 +269,23 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
       required={required}
       onChange={handleChange}
       value={value}
-      maxDropdownHeight={400}
-      styles={{
+      maxDropdownHeight={600}
+      comboboxProps={{ width: 'auto' }}
+      styles={(theme) => ({
         dropdown: {
-          maxWidth: '800px',
-          width: '100%'
+          width: 'auto',
+          // Mobile-first defaults
+          maxWidth: '100%', 
+          minWidth: '280px',
+          
+          // Styles for larger screens (sm breakpoint and up)
+          [`@media (min-width: ${theme.breakpoints.sm})`]: {
+            minWidth: '600px',
+            maxWidth: '800px',
+          },
         },
         option: {
-          padding: '8px 12px',
+          padding: '12px 12px',
           '& + &': {
             borderTop: '1px solid var(--mantine-color-gray-3)',
           },
@@ -179,7 +293,7 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
             backgroundColor: 'var(--mantine-color-gray-0)',
           }
         }
-      }}
+      })}
     />
   )
 });
