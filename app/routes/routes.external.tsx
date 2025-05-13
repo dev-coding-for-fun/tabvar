@@ -3,7 +3,7 @@ import { ActionFunction, LoaderFunction, data } from "@remix-run/cloudflare";
 import { useFetcher } from "@remix-run/react";
 import { User } from "~/lib/models";
 import { useEffect, useState } from "react";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
 
 type OpenBetaResponse = {
@@ -35,7 +35,7 @@ type OpenBetaResponse = {
 };
 
 export const action: ActionFunction = async ({ request, context }) => {
-  const user = await getAuthenticator(context).isAuthenticated(request);
+  const user = await requireUser(request, context);
   if (!user || (user.role !== 'admin' && user.role !== 'super')) {
     return data({ error: 'Unauthorized' }, { status: 403 });
   }
@@ -147,9 +147,7 @@ query getMyAreas {
 };
 
 export const loader: LoaderFunction = async ({ request, context }) => {
-    const user: User = await getAuthenticator(context).isAuthenticated(request, {
-        failureRedirect: "/login",
-    });
+    const user: User = await requireUser(request, context);
     if (user.role !== 'admin') {
         return data({ error: PERMISSION_ERROR }, { status: 403 });
     }

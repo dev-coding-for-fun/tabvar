@@ -3,7 +3,7 @@ import { ActionFunction, LoaderFunction, json } from "@remix-run/cloudflare";
 import { useFetcher } from "@remix-run/react";
 import { Issue, User } from "~/lib/models";
 import { useEffect, useState } from "react";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { SloperSyncResult, SyncedSector, syncSloperCragsAndSectors, syncSloperIssues, syncSloperRoutes } from "~/lib/sloper";
 
@@ -14,9 +14,7 @@ export interface IssueWithRoute extends Issue {
 }
 
 export const loader: LoaderFunction = async ({ request, context }) => {
-    const user: User = await getAuthenticator(context).isAuthenticated(request, {
-        failureRedirect: "/login",
-    });
+    const user: User = await requireUser(request, context);
     if (user.role !== 'admin') {
         return json({ error: PERMISSION_ERROR }, { status: 403 });
     }
@@ -24,9 +22,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
-    const user = await getAuthenticator(context).isAuthenticated(request, {
-        failureRedirect: "/login",
-    });
+    const user = await requireUser(request, context);
     if (user.role !== 'admin') {
         return json({ error: PERMISSION_ERROR }, { status: 403 });
     }

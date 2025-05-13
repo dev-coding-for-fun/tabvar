@@ -1,7 +1,7 @@
 import { ActionFunctionArgs, json } from "@remix-run/cloudflare";
-import { getAuthenticator } from "~/lib/auth.server"; // Assuming auth.server.ts handles user auth
+import { getAuthenticator } from "~/lib/auth.server";
 import { getDB } from "~/lib/db";
-
+import { User } from "~/lib/models";
 
 async function updateUserDisclaimerDate(userId: string, date: string, context: any) {
 

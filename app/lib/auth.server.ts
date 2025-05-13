@@ -1,29 +1,48 @@
 // app/services/auth.server.ts
-import { AppLoadContext, createCookieSessionStorage, redirect } from '@remix-run/cloudflare';
+import { AppLoadContext, createCookieSessionStorage, redirect, SessionStorage } from '@remix-run/cloudflare';
 import { Authenticator } from 'remix-auth';
 import { GoogleStrategy } from 'remix-auth-google'
 import { getDB } from './db';
 import { sql } from 'kysely';
 import { User } from './models';
 
+// Define the data structure for your session
+interface SessionData {
+  user: User | null; // `remix-auth` typically stores the user object here
+  postLoginRedirectTo?: string;
+  "auth:error"?: any; // remix-auth might store auth errors here
+}
+
 let _authenticator: Authenticator<User> | null = null;
-let _sessionStorage: ReturnType<typeof createCookieSessionStorage> | null = null;
+let _sessionStorage: SessionStorage<SessionData> | null = null;
 
-
-export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
-    if (_authenticator?.isAuthenticated !== undefined) return _authenticator;
-    _sessionStorage  = createCookieSessionStorage({
+function initializeSessionStorage(context: AppLoadContext): SessionStorage<SessionData> {
+    if (_sessionStorage) return _sessionStorage;
+    _sessionStorage = createCookieSessionStorage<SessionData>({
         cookie: {
             name: "_session",
             sameSite: "lax",
             path: "/",
             httpOnly: true,
-            secrets: [context.cloudflare.env.COOKIE_SECRET],
+            secrets: [context.cloudflare.env.COOKIE_SECRET!],
             secure: context.cloudflare.env.ENVIRONMENT === "production",
             domain: context.cloudflare.env.COOKIE_DOMAIN
         },
     });
-    _authenticator = new Authenticator<User>(_sessionStorage);
+    return _sessionStorage;
+}
+
+export function getSessionStorage(context: AppLoadContext): SessionStorage<SessionData> {
+    return initializeSessionStorage(context);
+}
+
+export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
+    if (_authenticator?.isAuthenticated !== undefined) return _authenticator;
+    const sessionStorage = initializeSessionStorage(context);
+    _authenticator = new Authenticator<User>(sessionStorage, {
+        sessionKey: 'user', // Explicitly tell authenticator to use 'user' key for the user data
+        sessionErrorKey: 'auth:error' // Explicitly tell authenticator to use 'auth:error' for errors
+    });
 
     const googleStrategy = new GoogleStrategy<User>(
         {
@@ -91,6 +110,22 @@ export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
     );
     _authenticator.use(googleStrategy);
     return _authenticator;
+}
+
+export async function requireUser(
+    request: Request,
+    context: AppLoadContext
+): Promise<User> {
+    const authenticator = getAuthenticator(context);
+    const currentPath = new URL(request.url).pathname;
+    // Append current query parameters as well, so if user was at /somepage?param1=value1, they return there.
+    const currentSearch = new URL(request.url).search;
+    const redirectTo = encodeURIComponent(currentPath + currentSearch);
+    const loginPathWithRedirect = `/login?redirectTo=${redirectTo}`;
+
+    return authenticator.isAuthenticated(request, {
+        failureRedirect: loginPathWithRedirect,
+    });
 }
 
 export async function logout(request: Request) {

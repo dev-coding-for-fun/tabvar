@@ -8,14 +8,12 @@ import { User, UserInvite } from "~/lib/models";
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { useEffect, useState } from "react";
 import { useErrorNotification } from "~/components/useErrorNotification";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR, userRoles } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 
 export const loader: LoaderFunction = async ({ request, context }) => {
-    const user: User = await getAuthenticator(context).isAuthenticated(request, {
-        failureRedirect: "/login",
-    });
+    const user: User = await requireUser(request, context);
     if (user.role !== 'admin') {
         return data({ users: [], error: PERMISSION_ERROR }, { status: 403 });
     }
@@ -30,9 +28,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
-    const user: User = await getAuthenticator(context).isAuthenticated(request, {
-        failureRedirect: "/login",
-    });
+    const user: User = await requireUser(request, context);
     if (user.role !== 'admin') {
         return data({ error: PERMISSION_ERROR }, { status: 403 });
     }

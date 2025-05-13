@@ -5,8 +5,7 @@ import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus, IconRobot, Ic
 import { getDB } from "~/lib/db";
 import { useEffect, useState } from "react";
 import type { Crag, Sector, Route } from "~/lib/models";
-import { loadCragByName, loadCragById, deleteCrag } from "~/lib/crag.server";
-import { getAuthenticator } from "~/lib/auth.server";
+import { loadCragById, deleteCrag } from "~/lib/crag.server";
 import type { User } from "~/lib/models";
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from '@hello-pangea/dnd';
 import { SectorCard } from "~/components/SectorCard";
@@ -16,6 +15,7 @@ import { PERMISSION_ERROR } from "~/lib/constants";
 import { TopoGallery } from "~/components/TopoGallery";
 import { RichTextViewer } from "~/components/RichTextViewer";
 import { ConfiguredRichTextEditor } from "~/components/ConfiguredRichTextEditor";
+import { getAuthenticator, requireUser } from "~/lib/auth.server";
 
 // Define a type for action responses
 interface ActionResponse { 
@@ -48,9 +48,7 @@ export const loader: LoaderFunction = async ({ params, context, request }) => {
 };
 
 export const action: ActionFunction = async ({ request, context }) => {
-  const user = await getAuthenticator(context).isAuthenticated(request, {
-    failureRedirect: "/login",
-  });
+  const user = await requireUser(request, context);
   if (user.role !== 'admin' && user.role !== 'super') {
     return { error: PERMISSION_ERROR };
   }

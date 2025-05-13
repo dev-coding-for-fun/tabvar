@@ -2,7 +2,7 @@ import { ActionFunction, data } from "@remix-run/cloudflare";
 import type { AppLoadContext } from "@remix-run/cloudflare";
 import type { TopoAttachment, User } from "~/lib/models";
 import { removeAttachment, uploadAttachment, addAttachmentToRoute, addAttachmentToSector, addAttachmentToCrag } from "~/lib/attachment.server";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 
 interface AttachmentUploadResult {
   success: boolean;
@@ -11,8 +11,8 @@ interface AttachmentUploadResult {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
-  const user = await getAuthenticator(context).isAuthenticated(request);
-  if (!user || (user.role !== 'admin' && user.role !== 'member')) {
+  const user = await requireUser(request, context);
+  if (user.role !== 'admin' && user.role !== 'member') {
     return data({ error: 'Unauthorized' }, { status: 403 });
   }
 

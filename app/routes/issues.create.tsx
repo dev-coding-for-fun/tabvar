@@ -5,9 +5,8 @@ import { ActionFunction, data, LoaderFunction, redirect } from "@remix-run/cloud
 import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
 import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import RouteDetailsModal from "~/components/routeDetailsModal";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 import { uploadFileToR2 } from "~/lib/s3.server";
@@ -16,9 +15,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; //5 MB
 type IssueType = keyof typeof subIssuesByType;
 
 export const loader: LoaderFunction = async ({ request, context }) => {
-  await getAuthenticator(context).isAuthenticated(request, {
-    failureRedirect: "/login",
-  });
+  await requireUser(request, context);
   return null; // User is authenticated, return null or any necessary data
 };
 
@@ -38,9 +35,7 @@ const validateIssueType = (issueType: string) => {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
-  const user = await getAuthenticator(context).isAuthenticated(request, {
-    failureRedirect: "/login",
-  });
+  const user = await requireUser(request, context);
   const formData = await request.formData();
   const routeParts = (formData.get("route")?.toString() ?? '').split(':');
   const routeId = (routeParts.length > 1 && routeParts[0] === 'route') ? routeParts[1] : '';

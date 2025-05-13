@@ -2,7 +2,7 @@ import { Container, Paper, Title, Stack, Text, Table, ActionIcon, Tooltip, Group
 import { type LoaderFunction, json, type ActionFunction } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import { getDB } from "~/lib/db";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 import type { ImportNotes } from "~/lib/models";
 import { DataTable } from "mantine-datatable";
 import { format } from "date-fns";
@@ -23,7 +23,7 @@ interface ActionData {
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
-    const user = await getAuthenticator(context).isAuthenticated(request);
+    const user = await requireUser(request, context);
     if (!user || user.role !== "admin") {
         return json<ActionData>({ error: "Unauthorized" }, { status: 401 });
     }
@@ -136,9 +136,7 @@ export const action: ActionFunction = async ({ request, context }) => {
 };
 
 export const loader: LoaderFunction = async ({ request, context }) => {
-    const user = await getAuthenticator(context).isAuthenticated(request, {
-        failureRedirect: "/login",
-    });
+    const user = await requireUser(request, context);
 
     if (user.role !== "admin") {
         throw new Response("Unauthorized", { status: 401 });

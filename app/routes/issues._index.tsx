@@ -7,13 +7,11 @@ import { getDB } from "~/lib/db";
 import { IconCheck, IconChevronRight, IconFlag } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { showNotification } from "@mantine/notifications";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 import { sql } from "kysely";
 
 export const loader: LoaderFunction = async ({ context, request }) => {
-        const user = await getAuthenticator(context).isAuthenticated(request, {
-        failureRedirect: "/login",
-    });
+    const user = await requireUser(request, context);
 
     const db = getDB(context);
     const crags = await db.selectFrom('crag')

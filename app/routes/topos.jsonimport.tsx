@@ -16,7 +16,7 @@ import {
 import { Dropzone } from "@mantine/dropzone";
 import { IconUpload, IconX, IconFile, IconAlertCircle } from "@tabler/icons-react";
 import { useState, useEffect, useMemo } from "react";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { RequirePermission } from "~/components/RequirePermission";
 import { getDB } from "~/lib/db";
@@ -144,9 +144,7 @@ export async function loader({ context }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
-    const user = await getAuthenticator(context).isAuthenticated(request, {
-        failureRedirect: "/login",
-    });
+    const user = await requireUser(request, context);
     if (user.role !== 'admin') {
         return json({ error: PERMISSION_ERROR });
     }

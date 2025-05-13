@@ -8,7 +8,7 @@ import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
 import type { TopoAttachment, Route } from "~/lib/models";
 import { getDB } from "~/lib/db";
 import { notifications } from "@mantine/notifications";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 
 interface ActionResponse {
   success: boolean;
@@ -37,8 +37,8 @@ export const action: ActionFunction = async ({ request, context }) => {
   const routeId = formData.get("routeId")?.toString();
   const fileIndex = formData.get("fileIndex")?.toString();
 
-  const user = await getAuthenticator(context).isAuthenticated(request);
-  if (!user || (user.role !== 'admin' && user.role !== 'super')) {
+  const user = await requireUser(request, context);
+  if (user.role !== 'admin' && user.role !== 'super') {
     return data({ success: false, error: "Unauthorized" }, { status: 403 });
   }
 
