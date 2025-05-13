@@ -240,24 +240,26 @@ export default function RoutesIndex() {
   useEffect(() => {
     if (!mapContainer.current) return;
     
-    // Check if context values are available
     if (!mapboxAccessToken || !mapboxStyleUrl) {
       console.error("Mapbox context not available in RoutesIndex");
-      // Optionally display an error to the user or disable map functionality
       return; 
     }
 
     mapboxgl.accessToken = mapboxAccessToken;
+
+    const isTouchDevice = (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
     
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: mapboxStyleUrl,
-      center: [-115.5708, 51.1784], // [longitude, latitude]
-      zoom: 9
+      center: [-115.5708, 51.1784], 
+      zoom: 9,
+      cooperativeGestures: isTouchDevice
     });
 
     // Add navigation controls
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.current.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
 
     // Add markers for each crag
     crags.filter(crag => crag.latitude && crag.longitude).forEach((crag) => {
@@ -359,7 +361,20 @@ export default function RoutesIndex() {
           </ActionIcon>
         )}
       </Group>
-      <div ref={mapContainer} style={{ height: "800px", width: "100%" }} />
+      <div ref={mapContainer} className="map-container-responsive" />
+
+      <style>{`
+        .map-container-responsive {
+          width: 100%;
+          height: 800px; /* Default height */
+        }
+
+        @media (max-width: 768px) { /* Corresponds to Mantine's 'sm' breakpoint */
+          .map-container-responsive {
+            height: 400px;
+          }
+        }
+      `}</style>
 
       <Title order={2} mt="xl" mb="md">Crag List</Title>
       <Table>
