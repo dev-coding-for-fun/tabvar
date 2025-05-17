@@ -1,9 +1,16 @@
 import { Title, Paper, Stack, Center, Text, Image, Button, Container } from "@mantine/core";
 import { Form, useSearchParams } from "@remix-run/react";
+import { useEffect } from "react";
 
 export default function Login() {
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
+
+  useEffect(() => {
+    if (redirectTo) {
+      document.cookie = `redirectTo=${encodeURIComponent(redirectTo)}; path=/`;
+    }
+  }, [redirectTo]);
 
   return (
     <Container size={420} my={40}>
@@ -17,7 +24,6 @@ export default function Login() {
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">
         <Form action="/auth/google" method="post">
           <Stack>
-            {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
             <Center>
             <Button
                 leftSection={<Image src="/google.png" alt="Google logo" width={30} height={30} />}
