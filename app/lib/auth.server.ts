@@ -93,6 +93,22 @@ export function getAuthenticator(context: AppLoadContext): Authenticator<User> {
     return _authenticator;
 }
 
+export async function requireUser(
+    request: Request,
+    context: AppLoadContext
+): Promise<User> {
+    const authenticator = getAuthenticator(context);
+    const currentPath = new URL(request.url).pathname;
+    // Append current query parameters as well, so if user was at /somepage?param1=value1, they return there.
+    const currentSearch = new URL(request.url).search;
+    const redirectTo = encodeURIComponent(currentPath + currentSearch);
+    const loginPathWithRedirect = `/login?redirectTo=${redirectTo}`;
+
+    return authenticator.isAuthenticated(request, {
+        failureRedirect: loginPathWithRedirect,
+    });
+}
+
 export async function logout(request: Request) {
     if (!_sessionStorage) throw new Error("Session storage not initialized");
     
