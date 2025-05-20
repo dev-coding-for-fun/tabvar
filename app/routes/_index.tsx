@@ -22,6 +22,8 @@ export default function Index() {
           <Link to={`/issues/`}>View Issues</Link>
         </li><li>
           <Link to={`/issues/manage`}>Manage Issues</Link>
+        </li><li>
+          <Link to={`/topos`}>Routes & Topos</Link>
         </li>
       </ul>
     </div>
