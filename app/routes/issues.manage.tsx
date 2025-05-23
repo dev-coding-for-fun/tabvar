@@ -174,9 +174,15 @@ const StatusActions: React.FC<{
 };
 
 async function modifyIssue(context: AppLoadContext, issueId: number, updates: Partial<Issue>, user: User) {
+    console.log('modifyIssue called with:', { issueId, updates, userId: user.uid });
     const db = getDB(context);
+    
+    console.log('Fetching current issue state for issueId:', issueId);
     const issue = await db.selectFrom('issue').selectAll()
         .where('id', '=', issueId).executeTakeFirstOrThrow();
+    console.log('Current issue state before update:', issue);
+    
+    console.log('Updating issue with values:', updates);
     await db.updateTable('issue')
         .set({
             issue_type: updates.issueType,
@@ -189,6 +195,9 @@ async function modifyIssue(context: AppLoadContext, issueId: number, updates: Pa
         })
         .where('id', '=', issueId)
         .execute();
+    console.log('Issue update completed');
+    
+    console.log('Creating audit log entry for issue modification');
     await db.insertInto('issue_audit_log')
         .values({
             issue_id: issueId,
@@ -210,14 +219,20 @@ async function modifyIssue(context: AppLoadContext, issueId: number, updates: Pa
             after_bolts_affected: updates.boltsAffected,
         })
         .execute();
+    console.log('Audit log entry created for issue modification');
 }
 
 async function modifyIssueStatus(context: AppLoadContext, issueId: number, updates: Partial<Omit<Issue, "id" | "created_at">>, user: User) {
+    console.log('modifyIssueStatus called with:', { issueId, updates, userId: user.uid });
     const db = getDB(context);
+    
     // Fetch the current issue state *before* updating for the audit log
+    console.log('Fetching current issue state for issueId:', issueId);
     const issue = await db.selectFrom('issue').selectAll()
         .where('id', '=', issueId).executeTakeFirstOrThrow();
+    console.log('Current issue state:', { status: issue.status, lastStatus: issue.last_status });
 
+    console.log('Updating issue with values:', updates);
     await db.updateTable('issue')
         .set({
             status: updates.status,
@@ -230,7 +245,9 @@ async function modifyIssueStatus(context: AppLoadContext, issueId: number, updat
         })
         .where('id', '=', issueId)
         .execute();
+    console.log('Issue update completed');
 
+    console.log('Creating audit log entry');
     await db.insertInto('issue_audit_log')
         .values({
             issue_id: issueId,
@@ -241,32 +258,54 @@ async function modifyIssueStatus(context: AppLoadContext, issueId: number, updat
             before_status: issue.status,
             after_status: updates.status,
         }).execute();
+    console.log('Audit log entry created');
 }
 
 async function deleteIssue(context: AppLoadContext, issueId: number, user: User) {
+    console.log('deleteIssue called with:', { issueId, userId: user.uid });
     const db = getDB(context);
     const env = context.cloudflare.env as unknown as Env;
+    
+    console.log('Fetching issue and attachments for deletion');
     const issue = await db.selectFrom('issue').selectAll()
         .where('id', '=', issueId).executeTakeFirstOrThrow();
+    console.log('Issue to delete:', issue);
+    
     const attachments = await db.selectFrom('issue_attachment')
         .select(['url', 'name'])
         .where('issue_id', '=', issueId).execute();
+    console.log('Attachments to delete:', attachments);
+    
     if (attachments.length > 0) {
+        console.log('Deleting attachments from R2');
         for (const attachment of attachments) {
             const fileName = attachment.name ?? attachment.url.split('/').pop();
             if (!fileName) { throw new Error('Invalid attachment filename'); }
+            console.log('Deleting file from R2:', fileName);
             await deleteFromR2(context, env.ISSUES_BUCKET_NAME, fileName);
         }
+        console.log('R2 deletion completed');
     }
+    
+    console.log('Deleting attachment records from database');
     await db.deleteFrom('issue_attachment')
         .where('issue_attachment.issue_id', '=', issueId)
         .execute();
+    console.log('Attachment records deleted');
+    
+    console.log('Deleting external issue references');
     await db.deleteFrom('external_issue_ref')
         .where('external_issue_ref.local_id', '=', issueId)
         .execute();
+    console.log('External issue references deleted');
+    
+    console.log('Deleting issue record');
     await db.deleteFrom('issue')
         .where('issue.id', '=', issueId)
         .execute();
+    console.log('Issue record deleted');
+    
+    console.log('Creating audit log entry for deletion');
     await db.insertInto('issue_audit_log')
         .values({
             issue_id: issueId,
@@ -284,6 +323,7 @@ async function deleteIssue(context: AppLoadContext, issueId: number, user: User)
             before_sub_issue_type: issue.sub_issue_type,
         })
         .execute();
+    console.log('Audit log entry created for deletion');
 }
 
 export const action: ActionFunction = async ({ request, context }) => {
@@ -298,6 +338,7 @@ export const action: ActionFunction = async ({ request, context }) => {
     if (issueId) {
         switch (action) {
             case "updateIssue": {
+                console.log('Starting updateIssue action for issueId:', issueId);
                 const issueUpdates: Partial<Issue> = {
                     issueType: formData.get("issueType")?.toString(),
                     subIssueType: formData.get("subIssueType")?.toString(),
@@ -308,7 +349,8 @@ export const action: ActionFunction = async ({ request, context }) => {
                 };
 
                 try {
-                    modifyIssue(context, issueId, issueUpdates, user);
+                    await modifyIssue(context, issueId, issueUpdates, user);
+                    console.log('Successfully updated issue:', issueId);
                     return data({ success: true, message: 'Issue updated' });
                 } catch (error) {
                     console.error('Error updating issue:', error);
@@ -317,8 +359,9 @@ export const action: ActionFunction = async ({ request, context }) => {
                 break;
             }
             case "accept":
+                console.log('Starting accept action for issueId:', issueId);
                 try {
-                    modifyIssueStatus(
+                    await modifyIssueStatus(
                         context,
                         issueId,
                         {
@@ -328,14 +371,16 @@ export const action: ActionFunction = async ({ request, context }) => {
                             approvedByUid: user.uid,
                         },
                         user);
+                    console.log('Successfully accepted issue:', issueId);
                     return data({ success: true, message: 'Issue accepted' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
                     return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
                 }
             case "archive":
+                console.log('Starting archive action for issueId:', issueId);
                 try {
-                    modifyIssueStatus(
+                    await modifyIssueStatus(
                         context,
                         issueId,
                         {
@@ -345,6 +390,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                             archivedByUid: user.uid,
                         },
                         user);
+                    console.log('Successfully archived issue:', issueId);
                     return data({ success: true, message: 'Issue archived' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
@@ -352,8 +398,9 @@ export const action: ActionFunction = async ({ request, context }) => {
                 }
                 break;
             case "complete":
+                console.log('Starting complete action for issueId:', issueId);
                 try {
-                    modifyIssueStatus(
+                    await modifyIssueStatus(
                         context,
                         issueId,
                         {
@@ -363,6 +410,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                             archivedByUid: user.uid,
                         },
                         user);
+                    console.log('Successfully completed issue:', issueId);
                     return data({ success: true, message: 'Issue marked as complete' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
@@ -370,8 +418,9 @@ export const action: ActionFunction = async ({ request, context }) => {
                 }
                 break;
             case "revert":
+                console.log('Starting revert action for issueId:', issueId);
                 try {
-                    modifyIssueStatus(
+                    await modifyIssueStatus(
                         context,
                         issueId,
                         {
@@ -379,6 +428,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                             lastStatus: status,
                         },
                         user);
+                    console.log('Successfully reverted issue:', issueId);
                     return data({ success: true, message: 'Issue reverted' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
@@ -386,9 +436,10 @@ export const action: ActionFunction = async ({ request, context }) => {
                 }
                 break;
             case "restore": {
+                console.log('Starting restore action for issueId:', issueId);
                 try {
                     const newStatus = formData.get("lastStatus") ? formData.get("lastStatus")?.toString() : "Reported";
-                    modifyIssueStatus(
+                    await modifyIssueStatus(
                         context,
                         issueId,
                         {
@@ -396,6 +447,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                             lastStatus: status,
                         },
                         user);
+                    console.log('Successfully restored issue:', issueId);
                     return data({ success: true, message: 'Issue restored' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
@@ -404,9 +456,11 @@ export const action: ActionFunction = async ({ request, context }) => {
                 break;
             }
             case "delete": {
+                console.log('Starting delete action for issueId:', issueId);
                 if (user.role == 'admin') {
                     try {
-                        deleteIssue(context, issueId, user);
+                        await deleteIssue(context, issueId, user);
+                        console.log('Successfully deleted issue:', issueId);
                         return data({ success: true, message: 'Issue permanently deleted' });
                     } catch (error) {
                         console.error('Error deleting issue:', error);
