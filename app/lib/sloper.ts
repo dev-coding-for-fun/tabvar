@@ -101,7 +101,7 @@ export function importSloperIssueMetadata(sloperIssue: SloperIssue): Partial<Iss
     issue.issue_type = issueType;
     issue.sub_issue_type = subIssueType;
     issue.status = sloperStatusIdMap.get(Number(sloperIssue.status));
-    issue.bolts_affected = sloperIssue.bolt_numbers; //formatted as 1|2|3
+    issue.bolts_affected = sloperIssue.bolt_numbers ? sloperIssue.bolt_numbers.replace(/\|/g, ',') : null;
     issue.reported_at = convertSloperDateTime(sloperIssue.date_reported);
     issue.last_modified = convertSloperDateTime(sloperIssue.date_modified);
     issue.reported_by = he.decode(sloperIssue.user_name);
