@@ -42,6 +42,7 @@ export const action: ActionFunction = async ({ request, context }) => {
   const issueType = formData.get("issueType")?.toString() ?? '';
   const subIssueType = formData.get("subIssueType")?.toString() ?? '';
   const notes = formData.get("notes")?.toString() ?? '';
+  const boltNumbers = formData.get("boltNumbers")?.toString() ?? '';
   const files = (formData.getAll("photos") as File[]).filter(file => file && file.size > 0);
   const errors = {
     routeId: validateRoute(routeId),
@@ -65,7 +66,10 @@ export const action: ActionFunction = async ({ request, context }) => {
       issue_type: issueType,
       sub_issue_type: subIssueType,
       description: notes,
+      bolts_affected: boltNumbers || null,
       status: "In Moderation",
+      reported_by_uid: user.uid,
+      reported_by: user.displayName,
       last_modified: new Date().toISOString(),
     })
     .returning('id')
@@ -88,7 +92,6 @@ export const action: ActionFunction = async ({ request, context }) => {
       })
       .execute()
   ));
-  //return json({ success: true, message: 'Issue submitted successfully' });
   return redirect('/issues/?success=true');
 }
 
@@ -131,6 +134,7 @@ export default function CreateIssue() {
       setSelectedRoute(null);
       setBoltCount(null);
       setSelectedFiles([]);
+      setSelectedBolts([]);
     }
     else {
       close();
@@ -176,7 +180,6 @@ export default function CreateIssue() {
       if (fileError != null) setFileError("Too many files and one or more is too large. Choose a maximum of 3 files under 5MB each");
       else setFileError(`Too many images selected. Choose a maximum of 3`);
     }
-
     else if (validFiles.length === files.length) {
       setFileError(null);
     }
@@ -230,7 +233,6 @@ export default function CreateIssue() {
             onChange={setSelectedSubIssue}
           ><Stack>
               {subIssues.map((subIssue) => (
-
                 <Radio
                   key={subIssue.value}
                   value={subIssue.value}
@@ -238,30 +240,30 @@ export default function CreateIssue() {
                   disabled={isSubIssueDisabled(subIssue.value)}
                 />
               ))}
-            </Stack>
-          </Radio.Group>
+            </Stack></Radio.Group>
           <Textarea
+            label="Notes"
             name="notes"
-            placeholder="Add any additional notes"
+            placeholder="Add any additional details about the issue"
             autosize
             minRows={3}
           />
           <FileInput
-            name="photos"
-            value={selectedFiles}
-            placeholder="Upload up to 3 photos, max 5MB"
-            leftSection={icon}
+            label="Photos"
+            placeholder="Upload up to 3 photos"
+            accept="image/*"
             multiple
-            clearable
+            leftSection={icon}
+            value={selectedFiles}
             onChange={handleFileChange}
             error={fileError}
-            accept="image/png,image/jpeg,image/gif,image/webp"
+            name="photos"
           />
-          <Group p="md" mt="xl">
-            <Button type="submit">Submit</Button>
+          <Group justify="flex-end" mt="md">
+            <Button type="submit" loading={isSubmitting}>Submit Issue</Button>
           </Group>
         </Stack>
       </Form>
     </Container>
-  )
+  );
 }
