@@ -1,4 +1,5 @@
 import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput, ActionIcon, Anchor, SegmentedControl } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { ActionFunction, AppLoadContext, LoaderFunction, data } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { DataTable, type DataTableColumn, type DataTableSortStatus } from "mantine-datatable";
@@ -19,6 +20,31 @@ const StatusActions: React.FC<{
     issueId: number,
 }> = ({ status, lastStatus, issueId }) => {
     const fetcher = useFetcher();
+
+    // Monitor fetcher state and show notifications
+    useEffect(() => {
+        if (fetcher.state === 'idle' && fetcher.data) {
+            const response = fetcher.data as { success: boolean; message?: string; error?: string };
+            
+            if (response.success) {
+                notifications.show({
+                    title: 'Success',
+                    message: response.message || 'Issue status updated successfully',
+                    color: 'green',
+                });
+            } else {
+                const errorMessage = response.message || response.error || 'Failed to update issue status';
+                console.error('Issue status update failed:', errorMessage);
+                notifications.show({
+                    title: 'Error',
+                    message: errorMessage,
+                    color: 'red',
+                });
+            }
+        } else if (fetcher.state === 'idle' && fetcher.data === undefined) {
+            // Initial state, no action needed
+        }
+    }, [fetcher.state, fetcher.data]);
 
     const handleStatusChange = (action: string) => {
         const formData = new FormData();
@@ -158,6 +184,7 @@ async function modifyIssue(context: AppLoadContext, issueId: number, updates: Pa
             description: updates.description,
             is_flagged: updates.isFlagged ? 1 : 0,
             flagged_message: updates.flaggedMessage,
+            bolts_affected: updates.boltsAffected,
             last_modified: new Date().toISOString(),
         })
         .where('id', '=', issueId)
@@ -179,7 +206,8 @@ async function modifyIssue(context: AppLoadContext, issueId: number, updates: Pa
             after_is_flagged: updates.isFlagged ? 1 : 0,
             before_flagged_message: issue.flagged_message,
             after_flagged_message: updates.flaggedMessage,
-
+            before_bolts_affected: issue.bolts_affected,
+            after_bolts_affected: updates.boltsAffected,
         })
         .execute();
 }
@@ -276,6 +304,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                     description: formData.get("description")?.toString(),
                     isFlagged: formData.get("isFlagged") === "on" ? true : false,
                     flaggedMessage: formData.get("safetyNotice")?.toString(),
+                    boltsAffected: formData.get("boltNumbers")?.toString(),
                 };
 
                 try {
@@ -299,12 +328,11 @@ export const action: ActionFunction = async ({ request, context }) => {
                             approvedByUid: user.uid,
                         },
                         user);
+                    return data({ success: true, message: 'Issue accepted' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
                     return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
                 }
-
-                break;
             case "archive":
                 try {
                     modifyIssueStatus(
@@ -317,6 +345,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                             archivedByUid: user.uid,
                         },
                         user);
+                    return data({ success: true, message: 'Issue archived' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
                     return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
@@ -334,6 +363,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                             archivedByUid: user.uid,
                         },
                         user);
+                    return data({ success: true, message: 'Issue marked as complete' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
                     return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
@@ -349,6 +379,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                             lastStatus: status,
                         },
                         user);
+                    return data({ success: true, message: 'Issue reverted' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
                     return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
@@ -365,6 +396,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                             lastStatus: status,
                         },
                         user);
+                    return data({ success: true, message: 'Issue restored' });
                 } catch (error) {
                     console.error('Error updating issue status:', error);
                     return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
@@ -375,9 +407,10 @@ export const action: ActionFunction = async ({ request, context }) => {
                 if (user.role == 'admin') {
                     try {
                         deleteIssue(context, issueId, user);
+                        return data({ success: true, message: 'Issue permanently deleted' });
                     } catch (error) {
-                        console.error('Error updating issue status:', error);
-                        return data({ success: false, message: 'Failed to update issue status' }, { status: 500 });
+                        console.error('Error deleting issue:', error);
+                        return data({ success: false, message: 'Failed to delete issue' }, { status: 500 });
                     }
                 }
                 else return data({ success: false, message: 'Admin role required to permanently delete issues' }, { status: 403 });

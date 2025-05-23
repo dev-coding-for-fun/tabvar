@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { getDB } from "~/lib/db";
 import { Crag, User } from "~/lib/models";
-import { getAuthenticator, requireUser } from "~/lib/auth.server";
+import { getAuthenticator } from "~/lib/auth.server";
 import { IconMapPinPlus, IconEdit } from "@tabler/icons-react";
 import { useMapboxContext } from "~/contexts/MapboxContext";
 
