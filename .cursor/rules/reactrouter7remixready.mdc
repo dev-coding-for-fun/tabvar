@@ -1,0 +1,30 @@
+---
+description: refactoring, writing server-side loaders, fetchers and actions
+globs: 
+alwaysApply: false
+---
+This project has the Remix v3_singleFetch mode enabled.  This means that code should remove calls to json() and defer() in favour of raw objects.
+
+Single Fetch supports JSON objects and Promises out of the box, so you can return the raw data from your loader/action functions.
+
+This return statement is now deprecated: return json(tasks);
+Instead, it can simply look like this: return tasks;
+
+If you were using the second parameter of json/defer to set a custom status or headers on your response, you can continue doing so via the new data API (please note that you will need a headers export to apply those headers to Single Fetch data requests).
+
+To do this, instead of importing 'json' from @remix-run/node, import 'data' instead, then:
+
+Instead of:
+return json(tasks, {
+    headers: {
+      "Cache-Control": "public, max-age=604800"
+    }
+});
+
+It should now look like:
+return data(tasks, {
+    headers: {
+      "Cache-Control": "public, max-age=604800"
+    }
+
+});
