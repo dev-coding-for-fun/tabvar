@@ -4,6 +4,7 @@ import {
 } from "@remix-run/dev";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 
 declare module "@remix-run/cloudflare" {
   interface Future {
@@ -24,7 +25,12 @@ const config = defineConfig({
         v3_singleFetch: true,
       }
     }), 
-    tsconfigPaths()
+    tsconfigPaths(),
+    sentryVitePlugin({
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      org: "tabvar-k0",
+      project: "tabvar-app",
+    }),
   ],
   resolve: {
     alias: {
@@ -37,7 +43,10 @@ const config = defineConfig({
       'crypto': 'node:crypto',
       // Add other necessary aliases here
     }
-  }
+  },
+  build: {
+    sourcemap: true,
+  },
 });
 
 export default config;

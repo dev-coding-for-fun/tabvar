@@ -1,3 +1,4 @@
+import { captureRemixErrorBoundaryError } from "@sentry/remix";
 import {
   Links,
   Meta,
@@ -5,6 +6,7 @@ import {
   Scripts,
   ScrollRestoration,
   useNavigate,
+  useRouteError,
 } from "@remix-run/react";
 import '@mantine/core/styles.layer.css';
 import 'mantine-datatable/styles.layer.css';
@@ -79,6 +81,12 @@ interface RootLoaderData {
   mapboxAccessToken: string | undefined;
   mapboxStyleUrl: string | undefined;
 }
+
+export const ErrorBoundary = () => {
+  const error = useRouteError();
+  captureRemixErrorBoundaryError(error);
+  return <div>Something went wrong</div>;
+};
 
 export default function App() {
   const { user, mapboxAccessToken, mapboxStyleUrl } = useLoaderData<RootLoaderData>();
