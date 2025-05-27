@@ -121,5 +121,6 @@ export const userRoles = [
     { value: 'admin', label: 'Admin' },
     { value: 'member', label: 'Member' },
     { value: 'super', label: 'Superuser' },
+    { value: 'anonymous', label: 'Anonymous' },
 ] as const;
 

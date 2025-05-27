@@ -12,7 +12,7 @@ interface AttachmentUploadResult {
 
 export const action: ActionFunction = async ({ request, context }) => {
   const user = await requireUser(request, context);
-  if (user.role !== 'admin' && user.role !== 'member') {
+  if (user.role !== 'admin' && user.role !== 'super' && user.role !== 'member') {
     return data({ error: 'Unauthorized' }, { status: 403 });
   }
 

@@ -1,7 +1,7 @@
 import { Alert, Container } from "@mantine/core";
 import { useUser } from "../lib/hooks/useUser";
 
-type AccessLevel = 'admin' | 'admin+member';
+type AccessLevel = 'admin' | 'atLeastSuper' | 'atLeastMember';
 
 interface RequirePermissionProps {
   children: React.ReactNode;
@@ -11,7 +11,8 @@ interface RequirePermissionProps {
 
 const ACCESS_LEVELS: Record<AccessLevel, string[]> = {
   'admin': ['admin'],
-  'admin+member': ['admin', 'member']
+  'atLeastSuper': ['admin', 'super'],
+  'atLeastMember': ['admin', 'super', 'member'],
 };
 
 export function RequirePermission({ 
