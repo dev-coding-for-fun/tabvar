@@ -279,7 +279,7 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
           minWidth: '280px',
           
           // Styles for larger screens (sm breakpoint and up)
-          [`@media (min-width: ${theme.breakpoints.sm})`]: {
+          [`@media (minWidth: ${theme.breakpoints.sm})`]: {
             minWidth: '600px',
             maxWidth: '800px',
           },
