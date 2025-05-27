@@ -1,4 +1,4 @@
-import * as Sentry from "@sentry/remix";
+import * as Sentry from "@sentry/remix/cloudflare";
 
 // Function to determine environment for instrumentation
 function getInstrumentationEnvironment() {
