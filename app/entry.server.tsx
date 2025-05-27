@@ -45,3 +45,5 @@ export default async function handleRequest(
   });
 
 }
+
+export const handleError = Sentry.sentryHandleError;
