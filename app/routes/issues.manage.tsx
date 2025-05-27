@@ -662,9 +662,7 @@ export default function IssuesManager() {
                 </Group>
                 <Stack gap="xs">
                     <Link to={`/issues/create`}>➕ Submit New Issue</Link>
-                    {(user.role === 'admin' || user.role === "member") && (
-                        <Link to={`/issues/`}>🔍 Explore Issues</Link>
-                    )}
+                    <Link to={`/issues/`}>🔍 Explore Issues</Link>
                 </Stack>
 
                 <TextInput

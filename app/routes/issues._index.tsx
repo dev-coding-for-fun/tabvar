@@ -80,7 +80,7 @@ export default function IssuesIndex() {
                 </Group>
                 <Stack gap="xs">
                     <Link to={`/issues/create`}>➕ Submit New Issue</Link>
-                    {(user.role === 'admin' || user.role === "super" || user.role === "member") && (
+                    {(user && user.role && (user.role === 'admin' || user.role === "super" || user.role === "member")) && (
                         <Link to={`/issues/manage`}>⚙️ Manage Issues</Link>
                     )}
                 </Stack>
