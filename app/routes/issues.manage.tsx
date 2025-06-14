@@ -433,7 +433,7 @@ export const action: ActionFunction = async ({ request, context }) => {
 
 export const loader: LoaderFunction = async ({ request, context }) => {
     const user = await requireUser(request, context);
-    if (user.role !== 'admin') {
+    if (user.role !== 'admin' && user.role !== 'super' && user.role !== 'member') {
         return data({ issues: [], error: PERMISSION_ERROR }, { status: 403 });
     }
     const db = getDB(context);
