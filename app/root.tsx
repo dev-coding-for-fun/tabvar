@@ -156,7 +156,8 @@ export default function App() {
                         <NavLink label="News" onClick={() => handleDrawerExternalLink('https://www.tabvar.org/about/news')} />
                         <NavLink label="Annual Reports" onClick={() => handleDrawerExternalLink('https://www.tabvar.org/about/annualreports')} />
                       </NavLink>
-                      <NavLink label="TOPOS" onClick={() => handleDrawerNavigate('/topos')} />
+                      <NavLink label="Issues" onClick={() => handleDrawerNavigate('/issues')} />
+                      <NavLink label="Topos" onClick={() => handleDrawerNavigate('/topos')} />
                     </Stack>
                   </Drawer>
 
