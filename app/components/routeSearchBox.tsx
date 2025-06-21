@@ -213,7 +213,7 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
     return () => {
       clearTimeout(handler);
     };
-  }, [query, fetcher, searchMode]);
+  }, [query, searchMode]);
 
   useEffect(() => {
     if (fetcher.data) {
