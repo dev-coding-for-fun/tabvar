@@ -242,7 +242,8 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
       return;
     }
 
-    const item = items.find(item => getItemValue(item) === value);
+    const currentItems = fetcher.data as RouteSearchResults[] || items;
+    const item = currentItems.find(item => getItemValue(item) === value);
     if (item) {
       const boltCount = item.type === 'route' ? Number(item.boltCount) : null;
       onChange({ value: getItemValue(item), boltCount });
