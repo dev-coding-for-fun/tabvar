@@ -27,13 +27,9 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
   const fetcher = useFetcher<RouteSearchResults[]>();
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<RouteSearchResults[]>([]);
-  const isSelectedRef = useRef(false);
-  const selectedLabelRef = useRef('');
 
   useImperativeHandle(_ref, () => ({
     reset() {
-      isSelectedRef.current = false;
-      selectedLabelRef.current = '';
       setQuery('');
     },
   }));
@@ -205,7 +201,6 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
   };
 
   useEffect(() => {
-    if (selectedLabelRef.current) return;
     const debounceTime = query.length < 2 ? 1000 : 300;
     const handler = setTimeout(() => {
       if (query.trim().length > 1) {
@@ -226,14 +221,6 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
 
   const handleSearchChange = (q: string) => {
     setQuery(q);
-    if (isSelectedRef.current) {
-      selectedLabelRef.current = q;
-      isSelectedRef.current = false;
-    }
-    else if (q != selectedLabelRef.current) {
-      isSelectedRef.current = false;
-      selectedLabelRef.current = '';
-    }
   };
 
   const handleChange = (value: string | null) => {
@@ -242,12 +229,10 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
       return;
     }
 
-    const currentItems = fetcher.data as RouteSearchResults[] || items;
-    const item = currentItems.find(item => getItemValue(item) === value);
+    const item = items.find(item => getItemValue(item) === value);
     if (item) {
       const boltCount = item.type === 'route' ? Number(item.boltCount) : null;
       onChange({ value: getItemValue(item), boltCount });
-      isSelectedRef.current = true;
     }
   };
 
@@ -262,7 +247,6 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
       searchable
       searchValue={query}
       onSearchChange={handleSearchChange}
-      filter={({ options }) => options}
       placeholder="Type to search..."
       nothingFoundMessage="No results found"
       clearable
