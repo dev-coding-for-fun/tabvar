@@ -192,9 +192,6 @@ export default function App() {
                       <nav className="main-navigation" role="navigation">
                         <ul className="nav-list">
                           <li className="nav-item">
-                            <a href="https://www.tabvar.org/home" className="nav-link">Home</a>
-                          </li>
-                          <li className="nav-item">
                             <a href="https://www.tabvar.org/donatenew" className="nav-link">Donate</a>
                           </li>
                           <li className="nav-item has-submenu">
@@ -229,7 +226,10 @@ export default function App() {
                             </div>
                           </li>
                           <li className="nav-item">
-                            <a href="/topos" className="nav-link">TOPOS</a>
+                            <a href="/issues" className="nav-link">Issues</a>
+                          </li>
+                          <li className="nav-item">
+                            <a href="/topos" className="nav-link">Topos</a>
                           </li>
                         </ul>
                       </nav>
