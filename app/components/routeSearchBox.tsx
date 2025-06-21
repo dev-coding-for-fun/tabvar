@@ -201,9 +201,11 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
   };
 
   useEffect(() => {
+    console.log('Search useEffect triggered with query:', query);
     const debounceTime = query.length < 2 ? 1000 : 300;
     const handler = setTimeout(() => {
       if (query.trim().length > 1) {
+        console.log('Making API call for query:', query);
         fetcher.load(`/api/search?query=${encodeURIComponent(query)}&searchMode=${searchMode}`);
       }
     }, debounceTime);
@@ -215,24 +217,36 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
 
   useEffect(() => {
     if (fetcher.data) {
+      console.log('Fetcher data updated:', fetcher.data);
       setItems(fetcher.data as RouteSearchResults[]);
     }
   }, [fetcher.data]);
 
+  useEffect(() => {
+    console.log('Items state updated:', items);
+  }, [items]);
+
   const handleSearchChange = (q: string) => {
+    console.log('handleSearchChange called with:', q);
     setQuery(q);
   };
 
   const handleChange = (value: string | null) => {
+    console.log('handleChange called with:', value);
     if (!value) {
+      console.log('handleChange: clearing selection');
       onChange({ value: null, boltCount: null });
       return;
     }
 
     const item = items.find(item => getItemValue(item) === value);
+    console.log('handleChange: found item:', item);
     if (item) {
       const boltCount = item.type === 'route' ? Number(item.boltCount) : null;
+      console.log('handleChange: calling onChange with:', { value: getItemValue(item), boltCount });
       onChange({ value: getItemValue(item), boltCount });
+    } else {
+      console.log('handleChange: item not found in items array');
     }
   };
 
