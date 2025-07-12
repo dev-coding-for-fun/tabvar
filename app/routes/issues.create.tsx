@@ -1,22 +1,69 @@
 import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Space, Stack, Textarea, Title, rem } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
-import { ActionFunction, data, LoaderFunction, redirect } from "@remix-run/cloudflare";
-import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
+import { ActionFunction, LoaderFunction, data, redirect } from "@remix-run/cloudflare";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useSearchParams } from "@remix-run/react";
 import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
 import { requireUser } from "~/lib/auth.server";
 import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
 import { getDB } from "~/lib/db";
+import { RouteSearchResults } from "~/lib/models";
 import { uploadFileToR2 } from "~/lib/s3.server";
+import { useFetcher } from "@remix-run/react";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; //5 MB
 type IssueType = keyof typeof subIssuesByType;
 
 export const loader: LoaderFunction = async ({ request, context }) => {
   await requireUser(request, context);
-  return null; // User is authenticated, return null or any necessary data
+  const url = new URL(request.url);
+  const routeId = url.searchParams.get('routeId');
+
+  if (!routeId) {
+    return data({ initialRoute: null });
+  }
+
+  const db = getDB(context);
+  const route = await db
+    .selectFrom('route')
+    .innerJoin('sector', 'route.sector_id', 'sector.id')
+    .innerJoin('crag', 'sector.crag_id', 'crag.id')
+    .where('route.id', '=', parseInt(routeId))
+    .select([
+      'route.id as routeId',
+      'route.sector_id as sectorId',
+      'route.crag_id as cragId',
+      'route.name as routeName',
+      'route.alt_names as routeAltNames',
+      'sector.name as sectorName',
+      'crag.name as cragName',
+      'route.grade_yds as gradeYds',
+      'route.bolt_count as boltCount',
+      'route.pitch_count as pitchCount'
+    ])
+    .executeTakeFirst();
+
+  if (!route) {
+    return data({ initialRoute: null });
+  }
+
+  const routeResult: RouteSearchResults = {
+    routeId: route.routeId,
+    sectorId: route.sectorId,
+    cragId: route.cragId,
+    routeName: route.routeName,
+    routeAltNames: route.routeAltNames,
+    type: 'route',
+    sectorName: route.sectorName,
+    cragName: route.cragName,
+    gradeYds: route.gradeYds,
+    boltCount: route.boltCount?.toString(),
+    pitchCount: route.pitchCount?.toString()
+  };
+
+  return data({ initialRoute: routeResult });
 };
 
 const validateRoute = (routeId: string) => {
@@ -96,11 +143,18 @@ export const action: ActionFunction = async ({ request, context }) => {
 }
 
 export default function CreateIssue() {
-  const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+  const { initialRoute } = useLoaderData<{ initialRoute: RouteSearchResults | null }>();
+
+  const getInitialRouteValue = () => {
+    if (!initialRoute) return null;
+    return `route:${initialRoute.routeId}:${initialRoute.cragId}`;
+  }
+
+  const [selectedRoute, setSelectedRoute] = useState<string | null>(getInitialRouteValue());
   const [selectedIssueType, setSelectedIssueType] = useState<IssueType | null>(null);
   const [selectedSubIssue, setSelectedSubIssue] = useState<string | null>(null);
   const [selectedBolts, setSelectedBolts] = useState<string[]>([]);
-  const [boltCount, setBoltCount] = useState<number | null>(null);
+  const [boltCount, setBoltCount] = useState<number | null>(initialRoute?.boltCount ? Number(initialRoute.boltCount) : null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const navigation = useNavigation();
@@ -108,7 +162,7 @@ export default function CreateIssue() {
   const formRef = useRef<HTMLFormElement>(null);
   const searchBoxRef = useRef<SearchBoxRef | null>(null);
   const [routeModalOpened, setRouteModalOpened] = useState(false);
-
+  const [searchParams] = useSearchParams();
 
   const actionData = useActionData<{ [key: string]: string }>();
 
@@ -202,6 +256,7 @@ export default function CreateIssue() {
           onChange={handleRouteChange}
           value={selectedRoute}
           ref={searchBoxRef}
+          initialItems={initialRoute ? [initialRoute] : []}
         />
         <Space h="sm" />
         <Stack>

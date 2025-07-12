@@ -10,6 +10,7 @@ interface RouteSearchBoxProps {
     onChange?: (selected: { value: string | null; boltCount: number | null }) => void;
     value: string | null;
     searchMode?: 'allObjects' | 'routesOnly' | 'global' | undefined;
+    initialItems?: RouteSearchResults[];
 }
 
 export type SearchBoxRef = { 
@@ -23,10 +24,12 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
   onChange = () => { },
   searchMode = 'global',
   value,
+  initialItems,
 }, _ref) => {
   const fetcher = useFetcher<RouteSearchResults[]>();
   const [query, setQuery] = useState('');
-  const [items, setItems] = useState<RouteSearchResults[]>([]);
+  const [items, setItems] = useState<RouteSearchResults[]>(initialItems ?? []);
+  const [isLookup, setIsLookup] = useState(false);
 
   useImperativeHandle(_ref, () => ({
     reset() {
@@ -215,10 +218,33 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
     };
   }, [query, searchMode]);
 
+  // Check if we have a value but the corresponding item isn't in our items array
   useEffect(() => {
-    if (fetcher.data) {
-      console.log('Fetcher data updated:', fetcher.data);
-      setItems(fetcher.data as RouteSearchResults[]);
+    // Only fetch if idle, to prevent re-triggering fetches on re-renders while a fetch is in-flight.
+    if (value && fetcher.state === 'idle') {
+      const itemExists = items.find(item => getItemValue(item) === value);
+      if (!itemExists) {
+        // Extract routeId from value format "route:routeId:cragId"
+        const parts = value.split(':');
+        if (parts.length >= 2 && parts[0] === 'route') {
+          const routeId = parts[1];
+          console.log('Value set but item not found, fetching route data for:', routeId);
+          // Use a form submission to fetch route data by ID
+          const formData = new FormData();
+          formData.append('routeId', routeId);
+          setIsLookup(true); // Flag that the next fetch is a lookup
+          fetcher.submit(formData, {
+            method: 'post',
+            action: '/api/route'
+          });
+        }
+      }
+    }
+  }, [value, items, fetcher.state]);
+
+  useEffect(() => {
+    if (fetcher.data && Array.isArray(fetcher.data)) {
+      setItems(fetcher.data);
     }
   }, [fetcher.data]);
 

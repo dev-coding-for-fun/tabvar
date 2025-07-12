@@ -5,6 +5,7 @@ import type { Route } from "~/lib/models";
 import { TopoGallery } from "./TopoGallery";
 import { useFetcher } from "@remix-run/react";
 import { RichTextViewer } from "./RichTextViewer";
+import { Link } from "@remix-run/react";
 
 interface RouteCardProps {
     route: Route;
@@ -58,6 +59,18 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                     {route.sortOrder != null ? `#${route.sortOrder}` : ''}
                 </Text>
             )}
+            <Link 
+                to={`/issues/create?routeId=${route.id}`}
+                style={{ 
+                    position: 'absolute',
+                    bottom: rem(10),
+                    right: rem(12),
+                    fontSize: theme.fontSizes.xs,
+                    color: theme.colors.gray[6],
+                }}
+            >
+                Report Issue
+            </Link>
             <Grid gutter="xs">
                 {/* Row 1: Name, Grade, Topos */}
                 <Grid.Col span="auto">
