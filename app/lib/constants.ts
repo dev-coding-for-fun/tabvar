@@ -86,7 +86,7 @@ export type SubIssueType = typeof subIssues[number]['value'];
 export type RolesType = typeof userRoles[number]['value'];
 
 //if these are modified, there are also triggers in the database that need to be updated
-export type StatusType = 'In Moderation' | 'Reported' | "Viewed" | "Completed" | "Archived";
+export type StatusType = 'In Moderation' | 'Reported' | "Viewed" | "Completed" | "Archived" | "Claimed";
 
 
 export const issueTypes = [
