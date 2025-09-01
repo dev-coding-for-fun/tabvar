@@ -25,7 +25,7 @@ export default function Index() {
         </li><li>
           <Link to={`/topos`}>Routes & Topos</Link>
         </li><li>
-          <Link to={`/contest`}>Golden Crowbar Award</Link>
+          <Link to={`/goldencrowbar`}>Golden Crowbar Award</Link>
         </li>
       </ul>
     </div>
