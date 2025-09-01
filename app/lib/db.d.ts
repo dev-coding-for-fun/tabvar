@@ -29,6 +29,20 @@ export interface AttachmentAuditLog {
   user_role: string | null;
 }
 
+export interface Campaign {
+  created_at: Generated<string | null>;
+  end_date: string;
+  id: Generated<number>;
+  name: string;
+}
+
+export interface CampaignCandidate {
+  campaign_id: number;
+  created_at: Generated<string | null>;
+  id: Generated<number>;
+  name: string;
+}
+
 export interface Crag {
   created_at: Generated<string | null>;
   id: Generated<number>;
@@ -106,6 +120,7 @@ export interface Issue {
   archived_at: string | null;
   archived_by_uid: string | null;
   bolts_affected: string | null;
+  claimed_by_uid: string | null;
   crag_id: number | null;
   created_at: Generated<string>;
   description: string | null;
@@ -276,10 +291,19 @@ export interface UserInvite {
   token_expires: string | null;
 }
 
+export interface Vote {
+  campaign_candidate_id: number;
+  campaign_id: number;
+  created_at: Generated<string | null>;
+  uid: string;
+}
+
 export interface DB {
   _cf_KV: _CfKV;
   _cf_METADATA: _CfMETADATA;
   attachment_audit_log: AttachmentAuditLog;
+  campaign: Campaign;
+  campaign_candidate: CampaignCandidate;
   crag: Crag;
   crag_attachment: CragAttachment;
   d1_migrations: D1Migrations;
@@ -304,4 +328,5 @@ export interface DB {
   topo_attachment: TopoAttachment;
   user: User;
   user_invite: UserInvite;
+  vote: Vote;
 }

@@ -24,6 +24,8 @@ export default function Index() {
           <Link to={`/issues/manage`}>Manage Issues</Link>
         </li><li>
           <Link to={`/topos`}>Routes & Topos</Link>
+        </li><li>
+          <Link to={`/contest`}>Golden Crowbar Award</Link>
         </li>
       </ul>
     </div>

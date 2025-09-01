@@ -2,6 +2,7 @@
 
 interface Env {
 	route: "dev.tabvar.org/*";
+	COOKIE_DOMAIN: "tabvar.org";
 	ENVIRONMENT: string;
 	BASE_URL: string;
 	GOOGLE_CLIENT_ID: string;
@@ -15,7 +16,6 @@ interface Env {
 	SLOPER_URL: string;
 	R2_BUCKET_DOMAIN: string;
 	COOKIE_SECRET: string;
-	COOKIE_DOMAIN: string;
 	MAPBOX_ACCESS_TOKEN: string;
 	MAPBOX_STYLE_URL: string;
 	ISSUES_BUCKET_DOMAIN: string;
