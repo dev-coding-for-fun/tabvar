@@ -7,6 +7,7 @@ import {
   ScrollRestoration,
   useNavigate,
   useRouteError,
+  useLocation,
 } from "@remix-run/react";
 import '@mantine/core/styles.layer.css';
 import 'mantine-datatable/styles.layer.css';
@@ -90,6 +91,7 @@ export const ErrorBoundary = () => {
 
 export default function App() {
   const { user, mapboxAccessToken, mapboxStyleUrl } = useLoaderData<RootLoaderData>();
+  const location = useLocation();
   const navigate = useNavigate();
   const searchBoxRef = useRef<{ reset: () => void }>(null);
   const [drawerOpened, { toggle: toggleDrawer, close: closeDrawer }] = useDisclosure(false);
@@ -236,7 +238,7 @@ export default function App() {
                     )}
                   </div>
                 </header>
-                <GlobalBanner />
+                {location.pathname !== '/goldencrowbar' && <GlobalBanner />}
                 <Box style={{ flexGrow: 1 }}>
                   <EditorMenu />
                   <Outlet />
