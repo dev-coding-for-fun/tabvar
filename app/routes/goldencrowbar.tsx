@@ -331,9 +331,29 @@ export default function Contest() {
 
   return (
     <Container size="lg" my={40}>
-      <Title ta="center" fw={900} mb={30}>
+      <Title ta="center" fw={900} mb={20}>
         Golden Crowbar Award
       </Title>
+      
+      <Paper 
+        withBorder 
+        shadow="md" 
+        p={20} 
+        radius="md" 
+        mb={30} 
+        style={{ 
+          backgroundColor: '#ffe0e0', 
+          borderColor: '#fa5252',
+          borderWidth: '2px'
+        }}
+      >
+        <Text ta="center" c="red" fw={600} size="md">
+          ⚠️ TESTING MODE ⚠️
+        </Text>
+        <Text ta="center" c="red" size="sm" mt={5}>
+          This voting system is currently being tested. All votes will be cleared when the official contest begins.
+        </Text>
+      </Paper>
       
       <Paper withBorder shadow="sm" p={40} radius="md" mb={40}>
         <Stack gap="lg">
