@@ -14,7 +14,7 @@ import {
   Center,
   ActionIcon
 } from "@mantine/core";
-import { Form, useLoaderData, useActionData } from "@remix-run/react";
+import { Form, useLoaderData, useActionData, Link } from "@remix-run/react";
 import { IconCheck } from "@tabler/icons-react";
 import { useState, useEffect } from "react";
 import { getAuthenticator, requireUser } from "~/lib/auth.server";
@@ -486,17 +486,16 @@ export default function Contest() {
               <Text size="sm" c="dimmed" ta="center">
                 Please sign in to cast your vote
               </Text>
-              <Form action="/auth/google" method="post">
-                <Button
-                  leftSection={<Image src="/google.png" alt="Google logo" width={20} height={20} />}
-                  variant="default"
-                  color="gray"
-                  type="submit"
-                  size="lg"
-                >
-                  Sign in with Google
-                </Button>
-              </Form>
+              <Button
+                component={Link}
+                to="/login?redirectTo=%2Fgoldencrowbar"
+                leftSection={<Image src="/google.png" alt="Google logo" width={20} height={20} />}
+                variant="default"
+                color="gray"
+                size="lg"
+              >
+                Sign in with Google
+              </Button>
             </Stack>
           ) : (
             <Text size="sm" c="dimmed" ta="center">
