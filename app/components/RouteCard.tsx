@@ -1,5 +1,5 @@
 import { Paper, Stack, Group, Text, rem, Box, Button, MantineTheme, Flex, Badge, Grid } from "@mantine/core";
-import { IconFlag } from "@tabler/icons-react";
+import { IconFlag, IconLink } from "@tabler/icons-react";
 import { getGradeColor, getClimbStyleColorName } from "~/lib/constants";
 import type { Route } from "~/lib/models";
 import { TopoGallery } from "./TopoGallery";
@@ -78,6 +78,16 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                         <Text size="md" fw={500} truncate="end">
                             {route.name}
                         </Text>
+                        <IconLink
+                            size={16}
+                            style={{ 
+                                cursor: 'pointer',
+                                color: theme.colors.gray[6],
+                                flexShrink: 0
+                            }}
+                            onClick={() => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#route-${route.id}`)}
+                            title="Copy link to this route"
+                        />
                         {route.gradeYds && (
                         <Badge color={getGradeColor(route.gradeYds)} variant="light" size="lg">
                             {route.gradeYds}
