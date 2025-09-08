@@ -352,7 +352,7 @@ export default function Contest() {
               🗳️ How It Works
             </Title>
             <Stack gap="xs">
-              <Text size="sm"><strong>Voting Ends: November 28, 2025</strong> TBD</Text>
+              <Text size="sm"><strong>Voting Ends: November 28, 2025</strong></Text>
               <Text size="sm"><strong>Winner Announced:</strong> At this year's Night of Lies on November 28</Text>
             </Stack>
           </div>
@@ -373,7 +373,7 @@ export default function Contest() {
               🗺️ Need a refresher on what was developed?
             </Title>
             <Text size="sm">
-              Check out the 2024 Development Map to explore all the new and retrofitted routes.
+              Check out the <a href="https://www.google.com/maps/d/viewer?mid=1lOH3K-OSpv1eYsiTIZgCo3Aa6BUT_8k&ll=50.968226668615614%2C-115.35179625000002&z=9" target="_blank">2024 Development Map</a> to explore all the new and retrofitted routes.
             </Text>
           </div>
 
