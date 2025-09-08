@@ -12,7 +12,8 @@ import {
   Image,
   Divider,
   Center,
-  ActionIcon
+  ActionIcon,
+  Flex
 } from "@mantine/core";
 import { Form, useLoaderData, useActionData, Link } from "@remix-run/react";
 import { IconCheck } from "@tabler/icons-react";
@@ -48,7 +49,7 @@ function CandidateCard({ contestant, isSelected = false, isClickable = true, isV
       style={cardStyle}
       onClick={isClickable ? onClick : undefined}
     >
-      <Group justify="space-between" mb="md">
+      <Group justify="space-between" mb="sm">
         <Title order={3}>{contestant.name}</Title>
         {(isSelected || isVoted) && (
           <ActionIcon variant="filled" color="blue" size="sm">
@@ -57,8 +58,8 @@ function CandidateCard({ contestant, isSelected = false, isClickable = true, isV
         )}
       </Group>
       
-      <Group grow mb="md">
-        <div>
+      <Flex gap="md" mb="md" direction={{ base: 'column', sm: 'row' }}>
+        <div style={{ flex: contestant.repairs.length > 0 ? '3' : '1' }}>
           <Text size="sm" fw={500} mb="xs">
             Routes Established
           </Text>
@@ -72,7 +73,7 @@ function CandidateCard({ contestant, isSelected = false, isClickable = true, isV
         </div>
         
         {contestant.repairs.length > 0 && (
-          <div>
+          <div style={{ flex: '2' }}>
             <Text size="sm" fw={500} mb="xs">
               Retrofits & Maintenance
             </Text>
@@ -85,7 +86,7 @@ function CandidateCard({ contestant, isSelected = false, isClickable = true, isV
             </Stack>
           </div>
         )}
-      </Group>
+      </Flex>
     </Card>
   );
 }
@@ -235,7 +236,7 @@ function getContestantData(): ContestantWithId[] {
       "Lower <a href='https://app.tabvar.org/topos/154' target='_blank' >Door Jamb</a> – 2 new 5.8 multipitch routes",
       "Bluerock Crag – 4 new routes, 5.4 to 5.8"
     ],
-    repairs: ["Retrofit on <a href='https://app.tabvar.org/topos/132#route-3664' target='_blank'>Lost and Crossed on Rundle Ridge"]
+    repairs: ["Retrofit on <a href='https://app.tabvar.org/topos/132#route-3664' target='_blank'>Lost and Crossed on Rundle Ridge</a>"]
   },
   {
     name: "Dan Padeanu",
@@ -257,7 +258,7 @@ function getContestantData(): ContestantWithId[] {
   },
   {
     name: "Chris Perry",
-    routes: ["Forever Yonge – 5.10d, 7 pitch bolted route on <a href='https://app.tabvar.org/topos/115' target='_blank' >Tunnel Mountain</a>"],
+    routes: ["<a href='https://app.tabvar.org/topos/115#route-3681' target='_blank'>Forever Yonge – 5.10d</a>, 7 pitch bolted route on Tunnel Mountain"],
     repairs: []
   },
   {
@@ -265,7 +266,7 @@ function getContestantData(): ContestantWithId[] {
     routes: [
       "<a href='https://app.tabvar.org/topos/106' target='_blank' >Moose Mountain</a> - 9 new routes, 5.11b to 5.13a",
       "<a href='https://app.tabvar.org/topos/128' target='_blank' >Black Feather Canyon</a> – 1 new route, 5.11a",
-      "Long Shadows – 2 pitch 5.12c route in <a href='https://app.tabvar.org/topos/176' target='_blank' >the Ghost</a>"
+      "<a href='https://app.tabvar.org/topos/176#route-3695' target='_blank'>Long Shadows</a> – 2 pitch 5.12c route in the Ghost"
     ],
     repairs: []
   },
@@ -279,7 +280,7 @@ function getContestantData(): ContestantWithId[] {
   },
   {
     name: "Adam Matias",
-    routes: ["West Phantom Bluffs – 5 new routes, 5.7 to 5.10a"],
+    routes: ["<a href='https://app.tabvar.org/topos/176#sector-1146' target='_blank'>West Phantom Bluffs</a> – 5 new routes, 5.7 to 5.10a"],
     repairs: []
   },
   {
@@ -289,15 +290,15 @@ function getContestantData(): ContestantWithId[] {
   },
   {
     name: "Mirko Arcais & Michele Hueber",
-    routes: ["Memory Lane – 5.11b A0/5.11d, 10 pitch bolted route on the Canmore Wall"],
+    routes: ["<a href='https://app.tabvar.org/topos/173#route-3690' target='_blank'>Memory Lane – 5.11b A0/5.11d</a>, 10 pitch bolted route on the Canmore Wall"],
     repairs: []
   },
   {
     name: "Matt Laird & Andrew Slootweg",
     routes: [
-      "Matt Laird & Andrew Slootweg: Bastion – 5.10d, 10 pitch bolted route on the Lookout Tower, <a href='https://app.tabvar.org/topos/127' target='_blank' >Castle Mtn</a>",
-      "Matt Laird: Creature from the Black Lagoon – 5.11a, 4 pitch bolted route on <a href='https://app.tabvar.org/topos/199' target='_blank' >Mount McGillivray</a>",
-      "Matt Laird: Macaroons – 5.10d, 3 pitch route on Armadillo Buttress in <a href='https://app.tabvar.org/topos/98' target='_blank' >Grotto Canyon</a>"
+      "Matt Laird & Andrew Slootweg: <a href='https://app.tabvar.org/topos/127#route-3685' target='_blank' >Bastion – 5.10c</a>, 10 pitch bolted route on Lookout Tower, Castle Mtn",
+      "Matt Laird: <a href='https://app.tabvar.org/topos/199#route-3670' target='_blank'>Creature from the Black Lagoon – 5.11a</a>, 4 pitch bolted route on Mount McGillivray",
+      "Matt Laird: <a href='https://app.tabvar.org/topos/98#route-3780' target='_blank'>Macaroon – 5.10d</a>, 3 pitch route on Armadillo Buttress in Grotto Canyon"
     ],
     repairs: ["Retrofit of 6 routes at <a href='https://app.tabvar.org/topos/100' target='_blank' >Echo Canyon</a>"]
   },
