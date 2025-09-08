@@ -273,7 +273,7 @@ function getContestantData(): ContestantWithId[] {
   {
     name: "Andy Genereux",
     routes: [
-      "Thriller – 5.8, 10 pitch bolted route on <a href='https://app.tabvar.org/topos/164' target='_blank' >Mount Indefatigable</a>",
+      "<a href='https://app.tabvar.org/topos/164#route-3663' target='_blank'>Thriller – 5.8</a>, 10 pitch bolted route on Mount Indefatigable",
       "<a href='https://app.tabvar.org/topos/106' target='_blank' >Moose Mountain</a> - 13 new routes, 5.9 to 5.11c"
     ],
     repairs: []
@@ -296,7 +296,7 @@ function getContestantData(): ContestantWithId[] {
   {
     name: "Matt Laird & Andrew Slootweg",
     routes: [
-      "Matt Laird & Andrew Slootweg: <a href='https://app.tabvar.org/topos/127#route-3685' target='_blank' >Bastion – 5.10c</a>, 10 pitch bolted route on Lookout Tower, Castle Mtn",
+      "Matt Laird & Andrew Slootweg: <a href='https://app.tabvar.org/topos/127#route-3685' target='_blank' >Bastion – 5.10c</a>, 10 pitch bolted route on Lookout Tower, Castle Mountain",
       "Matt Laird: <a href='https://app.tabvar.org/topos/199#route-3670' target='_blank'>Creature from the Black Lagoon – 5.11a</a>, 4 pitch bolted route on Mount McGillivray",
       "Matt Laird: <a href='https://app.tabvar.org/topos/98#route-3780' target='_blank'>Macaroon – 5.10d</a>, 3 pitch route on Armadillo Buttress in Grotto Canyon"
     ],
@@ -352,8 +352,7 @@ export default function Contest() {
               🗳️ How It Works
             </Title>
             <Stack gap="xs">
-              <Text size="sm"><strong>Vote Online:</strong> TBD</Text>
-              <Text size="sm"><strong>Voting Period:</strong> TBD</Text>
+              <Text size="sm"><strong>Voting Ends: November 28, 2025</strong> TBD</Text>
               <Text size="sm"><strong>Winner Announced:</strong> At this year's Night of Lies on November 28</Text>
             </Stack>
           </div>
@@ -364,7 +363,7 @@ export default function Contest() {
             </Title>
             <Text size="sm" mb="xs">The winner of The Golden Crowbar will receive:</Text>
             <Stack gap="xs" ml="md">
-              <Text size="sm">• Gear prizes from UnawrdUp / Vertical Addiction, Arc'teryx Alberta, and Blue Ice</Text>
+              <Text size="sm">• Gear prizes from OnWardUp, Vertical Addiction, and Arc'teryx</Text>
               <Text size="sm">• Their name engraved on the Golden Crowbar Trophy for the year</Text>
             </Stack>
           </div>
@@ -390,6 +389,36 @@ export default function Contest() {
           <Text size="md" ta="center" fw={500} style={{ fontStyle: 'italic' }}>
             Let's celebrate the visionaries who swing the crowbar and shape the future of Bow Valley climbing. Spread the word, cast your vote, and join us for the big reveal at Night of Lies!
           </Text>
+          
+          <div>
+            <Title order={3} size="h4" mb="md" ta="center">
+              🙏 Thank You to Our Prize Sponsors
+            </Title>
+            <Group justify="center" gap="xl">
+              <Image
+                src="/onwardup.png"
+                alt="OnWardUp Canmore"
+                h={20}
+                w="auto"
+                fit="contain"
+                style={{ filter: 'invert(1)' }}
+              />
+              <Image
+                src="/verticaladdiction.webp"
+                alt="Vertical Addiction Canmore"
+                h={45}
+                w="auto"
+                fit="contain"
+              />
+              <Image
+                src="/arcteryx.png"
+                alt="Arc'teryx"
+                h={70}
+                w="auto"
+                fit="contain"
+              />
+            </Group>
+          </div>
         </Stack>
       </Paper>
       
