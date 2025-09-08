@@ -293,11 +293,11 @@ function getContestantData(): ContestantWithId[] {
     repairs: []
   },
   {
-    name: "Matt Laird",
+    name: "Matt Laird & Andrew Slootweg",
     routes: [
-      "Bastion – 5.10d, 10 pitch bolted route on the Lookout Tower, <a href='https://app.tabvar.org/topos/127' target='_blank' >Castle Mtn</a>",
-      "Creature from the Black Lagoon – 5.11a, 4 pitch bolted route on <a href='https://app.tabvar.org/topos/199' target='_blank' >Mount McGillivray</a>",
-      "Macaroons – 5.10d, 3 pitch route on Armadillo Buttress in <a href='https://app.tabvar.org/topos/98' target='_blank' >Grotto Canyon</a>"
+      "Matt Laird & Andrew Slootweg: Bastion – 5.10d, 10 pitch bolted route on the Lookout Tower, <a href='https://app.tabvar.org/topos/127' target='_blank' >Castle Mtn</a>",
+      "Matt Laird: Creature from the Black Lagoon – 5.11a, 4 pitch bolted route on <a href='https://app.tabvar.org/topos/199' target='_blank' >Mount McGillivray</a>",
+      "Matt Laird: Macaroons – 5.10d, 3 pitch route on Armadillo Buttress in <a href='https://app.tabvar.org/topos/98' target='_blank' >Grotto Canyon</a>"
     ],
     repairs: ["Retrofit of 6 routes at <a href='https://app.tabvar.org/topos/100' target='_blank' >Echo Canyon</a>"]
   },
@@ -331,29 +331,9 @@ export default function Contest() {
 
   return (
     <Container size="lg" my={40}>
-      <Title ta="center" fw={900} mb={20}>
+      <Title ta="center" fw={900} mb={30}>
         Golden Crowbar Award
       </Title>
-      
-      <Paper 
-        withBorder 
-        shadow="md" 
-        p={20} 
-        radius="md" 
-        mb={30} 
-        style={{ 
-          backgroundColor: '#ffe0e0', 
-          borderColor: '#fa5252',
-          borderWidth: '2px'
-        }}
-      >
-        <Text ta="center" c="red" fw={600} size="md">
-          ⚠️ TESTING MODE ⚠️
-        </Text>
-        <Text ta="center" c="red" size="sm" mt={5}>
-          This voting system is currently being tested. All votes will be cleared when the official contest begins.
-        </Text>
-      </Paper>
       
       <Paper withBorder shadow="sm" p={40} radius="md" mb={40}>
         <Stack gap="lg">
