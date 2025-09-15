@@ -404,19 +404,20 @@ export default function Contest() {
                 style={{ filter: 'invert(1)' }}
               />
               <Image
+                src="/arcteryxalberta.png"
+                alt="Arc'teryx Alberta"
+                h={130}
+                w="auto"
+                fit="contain"
+              />
+              <Image
                 src="/verticaladdiction.webp"
                 alt="Vertical Addiction Canmore"
                 h={45}
                 w="auto"
                 fit="contain"
               />
-              <Image
-                src="/arcteryx.png"
-                alt="Arc'teryx"
-                h={70}
-                w="auto"
-                fit="contain"
-              />
+
             </Group>
           </div>
         </Stack>
