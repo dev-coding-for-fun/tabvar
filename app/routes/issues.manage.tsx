@@ -5,7 +5,7 @@ import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { DataTable, type DataTableColumn, type DataTableSortStatus } from "mantine-datatable";
 import { getDB } from "~/lib/db";
 import { requireUser } from "~/lib/auth.server";
-import { IconArchive, IconArrowBack, IconCheck, IconClick, IconEdit, IconFileX, IconFlag, IconRubberStamp } from "@tabler/icons-react";
+import { IconArchive, IconArrowBack, IconCheck, IconClick, IconEdit, IconFileX, IconFlag, IconRubberStamp, IconTrafficCone } from "@tabler/icons-react";
 import IssueDetailsModal from "~/components/issueDetailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useRef, useState } from "react";
@@ -93,6 +93,16 @@ const StatusActions: React.FC<{
                             onClick={() => handleStatusChange("complete")}
                         >
                             <IconCheck size={20} />
+                        </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Claim">
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="lg"
+                            onClick={() => handleStatusChange("claim")}
+                        >
+                            <IconTrafficCone size={20} />
                         </ActionIcon>
                     </Tooltip>
                     <Tooltip label="Delete">
@@ -461,35 +471,54 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         ])
         .execute();
 
-    const issues: Issue[] = result.map((row) => {
-        const route: Route = {
-            id: row.route_id,
-            name: row.route_name,
-            sectorName: row.sector_name ?? "",
-            cragName: row.crag_name ?? "",
-        } as Route;
-        return {
-            id: Number(row.id),
-            routeId: row.route_id,
-            route,
-            issueType: row.issue_type,
-            subIssueType: row.sub_issue_type,
-            status: row.status,
-            lastStatus: row.last_status ?? undefined,
-            description: row.description ?? undefined,
-            isFlagged: Boolean(row.is_flagged),
-            flaggedMessage: row.flagged_message ?? undefined,
-            boltsAffected: row.bolts_affected ?? undefined,
-            createdAt: row.created_at ?? "",
-            attachments: row.url && row.attachment_name && row.attachment_id ? [{
+    // Group results by issue ID to handle multiple attachments properly
+    const issuesMap = new Map<number, Issue>();
+    
+    result.forEach((row) => {
+        const issueId = Number(row.id);
+        
+        if (!issuesMap.has(issueId)) {
+            const route: Route = {
+                id: row.route_id,
+                name: row.route_name,
+                sectorName: row.sector_name ?? "",
+                cragName: row.crag_name ?? "",
+            } as Route;
+            
+            issuesMap.set(issueId, {
+                id: issueId,
+                routeId: row.route_id,
+                route,
+                issueType: row.issue_type,
+                subIssueType: row.sub_issue_type,
+                status: row.status,
+                lastStatus: row.last_status ?? undefined,
+                description: row.description ?? undefined,
+                isFlagged: Boolean(row.is_flagged),
+                flaggedMessage: row.flagged_message ?? undefined,
+                boltsAffected: row.bolts_affected ?? undefined,
+                createdAt: row.created_at ?? "",
+                attachments: []
+            } as Issue);
+        }
+        
+        // Add attachment if it exists
+        if (row.url && row.attachment_name && row.attachment_id) {
+            const issue = issuesMap.get(issueId)!;
+            if (!issue.attachments) {
+                issue.attachments = [];
+            }
+            issue.attachments.push({
                 id: row.attachment_id,
                 issueId: row.id,
                 url: row.url,
                 type: "image",
                 name: row.attachment_name
-            }] : []
-        } as Issue;
+            });
+        }
     });
+    
+    const issues: Issue[] = Array.from(issuesMap.values());
 
     return {
         issues,
