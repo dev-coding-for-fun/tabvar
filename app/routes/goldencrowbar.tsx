@@ -363,7 +363,7 @@ export default function Contest() {
             </Title>
             <Text size="sm" mb="xs">The winner of The Golden Crowbar will receive:</Text>
             <Stack gap="xs" ml="md">
-              <Text size="sm">• Gear prizes from OnWardUp, Vertical Addiction, and Arc'teryx</Text>
+              <Text size="sm">• Gear prizes from OnWardUp, Vertical Addiction, Arc'teryx and Black Diamond</Text>
               <Text size="sm">• Their name engraved on the Golden Crowbar Trophy for the year</Text>
             </Stack>
           </div>
@@ -406,7 +406,7 @@ export default function Contest() {
               <Image
                 src="/arcteryxalberta.png"
                 alt="Arc'teryx Alberta"
-                h={130}
+                h={136}
                 w="auto"
                 fit="contain"
               />
@@ -414,6 +414,13 @@ export default function Contest() {
                 src="/verticaladdiction.webp"
                 alt="Vertical Addiction Canmore"
                 h={45}
+                w="auto"
+                fit="contain"
+              />
+              <Image
+                src="/blackdiamond.png"
+                alt="Black Diamond"
+                h={38}
                 w="auto"
                 fit="contain"
               />
