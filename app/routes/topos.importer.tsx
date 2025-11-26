@@ -84,9 +84,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
             responseModalities: [
             ],
             responseMimeType: "application/json",
-          };
+        };
 
-          
+
 
         return { success: true };
     } catch {
@@ -96,7 +96,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
 export default function ToposImporter() {
     const { state } = useNavigation();
-    const actionData = useActionData<typeof action>();
+    const actionData = useActionData<ActionData>();
     const { name, type } = useLoaderData<LoaderData>();
 
     return (

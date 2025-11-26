@@ -5,5 +5,6 @@ import { createPagesFunctionHandler } from "@remix-run/cloudflare-pages";
 // eslint-disable-next-line import/no-unresolved
 import * as build from "../build/server";
 
-// @ts-expect-error TS2345: Argument of type '{ build: typeof build; }' is not assignable to parameter of type 'PagesFunctionHandlerOptions<Env, unknown>'.
+
+// @ts-expect-error TS2322: Type 'typeof import("x:/Documents/GitHub/tabvar/build/server/index")' is not assignable to type 'ServerBuild | (() => ServerBuild | Promise<ServerBuild>)'.
 export const onRequest = createPagesFunctionHandler({ build });
