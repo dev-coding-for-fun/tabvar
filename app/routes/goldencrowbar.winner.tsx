@@ -419,7 +419,7 @@ export default function WinnerPage() {
                                     <Title
                                         order={1}
                                         style={{
-                                            fontSize: winner.name.length > 20 ? '3.5rem' : winner.name.length > 15 ? '4rem' : '5rem',
+                                            fontSize: winner.name.length > 20 ? '3.2rem' : winner.name.length > 15 ? '4rem' : '5rem',
                                             lineHeight: 1,
                                             color: '#FFD700',
                                             textShadow: '0 0 20px rgba(255, 215, 0, 0.5)',
