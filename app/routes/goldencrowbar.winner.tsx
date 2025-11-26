@@ -360,7 +360,10 @@ export default function WinnerPage() {
                                     </ThemeIcon>
                                     <Stack gap="md" style={{ flex: 1 }}>
                                         <Badge size="xl" color="gray" variant="filled">RUNNER UP</Badge>
-                                        <Title order={2} style={{ fontSize: '3.5rem', lineHeight: 1.1 }}>
+                                        <Title order={2} style={{
+                                            fontSize: runnerUp.name.length > 20 ? '2.5rem' : '3.5rem',
+                                            lineHeight: 1.1
+                                        }}>
                                             {runnerUp.name}
                                         </Title>
                                         <Stack gap="xs" mt="md">
@@ -416,10 +419,11 @@ export default function WinnerPage() {
                                     <Title
                                         order={1}
                                         style={{
-                                            fontSize: '5rem',
+                                            fontSize: winner.name.length > 20 ? '3.5rem' : winner.name.length > 15 ? '4rem' : '5rem',
                                             lineHeight: 1,
                                             color: '#FFD700',
-                                            textShadow: '0 0 20px rgba(255, 215, 0, 0.5)'
+                                            textShadow: '0 0 20px rgba(255, 215, 0, 0.5)',
+                                            textAlign: 'center'
                                         }}
                                     >
                                         {winner.name}
