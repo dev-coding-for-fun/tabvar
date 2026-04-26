@@ -33,13 +33,32 @@ npm run start
 > Cloudflare does _not_ use `wrangler.toml` to configure deployment bindings.
 > You **MUST** [configure deployment bindings manually in the Cloudflare dashboard][bindings].
 
-First, build your app for production:
+Cloudflare Pages should use this build command:
 
 ```sh
-npm run build
+npm run build:cloudflare
 ```
 
-Then, deploy your app to Cloudflare Pages:
+For production builds, configure these Cloudflare Pages environment variables:
+
+- `RUN_PRODUCTION_MIGRATIONS=true`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
+
+Do not set `RUN_PRODUCTION_MIGRATIONS` for preview builds. This keeps preview deployments
+from applying migrations to the production D1 database.
+
+Before enabling automatic migrations, confirm the production Pages `DB` binding points at the
+same database as `env.production` in `wrangler.toml`. The build runs production migrations with:
+
+```sh
+npm run db:migrate:production
+```
+
+If D1 migrations fail, the Cloudflare Pages build exits non-zero and Cloudflare keeps serving
+the previous production deployment.
+
+To deploy manually with Wrangler:
 
 ```sh
 npm run deploy

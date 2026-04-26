@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "remix vite:build",
+    "build:cloudflare": "npm run build && node ./scripts/apply-production-d1-migrations.mjs",
+    "db:migrate:production": "wrangler d1 migrations apply DB --remote --env production",
     "deploy": "npm run build && wrangler pages deploy",
     "dev": "remix vite:dev",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
