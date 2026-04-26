@@ -35,33 +35,35 @@ const GlobalBanner: React.FC = () => {
   const warningMessage = "Rock climbing is a potentially dangerous sport, and anyone who does not fully recognize this fact should not use any of the information provided herein. The information only provides the location and approximate path followed by the various climbs and offers no advice, expressed or implied, as to how they may be safely ascended or descended. The contents of the information provided are subject to errors and omissions and to changes that may take place over time. Anyone in doubt of their ability to safely climb and descend from any of these routes is strongly advised to not go on the route or to use the services of a registered mountain guide.";
 
   return (
-    <Alert
-      title="Important Safety Notice"
-      color="red"
-      icon={icon}
-      radius="md"
-      style={{ margin: '1rem' }}
-      mt="md" // Added some margin-top for spacing from header
-    >
-      <Text>{warningMessage}</Text>
-      {user && (
-        <>
-          <Space h="md" />
-          <Button 
-            onClick={handleDismiss} 
-            variant="outline" 
-            color="red" 
-            size="xs"
-            loading={fetcher.state === 'submitting' || fetcher.state === 'loading'}
-          >
-            Acknowledge & Hide
-          </Button>
-        </>
-      )}
-      {fetcher.data?.error && (
-        <Text c="red" size="sm" mt="xs">Error: {fetcher.data.error}</Text>
-      )}
-    </Alert>
+    <div data-nosnippet>
+      <Alert
+        title="Important Safety Notice"
+        color="red"
+        icon={icon}
+        radius="md"
+        style={{ margin: '1rem' }}
+        mt="md" // Added some margin-top for spacing from header
+      >
+        <Text>{warningMessage}</Text>
+        {user && (
+          <>
+            <Space h="md" />
+            <Button
+              onClick={handleDismiss}
+              variant="outline"
+              color="red"
+              size="xs"
+              loading={fetcher.state === 'submitting' || fetcher.state === 'loading'}
+            >
+              Acknowledge & Hide
+            </Button>
+          </>
+        )}
+        {fetcher.data?.error && (
+          <Text c="red" size="sm" mt="xs">Error: {fetcher.data.error}</Text>
+        )}
+      </Alert>
+    </div>
   );
 };
 
