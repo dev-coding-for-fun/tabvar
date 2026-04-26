@@ -29,7 +29,8 @@ import {
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { Notifications } from "@mantine/notifications";
-import { LoaderFunction } from "@remix-run/cloudflare";
+import { LoaderFunction, type MetaFunction } from "@remix-run/cloudflare";
+import { DEFAULT_SITE_DESCRIPTION } from "~/lib/seo";
 import { useLoaderData } from "@remix-run/react";
 import { getAuthenticator } from "~/lib/auth.server";
 import type { User } from "~/lib/models";
@@ -59,7 +60,14 @@ const theme = createTheme({
       h3: { fontSize: 'var(--mantine-font-size-md)' }
     }
   }
-})
+});
+
+export const meta: MetaFunction = () => {
+  return [
+    { title: "TABVAR" },
+    { name: "description", content: DEFAULT_SITE_DESCRIPTION },
+  ];
+};
 
 export const loader: LoaderFunction = async ({ request, context }) => {
   const user = await getAuthenticator(context).isAuthenticated(request);

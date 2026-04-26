@@ -1,5 +1,7 @@
 import { useFetcher, useLoaderData, useSubmit } from "@remix-run/react";
 import { type ActionFunctionArgs, type LoaderFunctionArgs, json } from "@remix-run/node";
+import type { MetaFunction } from "@remix-run/cloudflare";
+import { privatePageMeta } from "~/lib/seo";
 import {
     Paper,
     Title,
@@ -142,6 +144,8 @@ export async function loader({ context }: LoaderFunctionArgs) {
         existingRoutes: routes
     });
 }
+
+export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Import JSON topos");
 
 export async function action({ request, context }: ActionFunctionArgs) {
     const user = await requireUser(request, context);

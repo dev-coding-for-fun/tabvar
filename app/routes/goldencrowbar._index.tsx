@@ -1,15 +1,17 @@
 import { Container, Title, Paper, Text, Stack, Badge, ThemeIcon, Flex } from "@mantine/core";
 import { IconTrophy, IconMedal } from "@tabler/icons-react";
 import type { MetaFunction } from "@remix-run/cloudflare";
+import { publicPageMeta } from "~/lib/seo";
+
+const GOLDCROW_DESC =
+  "Announcing the winners of the 2025 Golden Crowbar Award, recognizing outstanding contributions to Alberta's climbing community.";
 
 export const meta: MetaFunction = () => {
-  return [
-    { title: "Golden Crowbar Award 2025 - Winners" },
-    {
-      name: "description",
-      content: "Announcing the winners of the 2025 Golden Crowbar Award",
-    },
-  ];
+  return publicPageMeta({
+    titlePhrase: "Golden Crowbar 2025",
+    description: GOLDCROW_DESC,
+    pathname: "/goldencrowbar",
+  });
 };
 
 const WINNERS = [

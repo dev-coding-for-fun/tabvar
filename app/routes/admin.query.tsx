@@ -1,4 +1,4 @@
-import { ActionFunction, json, LoaderFunction } from "@remix-run/cloudflare";
+import { ActionFunction, json, LoaderFunction, type MetaFunction } from "@remix-run/cloudflare";
 import { Form, useActionData, useSubmit, useLoaderData, useFetcher } from "@remix-run/react";
 import { Container, Stack, Title, Textarea, Button, Group, Alert, Table, Text, Code, FileButton, Space, LoadingOverlay } from "@mantine/core";
 import { IconAlertCircle, IconDownload, IconUpload } from "@tabler/icons-react";
@@ -10,6 +10,7 @@ import type { User } from "~/lib/models";
 import { useUser } from "~/lib/hooks/useUser";
 import { useEffect } from "react";
 import { notifications } from "@mantine/notifications";
+import { privatePageMeta } from "~/lib/seo";
 
 // Keep export order as is for logical data presentation
 const TABLES_TO_EXPORT = [
@@ -73,6 +74,8 @@ export const loader: LoaderFunction = async ({ context }) => {
     const env = context.cloudflare.env as unknown as Env;
     return json({ environment: env.ENVIRONMENT });
 };
+
+export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Database admin");
 
 export const action: ActionFunction = async ({ request, context }) => {
     const user = await getAuthenticator(context).isAuthenticated(request, {

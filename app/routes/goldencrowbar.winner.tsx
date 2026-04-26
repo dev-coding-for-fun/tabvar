@@ -1,4 +1,5 @@
-import { LoaderFunctionArgs, MetaFunction } from "@remix-run/cloudflare";
+import { LoaderFunctionArgs, type MetaFunction } from "@remix-run/cloudflare";
+import { publicPageMeta } from "~/lib/seo";
 import { useLoaderData } from "@remix-run/react";
 import { getDB } from "~/lib/db";
 import {
@@ -17,10 +18,15 @@ import {
 import { IconTrophy, IconMedal, IconTool } from "@tabler/icons-react";
 import { useState, useEffect, useCallback } from "react";
 
+const GOLDCROW_WINNER_DESC =
+  "Voting and results for the Golden Crowbar Award, recognizing community contributions to Alberta climbing.";
+
 export const meta: MetaFunction = () => {
-    return [
-        { title: "Golden Crowbar Award - Winner" },
-    ];
+  return publicPageMeta({
+    titlePhrase: "Golden Crowbar — results",
+    description: GOLDCROW_WINNER_DESC,
+    pathname: "/goldencrowbar/winner",
+  });
 };
 
 interface Contestant {

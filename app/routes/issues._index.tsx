@@ -1,6 +1,7 @@
 import { Badge, Container, Group, Select, SelectProps, Stack, Text, Title, Tooltip, Anchor } from "@mantine/core";
-import { LoaderFunction } from "@remix-run/cloudflare";
+import { LoaderFunction, type MetaFunction } from "@remix-run/cloudflare";
 import { Link, useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
+import { privatePageMeta } from "~/lib/seo";
 import { Crag, IssueWithDetails, User } from "~/lib/models";
 import { DataTable } from "mantine-datatable";
 import { getDB } from "~/lib/db";
@@ -24,6 +25,8 @@ export const loader: LoaderFunction = async ({ context, request }) => {
         .execute();
     return { crags: crags, user: user };
 }
+
+export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Issues");
 
 export default function IssuesIndex() {
     const [searchParams] = useSearchParams();

@@ -1,5 +1,7 @@
 import { Form, useActionData, useNavigation, useSearchParams, useLoaderData, data } from "@remix-run/react";
 import { type ActionFunctionArgs, redirect } from "@remix-run/node";
+import type { MetaFunction } from "@remix-run/cloudflare";
+import { privatePageMeta } from "~/lib/seo";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
     TextInput,
@@ -60,6 +62,8 @@ export async function loader({ request, context }: ActionFunctionArgs) {
 
     throw new Response("Invalid request", { status: 400 });
 }
+
+export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Topos AI importer");
 
 export async function action({ request, context }: ActionFunctionArgs) {
     const url = (await request.formData()).get("url");

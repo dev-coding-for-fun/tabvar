@@ -1,5 +1,5 @@
 import { Container, Paper, Title, Stack, Text, Table, ActionIcon, Tooltip, Group, Badge, Button } from "@mantine/core";
-import { type LoaderFunction, json, type ActionFunction } from "@remix-run/cloudflare";
+import { type LoaderFunction, json, type ActionFunction, type MetaFunction } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import { getDB } from "~/lib/db";
 import { requireUser } from "~/lib/auth.server";
@@ -10,6 +10,7 @@ import { IconDownload } from "@tabler/icons-react";
 import { uploadAttachment } from "~/lib/attachment.server";
 import { Link } from "@remix-run/react";
 import { useState } from "react";
+import { privatePageMeta } from "~/lib/seo";
 
 interface LoaderData {
     importNotes: (ImportNotes & {
@@ -184,6 +185,8 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 
     return json<LoaderData>({ importNotes: transformedNotes });
 };
+
+export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Topos import manager");
 
 export default function ImportManager() {
     const { importNotes } = useLoaderData<LoaderData>();

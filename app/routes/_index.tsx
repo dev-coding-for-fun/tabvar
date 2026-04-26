@@ -1,14 +1,13 @@
 import type { MetaFunction } from "@remix-run/cloudflare";
 import { Link } from "@remix-run/react";
+import { publicPageMeta, DEFAULT_SITE_DESCRIPTION } from "~/lib/seo";
 
 export const meta: MetaFunction = () => {
-  return [
-    { title: "Tabvar App" },
-    {
-      name: "description",
-      content: "Welcome to TABVAR!",
-    },
-  ];
+  return publicPageMeta({
+    titlePhrase: "Home",
+    description: DEFAULT_SITE_DESCRIPTION,
+    pathname: "/",
+  });
 };
 
 export default function Index() {

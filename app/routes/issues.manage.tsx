@@ -1,6 +1,6 @@
 import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput, ActionIcon, Anchor, SegmentedControl } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { ActionFunction, AppLoadContext, LoaderFunction, data } from "@remix-run/cloudflare";
+import { ActionFunction, AppLoadContext, LoaderFunction, data, type MetaFunction } from "@remix-run/cloudflare";
 import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { DataTable, type DataTableColumn, type DataTableSortStatus } from "mantine-datatable";
 import { getDB } from "~/lib/db";
@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { deleteFromR2 } from "~/lib/s3.server";
 import { Issue, Route, User, RouteSearchResults, type IssueAttachment } from "~/lib/models";
-
+import { privatePageMeta } from "~/lib/seo";
 
 const StatusActions: React.FC<{
     status: string,
@@ -525,6 +525,8 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         user
     };
 }
+
+export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Manage issues");
 
 const TruncatableDescription: React.FC<{ description: string, fz: string }> = ({ description, fz }) => {
     const [expanded, setExpanded] = useState(false);

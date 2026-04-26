@@ -1,7 +1,7 @@
 import { ActionIcon, Badge, Button, Center, Container, Group, List, Popover, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
-import { ActionFunction, LoaderFunction, data, redirect } from "@remix-run/cloudflare";
+import { ActionFunction, LoaderFunction, data, redirect, type MetaFunction } from "@remix-run/cloudflare";
 import { Form, useActionData, useLoaderData, useSubmit } from "@remix-run/react";
 import { IconClick, IconSquareKey, IconTrash, IconUserMinus, IconX } from "@tabler/icons-react";
 import { User, UserInvite } from "~/lib/models";
@@ -11,6 +11,7 @@ import { useErrorNotification } from "~/components/useErrorNotification";
 import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR, userRoles } from "~/lib/constants";
 import { getDB } from "~/lib/db";
+import { privatePageMeta } from "~/lib/seo";
 
 export const loader: LoaderFunction = async ({ request, context }) => {
     const user: User = await requireUser(request, context);
@@ -26,6 +27,8 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         .execute();
     return data({ users: users, invites: invites });
 }
+
+export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Users");
 
 export const action: ActionFunction = async ({ request, context }) => {
     const user: User = await requireUser(request, context);

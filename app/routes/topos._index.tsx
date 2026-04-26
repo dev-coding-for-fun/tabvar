@@ -1,5 +1,6 @@
-import { type LoaderFunction, type ActionFunction, data } from "@remix-run/cloudflare";
+import { type LoaderFunction, type ActionFunction, data, type MetaFunction } from "@remix-run/cloudflare";
 import { Link, useLoaderData, useFetcher } from "@remix-run/react";
+import { publicPageMeta } from "~/lib/seo";
 import { Container, Title, Table, Anchor, Group, ActionIcon, Modal, TextInput, Button, Stack } from "@mantine/core";
 import mapboxgl from 'mapbox-gl';
 import { useEffect, useRef, useState } from 'react';
@@ -84,6 +85,15 @@ export const loader: LoaderFunction = async ({ context, request }) => {
   const user = await getAuthenticator(context).isAuthenticated(request);
 
   return { crags, user };
+};
+
+export const meta: MetaFunction<typeof loader> = () => {
+  return publicPageMeta({
+    titlePhrase: "Topos and crags",
+    description:
+      "Browse climbing crags and topos on an interactive map. TABVAR supports Alberta's climbing community with routes, sectors, and community issue reporting.",
+    pathname: "/topos",
+  });
 };
 
 export default function RoutesIndex() {

@@ -1,11 +1,12 @@
 import { Button, Code, Container, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
-import { ActionFunction, LoaderFunction, json } from "@remix-run/cloudflare";
+import { ActionFunction, LoaderFunction, json, type MetaFunction } from "@remix-run/cloudflare";
 import { useFetcher } from "@remix-run/react";
 import { Issue, User } from "~/lib/models";
 import { useEffect, useState } from "react";
 import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { SloperSyncResult, SyncedSector, syncSloperCragsAndSectors, syncSloperIssues, syncSloperRoutes } from "~/lib/sloper";
+import { privatePageMeta } from "~/lib/seo";
 
 export interface IssueWithRoute extends Issue {
     route_name: string;
@@ -20,6 +21,8 @@ export const loader: LoaderFunction = async ({ request, context }) => {
     }
     return json({});
 }
+
+export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Manage routes");
 
 export const action: ActionFunction = async ({ request, context }) => {
     const user = await requireUser(request, context);

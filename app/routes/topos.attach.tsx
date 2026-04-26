@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { Container, Paper, Title, Stack, Text, Group, Badge, ActionIcon, Button } from "@mantine/core";
 import { Dropzone } from "@mantine/dropzone";
 import { IconUpload, IconX, IconFile, IconTrash } from "@tabler/icons-react";
-import { ActionFunction, data } from "@remix-run/cloudflare";
+import { ActionFunction, data, type MetaFunction } from "@remix-run/cloudflare";
 import { Form, useFetcher } from "@remix-run/react";
+import { privatePageMeta } from "~/lib/seo";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
 import type { TopoAttachment, Route } from "~/lib/models";
 import { getDB } from "~/lib/db";
@@ -31,6 +32,8 @@ interface SaveResponse {
   success: boolean;
   error?: string;
 }
+
+export const meta: MetaFunction = () => privatePageMeta("Attach topos");
 
 export const action: ActionFunction = async ({ request, context }) => {
   const formData = await request.formData();

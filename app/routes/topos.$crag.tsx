@@ -1,5 +1,5 @@
 import { Container, Group, Stack, Text, Title, useMantineTheme, rem, Button, Box, Badge, ActionIcon, Modal, TextInput } from "@mantine/core";
-import { type LoaderFunction, type ActionFunction, data, redirect } from "@remix-run/cloudflare";
+import { type LoaderFunction, type ActionFunction, data, redirect, type MetaFunction } from "@remix-run/cloudflare";
 import { useLoaderData, Link, useSearchParams, useNavigate, useFetcher, useLocation } from "@remix-run/react";
 import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus, IconRobot, IconEdit, IconCheck, IconX, IconSquarePlus } from "@tabler/icons-react";
 import { getDB } from "~/lib/db";
@@ -16,6 +16,7 @@ import { TopoGallery } from "~/components/TopoGallery";
 import { RichTextViewer } from "~/components/RichTextViewer";
 import { ConfiguredRichTextEditor } from "~/components/ConfiguredRichTextEditor";
 import { getAuthenticator, requireUser } from "~/lib/auth.server";
+import { cragMetaDescription, pageTitle, publicPageMeta } from "~/lib/seo";
 
 // Define a type for action responses
 interface ActionResponse { 
@@ -23,7 +24,9 @@ interface ActionResponse {
   error?: string; 
 }
 
-export const loader: LoaderFunction = async ({ params, context, request }) => {
+type CragPageData = { crag: Crag; user: User | null };
+
+export const loader: LoaderFunction = async ({ params, context, request }): Promise<CragPageData> => {
   const cragId = parseInt(params.crag ?? "");
   const user = await getAuthenticator(context).isAuthenticated(request);
 
@@ -45,6 +48,23 @@ export const loader: LoaderFunction = async ({ params, context, request }) => {
   } catch (error) {
     throw new Response("Crag not found", { status: 404 });
   }
+};
+
+export const meta: MetaFunction<typeof loader> = (args) => {
+  const data = args.data as CragPageData | undefined;
+  if (!data?.crag) {
+    return [
+      { title: pageTitle("Topos") },
+      { name: "description", content: "Crag not found." },
+    ];
+  }
+  const { crag } = data;
+  const pathname = `/topos/${crag.id}`;
+  return publicPageMeta({
+    titlePhrase: crag.name,
+    description: cragMetaDescription(crag),
+    pathname,
+  });
 };
 
 export const action: ActionFunction = async ({ request, context }) => {
