@@ -2,61 +2,31 @@
 
 ALTER TABLE crag ADD COLUMN slug TEXT;
 
-WITH normalized AS (
-  SELECT
-    id,
-    lower(
-      trim(
-        replace(
-          replace(
-            replace(
-              replace(
-                replace(
-                  replace(
-                    replace(name, 'é', 'e'),
-                    'É',
-                    'e'
-                  ),
-                  ' ',
-                  '-'
-                ),
-                  '''',
-                  ''
-                ),
-                '"',
-                ''
-              ),
-              '/',
-              '-'
-            ),
-            '&',
-            'and'
-          ),
-          '.',
-          ''
-        ),
-        '-'
-      )
-    ) AS base_slug
-  FROM crag
-  WHERE slug IS NULL
-),
-slugged AS (
-  SELECT
-    id,
-    CASE
-      WHEN base_slug = '' THEN 'crag-' || id
-      ELSE base_slug
-    END AS base_slug
-  FROM normalized
-),
-ranked AS (
-  SELECT
-    id,
-    base_slug,
-    row_number() OVER (PARTITION BY base_slug ORDER BY id) AS duplicate_index
-  FROM slugged
-)
+CREATE TABLE crag_slug_backfill AS
+SELECT
+  id,
+  lower(trim(replace(replace(replace(replace(replace(replace(replace(replace(name, 'é', 'e'), 'É', 'e'), ' ', '-'), char(39), ''), char(34), ''), '/', '-'), '&', 'and'), '.', ''), '-')) AS base_slug
+FROM crag
+WHERE slug IS NULL;
+
+UPDATE crag_slug_backfill SET base_slug = replace(base_slug, '--', '-');
+UPDATE crag_slug_backfill SET base_slug = replace(base_slug, '--', '-');
+UPDATE crag_slug_backfill SET base_slug = replace(base_slug, '--', '-');
+UPDATE crag_slug_backfill SET base_slug = replace(base_slug, '--', '-');
+UPDATE crag_slug_backfill SET base_slug = trim(base_slug, '-');
+
+UPDATE crag_slug_backfill
+SET base_slug = 'crag-' || id
+WHERE base_slug = '';
+
+CREATE TABLE crag_slug_backfill_ranked AS
+SELECT
+  id,
+  base_slug,
+  count(*) OVER (PARTITION BY base_slug) AS duplicate_count,
+  row_number() OVER (PARTITION BY base_slug ORDER BY id) AS duplicate_index
+FROM crag_slug_backfill;
+
 UPDATE crag
 SET slug = (
   SELECT
@@ -64,9 +34,12 @@ SET slug = (
       WHEN ranked.duplicate_index = 1 THEN ranked.base_slug
       ELSE ranked.base_slug || '-' || ranked.duplicate_index
     END
-  FROM ranked
+  FROM crag_slug_backfill_ranked ranked
   WHERE ranked.id = crag.id
 )
-WHERE slug IS NULL;
+WHERE id IN (SELECT id FROM crag_slug_backfill_ranked);
+
+DROP TABLE crag_slug_backfill_ranked;
+DROP TABLE crag_slug_backfill;
 
 CREATE UNIQUE INDEX crag_slug_uq ON crag(slug) WHERE slug IS NOT NULL;
