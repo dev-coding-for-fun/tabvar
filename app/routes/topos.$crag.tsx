@@ -5,7 +5,7 @@ import { IconArrowBack, IconArrowsUpDown, IconTrash, IconTextPlus, IconRobot, Ic
 import { getDB } from "~/lib/db";
 import { useEffect, useState } from "react";
 import type { Crag, Sector, Route } from "~/lib/models";
-import { loadCragById, deleteCrag } from "~/lib/crag.server";
+import { loadCragById, loadCragBySlug, deleteCrag } from "~/lib/crag.server";
 import type { User } from "~/lib/models";
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from '@hello-pangea/dnd';
 import { SectorCard } from "~/components/SectorCard";
@@ -27,16 +27,34 @@ interface ActionResponse {
 type CragPageData = { crag: Crag; user: User | null };
 
 export const loader: LoaderFunction = async ({ params, context, request }): Promise<CragPageData> => {
-  const cragId = parseInt(params.crag ?? "");
+  const cragParam = params.crag ?? "";
   const user = await getAuthenticator(context).isAuthenticated(request);
 
-  if (!cragId) {
+  if (!cragParam) {
     throw new Response("Crag identifier is required", { status: 400 });
   }
 
   try {
     let crag: Crag;
-    crag = await loadCragById(context, cragId);
+
+    if (/^\d+$/.test(cragParam)) {
+      const cragId = parseInt(cragParam, 10);
+      const db = getDB(context);
+      const cragAlias = await db
+        .selectFrom("crag")
+        .select("slug")
+        .where("id", "=", cragId)
+        .executeTakeFirst();
+
+      if (cragAlias?.slug) {
+        const url = new URL(request.url);
+        throw redirect(`/topos/${cragAlias.slug}${url.search}`, 301);
+      }
+
+      crag = await loadCragById(context, cragId);
+    } else {
+      crag = await loadCragBySlug(context, cragParam);
+    }
     
     //bring any untitled sectors to the top
     const untitledSectors = crag.sectors?.filter(sector => sector.name?.startsWith("Untitled Sector"))
@@ -46,6 +64,9 @@ export const loader: LoaderFunction = async ({ params, context, request }): Prom
     
     return { crag: { ...crag, sectors: sortedSectors }, user };
   } catch (error) {
+    if (error instanceof Response) {
+      throw error;
+    }
     throw new Response("Crag not found", { status: 404 });
   }
 };
@@ -59,7 +80,7 @@ export const meta: MetaFunction<typeof loader> = (args) => {
     ];
   }
   const { crag } = data;
-  const pathname = `/topos/${crag.id}`;
+  const pathname = `/topos/${crag.slug ?? crag.id}`;
   return publicPageMeta({
     titlePhrase: crag.name,
     description: cragMetaDescription(crag),

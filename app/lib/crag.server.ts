@@ -289,16 +289,17 @@ async function loadSectorsForCrag(db: ReturnType<typeof getDB>, crag: Crag): Pro
     await loadRoutesForCrag(db, crag, attachmentMap);
 }
 
-async function loadCrag(context: AppLoadContext, identifier: number | string): Promise<Crag> {
+async function loadCrag(context: AppLoadContext, identifier: number | string, lookupColumn: 'id' | 'name' | 'slug'): Promise<Crag> {
     const db = getDB(context);
 
     // Get the base crag data
     const crag = await db
         .selectFrom('crag')
-        .where(typeof identifier === 'number' ? 'id' : 'name', '=', identifier)
+        .where(lookupColumn, '=', identifier)
         .select([
             'id',
             'name',
+            'slug',
             'latitude',
             'longitude',
             'notes',
@@ -309,7 +310,7 @@ async function loadCrag(context: AppLoadContext, identifier: number | string): P
         .executeTakeFirst() as Crag | undefined;
 
     if (!crag) {
-        throw new Error(`Crag with ${typeof identifier === 'number' ? 'id' : 'name'} "${identifier}" not found`);
+        throw new Error(`Crag with ${lookupColumn} "${identifier}" not found`);
     }
     await loadAttachmentsForCrag(db, crag);
     // Load the full hierarchy
@@ -319,11 +320,15 @@ async function loadCrag(context: AppLoadContext, identifier: number | string): P
 
 // Convenience wrappers for common use cases
 export async function loadCragById(context: AppLoadContext, id: number): Promise<Crag> {
-    return loadCrag(context, id);
+    return loadCrag(context, id, 'id');
 }
 
 export async function loadCragByName(context: AppLoadContext, name: string): Promise<Crag> {
-    return loadCrag(context, name);
+    return loadCrag(context, name, 'name');
+}
+
+export async function loadCragBySlug(context: AppLoadContext, slug: string): Promise<Crag> {
+    return loadCrag(context, slug, 'slug');
 }
 
 export async function deleteCrag(context: AppLoadContext, cragId: number): Promise<{ success: boolean; error?: string }> {

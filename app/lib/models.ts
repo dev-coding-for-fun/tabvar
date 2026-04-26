@@ -1,6 +1,7 @@
 export interface Crag {
     id: number;
     name: string;
+    slug?: string | null;
     latitude?: number | null;
     longitude?: number | null;
     sectors: Sector[];
@@ -59,6 +60,7 @@ export interface RouteSearchResults {
     routeId?: number | null;
     sectorId?: number | null;
     cragId?: number | null;
+    cragSlug?: string | null;
     type: string;
     routeName?: string | null;
     routeAltNames?: string | null;

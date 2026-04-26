@@ -10,6 +10,7 @@ import { Crag, User } from "~/lib/models";
 import { getAuthenticator } from "~/lib/auth.server";
 import { IconMapPinPlus, IconEdit } from "@tabler/icons-react";
 import { useMapboxContext } from "~/contexts/MapboxContext";
+import { slugifyUnique } from "~/lib/slug";
 
 interface LoaderData {
   crags: Crag[];
@@ -33,15 +34,17 @@ export const action: ActionFunction = async ({ context, request }) => {
       }
 
       const db = getDB(context);
+      const slug = await slugifyUnique(db, name);
       const newCrag = await db
         .insertInto('crag')
         .values({
           name,
+          slug,
           latitude: null,
           longitude: null,
           created_at: new Date().toISOString()
         })
-        .returning(['id', 'name', 'latitude', 'longitude'])
+        .returning(['id', 'name', 'slug', 'latitude', 'longitude'])
         .executeTakeFirst();
 
       return data({ success: true, crag: newCrag });
@@ -78,7 +81,7 @@ export const loader: LoaderFunction = async ({ context, request }) => {
   const db = getDB(context);
   const crags = await db
     .selectFrom("crag")
-    .select(["id", "name", "latitude", "longitude"])
+    .select(["id", "name", "slug", "latitude", "longitude"])
     .orderBy("name", "asc")
     .execute();
   
@@ -168,11 +171,12 @@ export default function RoutesIndex() {
   const createPopupHtml = (cragId: number, isMovable: boolean = false) => {
     const crag = crags.find(c => c.id === cragId);
     if (!crag) return '';
+    const cragPath = encodeURIComponent(String(crag.slug ?? crag.id));
     
     return `
       <div style="text-align: center;">
         <h3 style="margin-bottom: 8px;">${crag.name}</h3>
-        <a href="/topos/${encodeURIComponent(crag.id)}" style="color: #228BE6; text-decoration: none; display: block; margin-bottom: 8px;">
+        <a href="/topos/${cragPath}" style="color: #228BE6; text-decoration: none; display: block; margin-bottom: 8px;">
           View Routes
         </a>
         ${(user?.role === 'admin' || user?.role === 'super') ? `
@@ -401,7 +405,7 @@ export default function RoutesIndex() {
             <Table.Tr key={crag.id.toString()}>
               <Table.Td>
                 <Group gap="xs">
-                  <Anchor component={Link} to={`/topos/${crag.id}`} style={{ textDecoration: 'none' }}>
+                  <Anchor component={Link} to={`/topos/${crag.slug ?? crag.id}`} style={{ textDecoration: 'none' }}>
                     {crag.name}
                   </Anchor>
                   {canEdit && (!crag.latitude || !crag.longitude) && (

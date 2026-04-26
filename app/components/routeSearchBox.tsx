@@ -51,14 +51,16 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
   };
 
   const getItemValue = (item: RouteSearchResults) => {
+    const cragPath = item.cragSlug ?? item.cragId;
+
     if (item.type === 'route') { 
-      return `${item.type}:${item.routeId}:${item.cragId}`; 
+      return `${item.type}:${item.routeId}:${cragPath}`; 
     }
     else if (item.type === 'sector') { 
-      return `${item.type}:${item.sectorId}:${item.cragId}`; 
+      return `${item.type}:${item.sectorId}:${cragPath}`; 
     }
     else if (item.type === 'crag') { 
-      return `${item.type}:${item.cragId}:${item.cragId}`; 
+      return `${item.type}:${item.cragId}:${cragPath}`; 
     }
     else throw new Error(`Unknown item type: ${item.type}`);
   };
@@ -224,7 +226,7 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
     if (value && fetcher.state === 'idle') {
       const itemExists = items.find(item => getItemValue(item) === value);
       if (!itemExists) {
-        // Extract routeId from value format "route:routeId:cragId"
+        // Extract routeId from value format "route:routeId:cragPath"
         const parts = value.split(':');
         if (parts.length >= 2 && parts[0] === 'route') {
           const routeId = parts[1];
