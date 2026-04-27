@@ -1,7 +1,7 @@
 import { Title, Paper, Stack, Center, Text, Image, Button, Container } from "@mantine/core";
-import { Form, useSearchParams } from "@remix-run/react";
+import { Form, useSearchParams } from "react-router";
 import { useEffect } from "react";
-import type { MetaFunction } from "@remix-run/cloudflare";
+import type { MetaFunction } from "react-router";
 import { privatePageMeta } from "~/lib/seo";
 
 export const meta: MetaFunction = () => privatePageMeta("Sign in");

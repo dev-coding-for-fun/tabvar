@@ -3,9 +3,9 @@ import { IconFlag, IconLink } from "@tabler/icons-react";
 import { getGradeColor, getClimbStyleColorName } from "~/lib/constants";
 import type { Route } from "~/lib/models";
 import { TopoGallery } from "./TopoGallery";
-import { useFetcher } from "@remix-run/react";
+import { useFetcher } from "react-router";
 import { RichTextViewer } from "./RichTextViewer";
-import { Link } from "@remix-run/react";
+import { Link } from "react-router";
 
 interface RouteCardProps {
     route: Route;
@@ -71,7 +71,7 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
             >
                 Report Issue
             </Link>
-            <Grid gutter="xs">
+            <Grid gap="xs">
                 {/* Row 1: Name, Grade, Topos */}
                 <Grid.Col span="auto">
                     <Group gap="xs" wrap="nowrap">

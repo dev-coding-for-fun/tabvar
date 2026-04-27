@@ -1,4 +1,4 @@
-import { ActionFunctionArgs, json } from "@remix-run/cloudflare";
+import { ActionFunctionArgs, data } from "react-router";
 import { getAuthenticator } from "~/lib/auth.server"; // Assuming auth.server.ts handles user auth
 import { getDB } from "~/lib/db";
 
@@ -19,16 +19,16 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const user = await authenticator.isAuthenticated(request);
 
   if (!user) {
-    return json({ error: "User not authenticated" }, { status: 401 });
+    return data({ error: "User not authenticated" }, { status: 401 });
   }
 
   try {
     const currentDate = new Date().toISOString();
 
     await updateUserDisclaimerDate(user.uid, currentDate, context);
-    return json({ success: true, disclaimerAckDate: currentDate });
+    return data({ success: true, disclaimerAckDate: currentDate });
   } catch (error) {
     console.error("Failed to acknowledge disclaimer:", error);
-    return json({ error: "Failed to update disclaimer acknowledgement." }, { status: 500 });
+    return data({ error: "Failed to update disclaimer acknowledgement." }, { status: 500 });
   }
 } 

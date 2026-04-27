@@ -1,4 +1,4 @@
-import { LoaderFunction } from '@remix-run/cloudflare'; // assuming Remix is being used
+import { LoaderFunction } from 'react-router'; // assuming Remix is being used
 import { sql } from 'kysely';
 import { getDB } from '~/lib/db';
 import { IssueWithDetails } from '~/lib/models';

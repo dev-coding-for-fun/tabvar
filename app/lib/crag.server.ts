@@ -1,7 +1,7 @@
-import type { AppLoadContext } from "@remix-run/cloudflare";
+import type { AppLoadContext } from "react-router";
 import { getDB } from "./db";
 import type { Crag, Sector, Route, Issue, IssueAttachment, TopoAttachment } from "./models";
-import { redirect } from "@remix-run/cloudflare";
+import { redirect } from "react-router";
 import { sql } from "kysely";
 
 async function loadAttachmentsForIssues(db: ReturnType<typeof getDB>, issues: Issue[]): Promise<void> {

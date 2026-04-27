@@ -23,6 +23,12 @@ module.exports = {
 
   // Base config
   extends: ["eslint:recommended"],
+  rules: {
+    "import/default": "warn",
+    "import/namespace": "warn",
+    "no-constant-condition": "warn",
+    "no-useless-escape": "warn",
+  },
 
   overrides: [
     // React
@@ -50,6 +56,12 @@ module.exports = {
       },
       rules: {
         "react/prop-types": 0,
+        "react/no-unescaped-entities": "warn",
+        "react-hooks/immutability": "warn",
+        "react-hooks/set-state-in-effect": "warn",
+        "jsx-a11y/no-autofocus": "warn",
+        "import/default": "warn",
+        "import/namespace": "warn",
       },
     },
 
@@ -75,7 +87,10 @@ module.exports = {
         "plugin:import/typescript",
       ],
       rules: {
-        "@typescript-eslint/no-unused-vars": "warn"
+        "@typescript-eslint/no-explicit-any": "warn",
+        "@typescript-eslint/no-unused-vars": "warn",
+        "import/default": "warn",
+        "import/namespace": "warn"
       }
     },
 

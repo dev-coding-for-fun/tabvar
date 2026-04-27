@@ -1,4 +1,4 @@
-import type { MetaDescriptor } from "@remix-run/cloudflare";
+import type { MetaDescriptor } from "react-router";
 
 /** Canonical public app host for open graph, canonical links, and sharing. */
 export const APP_ORIGIN = "https://app.tabvar.org" as const;

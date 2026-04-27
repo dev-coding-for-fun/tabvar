@@ -1,6 +1,6 @@
 import { Container, Paper, Title, Stack, Text, Table, ActionIcon, Tooltip, Group, Badge, Button } from "@mantine/core";
-import { type LoaderFunction, json, type ActionFunction, type MetaFunction } from "@remix-run/cloudflare";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { type LoaderFunction, data, type ActionFunction, type MetaFunction } from "react-router";
+import { useLoaderData, useFetcher } from "react-router";
 import { getDB } from "~/lib/db";
 import { requireUser } from "~/lib/auth.server";
 import type { ImportNotes } from "~/lib/models";
@@ -8,7 +8,7 @@ import { DataTable } from "mantine-datatable";
 import { format } from "date-fns";
 import { IconDownload } from "@tabler/icons-react";
 import { uploadAttachment } from "~/lib/attachment.server";
-import { Link } from "@remix-run/react";
+import { Link } from "react-router";
 import { useState } from "react";
 import { privatePageMeta } from "~/lib/seo";
 
@@ -26,7 +26,7 @@ interface ActionData {
 export const action: ActionFunction = async ({ request, context }) => {
     const user = await requireUser(request, context);
     if (!user || user.role !== "admin") {
-        return json<ActionData>({ error: "Unauthorized" }, { status: 401 });
+        return data<ActionData>({ error: "Unauthorized" }, { status: 401 });
     }
 
     const formData = await request.formData();
@@ -41,7 +41,7 @@ export const action: ActionFunction = async ({ request, context }) => {
             const routeId = Number(formData.get("routeId"));
 
             if (!noteId || !topoUrl) {
-                return json<ActionData>({ error: "Missing required fields" }, { status: 400 });
+                return data<ActionData>({ error: "Missing required fields" }, { status: 400 });
             }
 
             const db = getDB(context);
@@ -56,7 +56,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                         .set({ download_result: `${response.status}: ${response.statusText}` })
                         .where("id", "=", noteId)
                         .execute();
-                    return json<ActionData>({ error: `Download failed: ${response.status} ${response.statusText}` }, { status: response.status });
+                    return data<ActionData>({ error: `Download failed: ${response.status} ${response.statusText}` }, { status: response.status });
                 }
 
                 const blob = await response.blob();
@@ -66,7 +66,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                         .set({ download_result: "0: Empty file" })
                         .where("id", "=", noteId)
                         .execute();
-                    return json<ActionData>({ error: "Downloaded file is empty" }, { status: 400 });
+                    return data<ActionData>({ error: "Downloaded file is empty" }, { status: 400 });
                 }
 
                 // Extract filename from Content-Disposition header
@@ -102,7 +102,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                         .set({ upload_result: uploadResult.error || "Unknown upload error" })
                         .where("id", "=", noteId)
                         .execute();
-                    return json<ActionData>({ error: uploadResult.error }, { status: 400 });
+                    return data<ActionData>({ error: uploadResult.error }, { status: 400 });
                 }
 
                 // Update the import note with success
@@ -115,7 +115,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                     .where("id", "=", noteId)
                     .execute();
 
-                return json<ActionData>({ success: true });
+                return data<ActionData>({ success: true });
             } catch (error) {
                 console.error("Error processing topo:", error);
                 const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -127,12 +127,12 @@ export const action: ActionFunction = async ({ request, context }) => {
                     })
                     .where("id", "=", noteId)
                     .execute();
-                return json<ActionData>({ error: errorMessage }, { status: 500 });
+                return data<ActionData>({ error: errorMessage }, { status: 500 });
             }
         }
 
         default:
-            return json<ActionData>({ error: "Invalid action" }, { status: 400 });
+            return data<ActionData>({ error: "Invalid action" }, { status: 400 });
     }
 };
 
@@ -183,7 +183,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         objectName: note.route_name || note.sector_name || note.crag_name || null
     }));
 
-    return json<LoaderData>({ importNotes: transformedNotes });
+    return data<LoaderData>({ importNotes: transformedNotes });
 };
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Topos import manager");

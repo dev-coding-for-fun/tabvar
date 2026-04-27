@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal, TextInput, NumberInput, Select, Button, Group, Stack } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
-import { useFetcher } from '@remix-run/react';
+import { useFetcher } from 'react-router';
 import { Route } from '~/lib/models';
 import { YDS_GRADES } from '~/lib/constants';
 

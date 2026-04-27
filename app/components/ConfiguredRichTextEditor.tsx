@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { RichTextEditor, Link } from '@mantine/tiptap';
-import { useEditor, EditorOptions, BubbleMenu } from '@tiptap/react';
+import { useEditor, EditorOptions } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Paper } from '@mantine/core';
 
 // Re-add the regex check here
 const HTML_TAG_REGEX = /<[a-z][\s\S]*>/i;

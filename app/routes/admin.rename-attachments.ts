@@ -1,5 +1,5 @@
-import { LoaderFunctionArgs, json } from "@remix-run/cloudflare";
-import type { AppLoadContext } from "@remix-run/cloudflare";
+import { LoaderFunctionArgs, data } from "react-router";
+import type { AppLoadContext } from "react-router";
 import { getAuthenticator } from "~/lib/auth.server";
 import { getAllAttachments, updateAttachmentRecord } from "~/lib/attachment.server";
 import { renameInR2 } from "~/lib/s3.server";
@@ -13,7 +13,7 @@ interface RenameResult {
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const user = await getAuthenticator(context).isAuthenticated(request);
   if (!user || user.role !== 'admin') {
-    return json({ error: 'Unauthorized' }, { status: 403 });
+    return data({ error: 'Unauthorized' }, { status: 403 });
   }
 
   const env = context.cloudflare.env as unknown as Env;
@@ -21,7 +21,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const bucketDomain = env.TOPOS_BUCKET_DOMAIN;
 
   if (!bucketName || !bucketDomain) {
-    return json({ error: 'R2 bucket configuration missing in environment variables.' }, { status: 500 });
+    return data({ error: 'R2 bucket configuration missing in environment variables.' }, { status: 500 });
   }
 
   const results: RenameResult = {
@@ -68,9 +68,9 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       }
     }
 
-    return json(results);
+    return data(results);
   } catch (error: any) {
     console.error("Error fetching or processing attachments:", error);
-    return json({ error: 'Failed to process attachments', details: error.message }, { status: 500 });
+    return data({ error: 'Failed to process attachments', details: error.message }, { status: 500 });
   }
 } 

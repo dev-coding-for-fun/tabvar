@@ -1,7 +1,7 @@
-import { ActionFunctionArgs } from '@remix-run/cloudflare'
-import { getAuthenticator } from '~/lib/auth.server'
+import { type LoaderFunctionArgs } from 'react-router'
+import { createUserSession, getAuthenticator } from '~/lib/auth.server'
 
-export const loader = ({ request, context }: ActionFunctionArgs) => {
+export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const cookieHeader = request.headers.get("Cookie");
   const cookies = cookieHeader ? Object.fromEntries(cookieHeader.split('; ').map(c => c.split('='))) : {};
   
@@ -21,8 +21,11 @@ export const loader = ({ request, context }: ActionFunctionArgs) => {
     }
   }
 
-  return getAuthenticator(context).authenticate('google', request, {
-    successRedirect: finalRedirectTo,
-    failureRedirect: '/login',
-  })
+  try {
+    const user = await getAuthenticator(context).authenticate('google', request);
+    return createUserSession(request, context, user, finalRedirectTo);
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    throw error;
+  }
 }

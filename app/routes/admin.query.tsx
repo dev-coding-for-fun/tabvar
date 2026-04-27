@@ -1,8 +1,8 @@
-import { ActionFunction, json, LoaderFunction, type MetaFunction } from "@remix-run/cloudflare";
-import { Form, useActionData, useSubmit, useLoaderData, useFetcher } from "@remix-run/react";
+import { ActionFunction, data, LoaderFunction, type MetaFunction } from "react-router";
+import { Form, useActionData, useSubmit, useLoaderData, useFetcher } from "react-router";
 import { Container, Stack, Title, Textarea, Button, Group, Alert, Table, Text, Code, FileButton, Space, LoadingOverlay } from "@mantine/core";
 import { IconAlertCircle, IconDownload, IconUpload } from "@tabler/icons-react";
-import { getAuthenticator } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { RequirePermission } from "~/components/RequirePermission";
 import { getDB } from "~/lib/db";
@@ -72,17 +72,15 @@ interface ActionData {
 
 export const loader: LoaderFunction = async ({ context }) => {
     const env = context.cloudflare.env as unknown as Env;
-    return json({ environment: env.ENVIRONMENT });
+    return data({ environment: env.ENVIRONMENT });
 };
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Database admin");
 
 export const action: ActionFunction = async ({ request, context }) => {
-    const user = await getAuthenticator(context).isAuthenticated(request, {
-        failureRedirect: "/login",
-    });
+    const user = await requireUser(request, context);
     if (user.role !== 'admin') {
-        return json({ error: PERMISSION_ERROR }, { status: 403 });
+        return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
 
     const formData = await request.formData();
@@ -102,10 +100,10 @@ export const action: ActionFunction = async ({ request, context }) => {
                 exportData[table] = rows;
             }
 
-            return json({ success: true, exportData });
+            return data({ success: true, exportData });
         } catch (error) {
             console.error('Export error:', error);
-            return json({
+            return data({
                 error: `Export failed: ${error instanceof Error ? error.stack || error.message : String(error)}`,
             });
         }
@@ -115,7 +113,7 @@ export const action: ActionFunction = async ({ request, context }) => {
         try {
             const fileData = formData.get("file");
             if (!fileData || !(fileData instanceof File)) {
-                return json({ error: "No file provided" });
+                return data({ error: "No file provided" });
             }
 
             const importData = JSON.parse(await fileData.text()) as Record<string, any[]>;
@@ -180,7 +178,7 @@ export const action: ActionFunction = async ({ request, context }) => {
                 .map(([table, count]) => `${table}: ${count} rows`)
                 .join('\n');
 
-            return json({ 
+            return data({ 
                 success: true, 
                 message: `Database imported successfully.\nTotal rows imported: ${totalRows}\n\nDetails:\n${tableStats}`,
                 importStats,
@@ -188,7 +186,7 @@ export const action: ActionFunction = async ({ request, context }) => {
             });
         } catch (error) {
             console.error('Import error:', error);
-            return json({
+            return data({
                 error: error instanceof Error ? error.stack || error.message : String(error),
             });
         }
@@ -196,7 +194,7 @@ export const action: ActionFunction = async ({ request, context }) => {
 
     const queryString = formData.get("query")?.toString();
     if (!queryString) {
-        return json({ error: "No query provided" });
+        return data({ error: "No query provided" });
     }
 
     try {
@@ -207,7 +205,7 @@ export const action: ActionFunction = async ({ request, context }) => {
         } as any);
 
         const { rows } = result;
-        return json({
+        return data({
             success: true,
             rows,
             numRows: rows.length,
@@ -216,7 +214,7 @@ export const action: ActionFunction = async ({ request, context }) => {
         });
     } catch (error) {
         console.error('Query error:', error);
-        return json({
+        return data({
             error: error instanceof Error ? error.stack || error.message : String(error),
             query: queryString
         });

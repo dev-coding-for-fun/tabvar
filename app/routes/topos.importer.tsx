@@ -1,6 +1,5 @@
-import { Form, useActionData, useNavigation, useSearchParams, useLoaderData, data } from "@remix-run/react";
-import { type ActionFunctionArgs, redirect } from "@remix-run/node";
-import type { MetaFunction } from "@remix-run/cloudflare";
+import { Form, useActionData, useNavigation, useSearchParams, useLoaderData } from "react-router";
+import { data, type ActionFunctionArgs, type LoaderFunctionArgs, type MetaFunction, redirect } from "react-router";
 import { privatePageMeta } from "~/lib/seo";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
@@ -24,7 +23,7 @@ type LoaderData = {
     type: 'crag' | 'sector';
 };
 
-export async function loader({ request, context }: ActionFunctionArgs) {
+export async function loader({ request, context }: LoaderFunctionArgs) {
     const url = new URL(request.url);
     const cragId = url.searchParams.get("cragId");
     const sectorId = url.searchParams.get("sectorId");

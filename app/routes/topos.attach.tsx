@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Container, Paper, Title, Stack, Text, Group, Badge, ActionIcon, Button } from "@mantine/core";
 import { Dropzone } from "@mantine/dropzone";
 import { IconUpload, IconX, IconFile, IconTrash } from "@tabler/icons-react";
-import { ActionFunction, data, type MetaFunction } from "@remix-run/cloudflare";
-import { Form, useFetcher } from "@remix-run/react";
+import { ActionFunction, data, type MetaFunction } from "react-router";
+import { Form, useFetcher } from "react-router";
 import { privatePageMeta } from "~/lib/seo";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
 import type { TopoAttachment, Route } from "~/lib/models";
@@ -314,7 +314,9 @@ export default function ToposAttach() {
                       onChange={(value) => handleRouteSelect(index, value)}
                       value={null}
                       searchMode="routesOnly"
-                      ref={el => searchBoxRefs.current[index] = el}
+                      ref={(el) => {
+                        searchBoxRefs.current[index] = el;
+                      }}
                     />
                   </Form>
                 </Stack>

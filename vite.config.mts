@@ -1,31 +1,12 @@
-import {
-  vitePlugin as remix,
-  cloudflareDevProxyVitePlugin as remixCloudflareDevProxy,
-} from "@remix-run/dev";
+import { reactRouter } from "@react-router/dev/vite";
+import { cloudflareDevProxy } from "@react-router/dev/vite/cloudflare";
 import { defineConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
-
-declare module "@remix-run/cloudflare" {
-  interface Future {
-    v3_singleFetch: true;
-  }
-}
 
 const config = defineConfig({
   plugins: [
-    remixCloudflareDevProxy(), 
-    remix({
-      future: {
-        unstable_optimizeDeps: true,
-        v3_fetcherPersist: true,
-        v3_relativeSplatPath: true,
-        v3_throwAbortReason: true,
-        v3_lazyRouteDiscovery: true,
-        v3_singleFetch: true,
-      }
-    }), 
-    tsconfigPaths(),
+    cloudflareDevProxy(),
+    reactRouter(),
     sentryVitePlugin({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       org: "tabvar-k0",
@@ -33,6 +14,7 @@ const config = defineConfig({
     }),
   ],
   resolve: {
+    tsconfigPaths: true,
     alias: {
       // Alias Node.js core modules to their prefixed versions
       'util': 'node:util',

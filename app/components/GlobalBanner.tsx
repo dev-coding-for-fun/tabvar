@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useUser } from '~/lib/hooks/useUser';
 import { Alert, Button, Text, Space } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
-import { useFetcher } from '@remix-run/react';
+import { useFetcher } from 'react-router';
 
 const GlobalBanner: React.FC = () => {
   const user = useUser();

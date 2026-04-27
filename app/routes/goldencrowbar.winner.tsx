@@ -1,6 +1,6 @@
-import { LoaderFunctionArgs, type MetaFunction } from "@remix-run/cloudflare";
+import { LoaderFunctionArgs, type MetaFunction } from "react-router";
 import { publicPageMeta } from "~/lib/seo";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData } from "react-router";
 import { getDB } from "~/lib/db";
 import {
     Container,

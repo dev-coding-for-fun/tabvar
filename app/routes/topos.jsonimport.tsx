@@ -1,6 +1,5 @@
-import { useFetcher, useLoaderData, useSubmit } from "@remix-run/react";
-import { type ActionFunctionArgs, type LoaderFunctionArgs, json } from "@remix-run/node";
-import type { MetaFunction } from "@remix-run/cloudflare";
+import { useFetcher, useLoaderData, useSubmit } from "react-router";
+import { type ActionFunctionArgs, type LoaderFunctionArgs, type MetaFunction, data } from "react-router";
 import { privatePageMeta } from "~/lib/seo";
 import {
     Paper,
@@ -138,7 +137,7 @@ export async function loader({ context }: LoaderFunctionArgs) {
         ])
         .execute();
 
-    return json<LoaderData>({ 
+    return data<LoaderData>({ 
         existingCrags,
         existingSectors: sectors,
         existingRoutes: routes
@@ -150,7 +149,7 @@ export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Import J
 export async function action({ request, context }: ActionFunctionArgs) {
     const user = await requireUser(request, context);
     if (user.role !== 'admin') {
-        return json({ error: PERMISSION_ERROR });
+        return data({ error: PERMISSION_ERROR });
     }
 
     const formData = await request.formData();
@@ -161,18 +160,18 @@ export async function action({ request, context }: ActionFunctionArgs) {
         const file = formData.get("file") as File;
         
         if (!file) {
-            return json({ error: "No file uploaded" });
+            return data({ error: "No file uploaded" });
         }
 
         try {
             const text = await file.text();
             console.log('File contents:', text);
-            const data = JSON.parse(text) as RouteData[];
-            console.log('Parsed data:', data);
-            return json({ success: true, data });
+            const parsedData = JSON.parse(text) as RouteData[];
+            console.log('Parsed data:', parsedData);
+            return data({ success: true, data: parsedData });
         } catch (error) {
             console.error('Error processing file:', error);
-            return json({ error: "Failed to parse JSON file" });
+            return data({ error: "Failed to parse JSON file" });
         }
     }
     
@@ -205,7 +204,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         try {
             routeData = getRouteData();
         } catch (error) {
-            return json({ error: "No route data provided" });
+            return data({ error: "No route data provided" });
         }
         
         // Handle different types of actions
@@ -261,7 +260,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 }
             }
             
-            return json({ 
+            return data({ 
                 success: true, 
                 message: `Created ${createdCrags.length} new crags`,
                 recordCount: createdCrags.length,
@@ -369,7 +368,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                     }
                 }
                 
-                return json({ 
+                return data({ 
                     success: true, 
                     message: `Created ${createdSectors.length} new sectors`,
                     recordCount: createdSectors.length,
@@ -436,7 +435,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                     }
                 }
                 
-                return json({ 
+                return data({ 
                     success: true, 
                     message: `Updated ${updatedSectors.length} sectors`,
                     recordCount: updatedSectors.length,
@@ -556,7 +555,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                         }
                     }
                     
-                    return json({ 
+                    return data({ 
                         success: true, 
                         message: `Created ${createdRoutes.length} new routes`,
                         recordCount: createdRoutes.length,
@@ -660,7 +659,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                         }
                     }
                     
-                    return json({ 
+                    return data({ 
                         success: true, 
                         message: `Updated ${updatedRoutes.length} routes`,
                         recordCount: updatedRoutes.length,
@@ -725,7 +724,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                     }
                 }
                 
-                return json({ 
+                return data({ 
                     success: true, 
                     message: `Updated ${updatedCrags.length} crags`,
                     recordCount: updatedCrags.length,
@@ -899,7 +898,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 }
             }
             
-            return json({ 
+            return data({ 
                 success: true, 
                 message: `Created ${createdNotes.length} notes/topos`,
                 recordCount: createdNotes.length,
@@ -908,11 +907,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
         }
         
         // If no matching action was found
-        return json({ error: "Invalid action" });
+        return data({ error: "Invalid action" });
         
     } catch (error) {
         console.error(`Error processing ${action} action:`, error);
-        return json({ error: `Failed to ${action?.replace(/_/g, ' ')}` });
+        return data({ error: `Failed to ${action?.replace(/_/g, ' ')}` });
     }
 }
 

@@ -6,7 +6,7 @@ import { RouteCard } from "./RouteCard";
 import { RouteEditCard } from "./RouteEditCard";
 import { useState, useEffect } from "react";
 import { TopoGallery } from "./TopoGallery";
-import { Link, useFetcher } from "@remix-run/react";
+import { Link, useFetcher } from "react-router";
 import { CragPicker } from "./CragPicker";
 import { RichTextViewer } from "./RichTextViewer";
 import { ConfiguredRichTextEditor } from "./ConfiguredRichTextEditor";

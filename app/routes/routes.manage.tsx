@@ -1,6 +1,6 @@
 import { Button, Code, Container, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
-import { ActionFunction, LoaderFunction, json, type MetaFunction } from "@remix-run/cloudflare";
-import { useFetcher } from "@remix-run/react";
+import { ActionFunction, LoaderFunction, data, type MetaFunction } from "react-router";
+import { useFetcher } from "react-router";
 import { Issue, User } from "~/lib/models";
 import { useEffect, useState } from "react";
 import { requireUser } from "~/lib/auth.server";
@@ -17,9 +17,9 @@ export interface IssueWithRoute extends Issue {
 export const loader: LoaderFunction = async ({ request, context }) => {
     const user: User = await requireUser(request, context);
     if (user.role !== 'admin') {
-        return json({ error: PERMISSION_ERROR }, { status: 403 });
+        return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
-    return json({});
+    return data({});
 }
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Manage routes");
@@ -27,7 +27,7 @@ export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Manage r
 export const action: ActionFunction = async ({ request, context }) => {
     const user = await requireUser(request, context);
     if (user.role !== 'admin') {
-        return json({ error: PERMISSION_ERROR }, { status: 403 });
+        return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
     const formData = await request.formData();
     const action = formData.get("action");
@@ -35,19 +35,19 @@ export const action: ActionFunction = async ({ request, context }) => {
     const sloperId = formData.get("sloperId")?.toString();
     if (action == "sloper-datasync1") {
         console.log('starting crag/sector sync 1');
-        return json(await syncSloperCragsAndSectors(context, 0));
+        return data(await syncSloperCragsAndSectors(context, 0));
     }
     if (action == "sloper-datasync2") {
         console.log('starting crag/sector sync 2');
-        return json(await syncSloperCragsAndSectors(context, 1));
+        return data(await syncSloperCragsAndSectors(context, 1));
     }
     else if (action == "sloper-issuesync") {
         console.log('starting issue sync');
-        return json(await syncSloperIssues(context));
+        return data(await syncSloperIssues(context));
     }
     else if (action == "sloper-routesync" && sectorId && sloperId) {
         const syncResult = await syncSloperRoutes(context, sectorId, sloperId);
-        return json({ ...syncResult, sectorId });
+        return data({ ...syncResult, sectorId });
     }
 }
 

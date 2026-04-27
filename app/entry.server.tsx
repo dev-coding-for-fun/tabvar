@@ -1,12 +1,11 @@
-import * as Sentry from "@sentry/remix/cloudflare";
+import * as Sentry from "@sentry/react-router";
 /**
  * By default, Remix will handle generating the HTTP Response for you.
  * You are free to delete this file if you'd like to, but if you ever want it revealed again, you can run `npx remix reveal` ✨
  * For more information, see https://remix.run/file-conventions/entry.server
  */
 
-import type { AppLoadContext, EntryContext } from "@remix-run/cloudflare";
-import { RemixServer } from "@remix-run/react";
+import { ServerRouter, type AppLoadContext, type EntryContext } from "react-router";
 import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server";
 
@@ -23,7 +22,7 @@ export default async function handleRequest(
 ) {
   
   const body = await renderToReadableStream(
-    <RemixServer context={remixContext} url={request.url} />,
+    <ServerRouter context={remixContext} url={request.url} />,
     {
       signal: request.signal,
       onError(error: unknown) {
@@ -46,4 +45,4 @@ export default async function handleRequest(
 
 }
 
-export const handleError = Sentry.sentryHandleError;
+export const handleError = Sentry.createSentryHandleError({});

@@ -1,6 +1,6 @@
 import { Container, Title, Paper, Text, Stack, Badge, ThemeIcon, Flex } from "@mantine/core";
 import { IconTrophy, IconMedal } from "@tabler/icons-react";
-import type { MetaFunction } from "@remix-run/cloudflare";
+import type { MetaFunction } from "react-router";
 import { publicPageMeta } from "~/lib/seo";
 
 const GOLDCROW_DESC =

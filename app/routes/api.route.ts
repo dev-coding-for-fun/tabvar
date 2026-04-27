@@ -1,4 +1,4 @@
-import { ActionFunction } from '@remix-run/cloudflare';
+import { ActionFunction } from 'react-router';
 import { getDB } from '~/lib/db';
 import { RouteSearchResults } from '~/lib/models';
 

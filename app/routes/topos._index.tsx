@@ -1,8 +1,8 @@
-import { type LoaderFunction, type ActionFunction, data, type MetaFunction } from "@remix-run/cloudflare";
-import { Link, useLoaderData, useFetcher } from "@remix-run/react";
+import { type LoaderFunction, type ActionFunction, data, type MetaFunction } from "react-router";
+import { Link, useLoaderData, useFetcher } from "react-router";
 import { publicPageMeta } from "~/lib/seo";
 import { Container, Title, Table, Anchor, Group, ActionIcon, Modal, TextInput, Button, Stack } from "@mantine/core";
-import mapboxgl from 'mapbox-gl';
+import * as mapboxglNamespace from 'mapbox-gl';
 import { useEffect, useRef, useState } from 'react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { getDB } from "~/lib/db";
@@ -11,6 +11,8 @@ import { getAuthenticator } from "~/lib/auth.server";
 import { IconMapPinPlus, IconEdit } from "@tabler/icons-react";
 import { useMapboxContext } from "~/contexts/MapboxContext";
 import { slugifyUnique } from "~/lib/slug";
+
+const mapboxgl = mapboxglNamespace.default;
 
 interface LoaderData {
   crags: Crag[];

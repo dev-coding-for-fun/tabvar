@@ -1,5 +1,5 @@
-import type { MetaFunction } from "@remix-run/cloudflare";
-import { Link } from "@remix-run/react";
+import type { MetaFunction } from "react-router";
+import { Link } from "react-router";
 import { publicPageMeta, DEFAULT_SITE_DESCRIPTION } from "~/lib/seo";
 
 export const meta: MetaFunction = () => {

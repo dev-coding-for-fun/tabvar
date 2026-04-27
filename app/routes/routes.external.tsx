@@ -1,6 +1,6 @@
 import { Button, Code, Container, Group, Loader, Stack, Table, Text, TextInput, Textarea, Title } from "@mantine/core";
-import { ActionFunction, LoaderFunction, data, type MetaFunction } from "@remix-run/cloudflare";
-import { useFetcher } from "@remix-run/react";
+import { ActionFunction, LoaderFunction, data, type MetaFunction } from "react-router";
+import { useFetcher } from "react-router";
 import { User } from "~/lib/models";
 import { useEffect, useState } from "react";
 import { requireUser } from "~/lib/auth.server";

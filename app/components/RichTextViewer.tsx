@@ -1,4 +1,4 @@
-import { TypographyStylesProvider, Text } from "@mantine/core";
+import { Text, Typography } from "@mantine/core";
 
 interface RichTextViewerProps {
   content: string;
@@ -24,9 +24,9 @@ export function RichTextViewer({ content }: RichTextViewerProps) {
   if (isHtml) {
     // Render as HTML using TypographyStylesProvider
     return (
-      <TypographyStylesProvider>
+      <Typography>
         <div dangerouslySetInnerHTML={{ __html: content }} />
-      </TypographyStylesProvider>
+      </Typography>
     );
   } else {
     // Render as plain text, preserving line breaks and wrapping

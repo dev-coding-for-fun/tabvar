@@ -1,4 +1,4 @@
-import type { AppLoadContext } from "@remix-run/cloudflare";
+import type { AppLoadContext } from "react-router";
 import { getDB } from "./db";
 import type { Route, Sector } from "./models";
 

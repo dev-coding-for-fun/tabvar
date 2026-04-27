@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, TextInput, Button, Group, Textarea, Select, Checkbox, Stack, Paper, MultiSelect } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useFetcher } from '@remix-run/react';
+import { useFetcher } from 'react-router';
 import { IssueType, SubIssueType, issueTypes, subIssuesByType } from '~/lib/constants';
 import { Issue } from '~/lib/models';
 

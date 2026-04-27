@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { AppLoadContext } from "@remix-run/cloudflare";
+import { AppLoadContext } from "react-router";
 import { getDB } from "./db";
 import he from 'he';
 import { Kysely } from "kysely";

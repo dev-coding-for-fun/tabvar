@@ -1,5 +1,5 @@
 import { getDB } from "./db";
-import type { AppLoadContext } from "@remix-run/cloudflare";
+import type { AppLoadContext } from "react-router";
 import { uploadFileToR2, deleteFromR2 } from "./s3.server";
 import { TopoAttachment } from "./models";
 

@@ -1,5 +1,5 @@
-import { ActionFunctionArgs, redirect, type MetaFunction } from "@remix-run/cloudflare";
-import { Form, Link } from "@remix-run/react";
+import { ActionFunctionArgs, type MetaFunction } from "react-router";
+import { Form, Link } from "react-router";
 import { logout } from "~/lib/auth.server";
 import { privatePageMeta } from "~/lib/seo";
 
@@ -7,8 +7,9 @@ export const meta: MetaFunction = () => privatePageMeta("Sign out");
 
 export const action = async ({
   request,
+  context,
 }: ActionFunctionArgs) => {
-  return logout(request);
+  return logout(request, context);
 };
 
 export default function Logout() {

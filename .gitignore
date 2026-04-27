@@ -4,6 +4,7 @@ sloperdata
 /.cache
 /.vscode
 /build
+/.react-router
 .env
 .env.cursor
 

@@ -1,8 +1,8 @@
 import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Space, Stack, Textarea, Title, rem } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
-import { ActionFunction, LoaderFunction, data, redirect, type MetaFunction } from "@remix-run/cloudflare";
-import { Form, Link, useActionData, useLoaderData, useNavigation, useSearchParams } from "@remix-run/react";
+import { ActionFunction, LoaderFunction, data, redirect, type MetaFunction } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useSearchParams } from "react-router";
 import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
@@ -11,7 +11,7 @@ import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/cons
 import { getDB } from "~/lib/db";
 import { RouteSearchResults } from "~/lib/models";
 import { uploadFileToR2 } from "~/lib/s3.server";
-import { useFetcher } from "@remix-run/react";
+import { useFetcher } from "react-router";
 import { privatePageMeta } from "~/lib/seo";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; //5 MB

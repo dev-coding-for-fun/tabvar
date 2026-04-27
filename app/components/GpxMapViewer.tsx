@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
+import * as mapboxglNamespace from 'mapbox-gl';
 import * as togeojson from '@mapbox/togeojson';
 import { Loader, Alert, Center } from '@mantine/core';
 import 'mapbox-gl/dist/mapbox-gl.css';
+
+const mapboxgl = mapboxglNamespace.default;
 
 interface GpxMapViewerProps {
   gpxUrl: string;

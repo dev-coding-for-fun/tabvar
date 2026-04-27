@@ -2,7 +2,7 @@
 import { Kysely, KyselyPlugin, PluginTransformQueryArgs, PluginTransformResultArgs, QueryResult, RootOperationNode, UnknownRow } from 'kysely';
 import { D1Dialect } from 'kysely-d1'
 import { DB } from './db.d'
-import { AppLoadContext } from '@remix-run/cloudflare';
+import { AppLoadContext } from 'react-router';
 
 // Create a plugin to decode HTML entities
 class HtmlDecodePlugin implements KyselyPlugin {
@@ -48,6 +48,9 @@ class HtmlDecodePlugin implements KyselyPlugin {
 
 export function getDB(context: AppLoadContext) {
   const env = context.cloudflare.env as unknown as Env;
+  if (!env.DB) {
+    throw new Error("D1 database binding is not configured");
+  }
   return new Kysely<DB>({
     dialect: new D1Dialect({ database: env.DB }),
     plugins: [new HtmlDecodePlugin()],

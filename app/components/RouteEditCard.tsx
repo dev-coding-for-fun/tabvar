@@ -3,7 +3,7 @@ import { IconFlag, IconCheck, IconX } from "@tabler/icons-react";
 import { CLIMB_STYLES, getGradeColor, getGradesbyStyle } from "~/lib/constants";
 import type { Route } from "~/lib/models";
 import { useEffect, useState } from "react";
-import { useFetcher } from "@remix-run/react";
+import { useFetcher } from "react-router";
 import { ConfiguredRichTextEditor } from "./ConfiguredRichTextEditor";
 
 interface ActionData {

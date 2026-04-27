@@ -1,14 +1,5 @@
-import { captureRemixErrorBoundaryError } from "@sentry/remix";
-import {
-  Links,
-  Meta,
-  Outlet,
-  Scripts,
-  ScrollRestoration,
-  useNavigate,
-  useRouteError,
-  useLocation,
-} from "@remix-run/react";
+import { captureException } from "@sentry/react-router";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useNavigate, useRouteError, useLocation } from "react-router";
 import '@mantine/core/styles.layer.css';
 import 'mantine-datatable/styles.layer.css';
 import '@mantine/notifications/styles.css';
@@ -29,9 +20,9 @@ import {
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { Notifications } from "@mantine/notifications";
-import { LoaderFunction, type MetaFunction } from "@remix-run/cloudflare";
+import { LoaderFunction, type MetaFunction } from "react-router";
 import { DEFAULT_SITE_DESCRIPTION } from "~/lib/seo";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData } from "react-router";
 import { getAuthenticator } from "~/lib/auth.server";
 import type { User } from "~/lib/models";
 import { UserProvider } from "./lib/hooks/useUser";
@@ -93,7 +84,7 @@ interface RootLoaderData {
 
 export const ErrorBoundary = () => {
   const error = useRouteError();
-  captureRemixErrorBoundaryError(error);
+  captureException(error);
   return <div>Something went wrong</div>;
 };
 

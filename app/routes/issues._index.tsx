@@ -1,6 +1,6 @@
 import { Badge, Container, Group, Select, SelectProps, Stack, Text, Title, Tooltip, Anchor } from "@mantine/core";
-import { LoaderFunction, type MetaFunction } from "@remix-run/cloudflare";
-import { Link, useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
+import { LoaderFunction, type MetaFunction } from "react-router";
+import { Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import { privatePageMeta } from "~/lib/seo";
 import { Crag, IssueWithDetails, User } from "~/lib/models";
 import { DataTable } from "mantine-datatable";

@@ -1,6 +1,6 @@
 import { ActionIcon, Group, Stack, Tooltip } from "@mantine/core";
 import { IconFileUpload, IconDatabase, IconUsers, IconDownload } from "@tabler/icons-react";
-import { Link } from "@remix-run/react";
+import { Link } from "react-router";
 import { useUser } from "~/lib/hooks/useUser";
 
 export function EditorMenu() {

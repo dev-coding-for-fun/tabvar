@@ -1,4 +1,4 @@
-import type { LoaderFunction } from "@remix-run/cloudflare";
+import type { LoaderFunction } from "react-router";
 import { absoluteUrl } from "~/lib/seo";
 
 export const loader: LoaderFunction = async () => {
