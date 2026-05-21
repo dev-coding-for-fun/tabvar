@@ -1,6 +1,9 @@
-import type { getDB } from "./db";
+import type { Kysely } from "kysely";
+import type { DB } from "./db.d";
 
 const MAX_SLUG_LENGTH = 80;
+
+type SlugLookupDb = Pick<Kysely<DB>, "selectFrom">;
 
 export function slugify(value: string): string {
   const slug = value
@@ -18,7 +21,7 @@ export function slugify(value: string): string {
 }
 
 export async function slugifyUnique(
-  db: ReturnType<typeof getDB>,
+  db: SlugLookupDb,
   value: string,
   excludeId?: number
 ): Promise<string> {
