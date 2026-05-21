@@ -3,16 +3,18 @@ import { cloudflareDevProxy } from "@react-router/dev/vite/cloudflare";
 import { defineConfig } from "vitest/config";
 import { sentryReactRouter } from "@sentry/react-router";
 
-const config = defineConfig(async (configEnv) => ({
-  plugins: [
-    cloudflareDevProxy(),
-    reactRouter(),
-    ...(await sentryReactRouter({
-      authToken: process.env.SENTRY_AUTH_TOKEN,
-      org: "tabvar-k0",
-      project: "tabvar-app",
-    }, configEnv)),
-  ],
+const config = defineConfig(async (configEnv) => {
+  const isTest = configEnv.mode === "test";
+
+  return {
+    plugins: [
+      ...(!isTest ? [cloudflareDevProxy(), reactRouter()] : []),
+      ...(await sentryReactRouter({
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+        org: "tabvar-k0",
+        project: "tabvar-app",
+      }, configEnv)),
+    ],
   resolve: {
     tsconfigPaths: true,
     alias: {
@@ -44,6 +46,7 @@ const config = defineConfig(async (configEnv) => ({
       ],
     },
   },
-}));
+  };
+});
 
 export default config;

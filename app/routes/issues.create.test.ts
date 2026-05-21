@@ -104,6 +104,9 @@ describe("issues.create loader", () => {
         pitchCount: "1",
       },
     });
+    expect(db.__queries[0].leftJoin).toHaveBeenCalledWith("sector", "route.sector_id", "sector.id");
+    expect(db.__queries[0].leftJoin).toHaveBeenCalledWith("crag", "sector.crag_id", "crag.id");
+    expect(db.__queries[0].innerJoin).not.toHaveBeenCalled();
   });
 });
 

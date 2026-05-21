@@ -105,11 +105,33 @@ export async function readJson(value: unknown) {
   if (value instanceof Response) {
     return value.json();
   }
+  if (
+    value &&
+    typeof value === "object" &&
+    "type" in value &&
+    value.type === "DataWithResponseInit" &&
+    "data" in value
+  ) {
+    return value.data;
+  }
 
   return value;
 }
 
 export function getStatus(value: unknown) {
+  if (
+    value &&
+    typeof value === "object" &&
+    "type" in value &&
+    value.type === "DataWithResponseInit" &&
+    "init" in value
+  ) {
+    const init = value.init;
+    return init && typeof init === "object" && "status" in init && typeof init.status === "number"
+      ? init.status
+      : 200;
+  }
+
   return value instanceof Response ? value.status : 200;
 }
 

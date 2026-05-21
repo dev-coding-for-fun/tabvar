@@ -2,7 +2,7 @@ import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
 import { ActionFunction, LoaderFunction, data, redirect, type MetaFunction } from "react-router";
-import { Form, Link, useActionData, useLoaderData, useNavigation, useSearchParams } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
@@ -11,7 +11,6 @@ import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/cons
 import { getDB } from "~/lib/db";
 import { RouteSearchResults } from "~/lib/models";
 import { uploadFileToR2 } from "~/lib/s3.server";
-import { useFetcher } from "react-router";
 import { privatePageMeta } from "~/lib/seo";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; //5 MB
@@ -29,8 +28,8 @@ export const loader: LoaderFunction = async ({ request, context }) => {
   const db = getDB(context);
   const route = await db
     .selectFrom('route')
-    .innerJoin('sector', 'route.sector_id', 'sector.id')
-    .innerJoin('crag', 'sector.crag_id', 'crag.id')
+    .leftJoin('sector', 'route.sector_id', 'sector.id')
+    .leftJoin('crag', 'sector.crag_id', 'crag.id')
     .where('route.id', '=', parseInt(routeId))
     .select([
       'route.id as routeId',
@@ -150,28 +149,28 @@ export const action: ActionFunction = async ({ request, context }) => {
 export default function CreateIssue() {
   const { initialRoute } = useLoaderData<{ initialRoute: RouteSearchResults | null }>();
 
-  const getInitialRouteValue = () => {
-    if (!initialRoute) return null;
-    return `route:${initialRoute.routeId}:${initialRoute.cragSlug ?? initialRoute.cragId}`;
-  }
+  const initialRouteValue = initialRoute
+    ? `route:${initialRoute.routeId}:${initialRoute.cragSlug ?? initialRoute.cragId}`
+    : null;
+  const initialBoltCount = initialRoute?.boltCount ? Number(initialRoute.boltCount) : null;
 
-  const [selectedRoute, setSelectedRoute] = useState<string | null>(getInitialRouteValue());
+  const [selectedRoute, setSelectedRoute] = useState<string | null | undefined>(undefined);
   const [selectedIssueType, setSelectedIssueType] = useState<IssueType | null>(null);
   const [selectedSubIssue, setSelectedSubIssue] = useState<string | null>(null);
   const [selectedBolts, setSelectedBolts] = useState<string[]>([]);
-  const [boltCount, setBoltCount] = useState<number | null>(initialRoute?.boltCount ? Number(initialRoute.boltCount) : null);
+  const [selectedBoltCount, setSelectedBoltCount] = useState<number | null | undefined>(undefined);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const navigation = useNavigation();
   const [overlayVisible, { open, close }] = useDisclosure(false);
   const formRef = useRef<HTMLFormElement>(null);
   const searchBoxRef = useRef<SearchBoxRef | null>(null);
-  const [routeModalOpened, setRouteModalOpened] = useState(false);
-  const [searchParams] = useSearchParams();
 
   const actionData = useActionData<{ [key: string]: string }>();
 
   const isSubmitting = navigation.state === 'loading' || navigation.state === 'submitting';
+  const routeValue = selectedRoute === undefined ? initialRouteValue : selectedRoute;
+  const boltCount = selectedBoltCount === undefined ? initialBoltCount : selectedBoltCount;
 
   const isSubIssueDisabled = (subIssue: string) => {
     if (!selectedIssueType) return true;
@@ -191,7 +190,7 @@ export default function CreateIssue() {
       setSelectedSubIssue(null);
       setSelectedIssueType(null);
       setSelectedRoute(null);
-      setBoltCount(null);
+      setSelectedBoltCount(null);
       setSelectedFiles([]);
       setSelectedBolts([]);
     }
@@ -199,14 +198,6 @@ export default function CreateIssue() {
       close();
     }
   }, [isSubmitting, open, close]);
-
-  useEffect(() => {
-    if (selectedIssueType && selectedSubIssue) {
-      if (!subIssuesByType[selectedIssueType].includes(selectedSubIssue as SubIssueType)) {
-        setSelectedSubIssue(null);
-      }
-    }
-  }, [selectedIssueType, selectedSubIssue]);
 
   useEffect(() => {
     if (actionData) {
@@ -224,8 +215,18 @@ export default function CreateIssue() {
 
   const handleRouteChange = (selected: { value: string | null; boltCount: number | null }) => {
     setSelectedRoute(selected.value);
-    setBoltCount((selected.boltCount) ? selected.boltCount : 20);
+    setSelectedBoltCount((selected.boltCount) ? selected.boltCount : 20);
   }
+
+  const handleIssueTypeChange = (value: string) => {
+    const issueType = value as IssueType;
+    setSelectedIssueType(issueType);
+    setSelectedSubIssue((currentSubIssue) => (
+      currentSubIssue && !subIssuesByType[issueType].includes(currentSubIssue as SubIssueType)
+        ? null
+        : currentSubIssue
+    ));
+  };
 
   const handleFileChange = (files: File[]) => {
     const validFiles = files.filter(file => {
@@ -259,9 +260,9 @@ export default function CreateIssue() {
           name="route"
           required={true}
           onChange={handleRouteChange}
-          value={selectedRoute}
+          value={routeValue}
           ref={searchBoxRef}
-          initialItems={initialRoute ? [initialRoute] : []}
+          selectedItem={initialRoute}
         />
         <Space h="sm" />
         <Stack>
@@ -271,7 +272,7 @@ export default function CreateIssue() {
             description="for multi-pitch routes, detail affected pitch(es) in the notes"
             required={true}
             value={selectedIssueType ?? ''}
-            onChange={(value: string) => setSelectedIssueType(value as IssueType)}
+            onChange={handleIssueTypeChange}
           ><Group mt="xs">
               {issueTypes.map((issue) => (
                 <Radio key={issue.value} value={issue.value} label={issue.label} />

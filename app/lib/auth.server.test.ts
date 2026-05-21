@@ -1,9 +1,16 @@
+// @vitest-environment node
+
 import { describe, expect, it } from "vitest";
 import { createContext, createGetRequest, createUser } from "~/test/helpers";
 import { createUserSession, logout, requireUser } from "./auth.server";
 
+function setCookieHeaders(response: Response) {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  return headers.getSetCookie?.() ?? [response.headers.get("Set-Cookie") ?? ""];
+}
+
 function sessionCookieFrom(response: Response) {
-  const setCookie = response.headers.get("Set-Cookie") ?? "";
+  const setCookie = setCookieHeaders(response).join(", ");
   const match = setCookie.match(/_session=[^;]+/);
 
   if (!match) {
@@ -24,8 +31,8 @@ describe("auth.server session helpers", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/topos");
-    expect(response.headers.get("Set-Cookie")).toContain("_session=");
-    expect(response.headers.get("Set-Cookie")).toContain("redirectTo=;");
+    expect(setCookieHeaders(response).join(", ")).toContain("_session=");
+    expect(setCookieHeaders(response).join(", ")).toContain("redirectTo=;");
   });
 
   it("redirects unauthenticated users to login with the current path", async () => {
@@ -73,6 +80,7 @@ describe("auth.server session helpers", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/login");
-    expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0");
+    expect(setCookieHeaders(response).join(", ")).toContain("_session=;");
+    expect(setCookieHeaders(response).join(", ")).toContain("Expires=Thu, 01 Jan 1970");
   });
 });

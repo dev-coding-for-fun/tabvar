@@ -1,6 +1,6 @@
 import { useFetcher } from "react-router";
 import { SelectProps, Group, Select, Text, Badge, Stack, Box } from "@mantine/core";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { RouteSearchResults } from "~/lib/models";
 
 interface RouteSearchBoxProps {
@@ -10,11 +10,207 @@ interface RouteSearchBoxProps {
     onChange?: (selected: { value: string | null; boltCount: number | null }) => void;
     value: string | null;
     searchMode?: 'allObjects' | 'routesOnly' | 'global' | undefined;
+    selectedItem?: RouteSearchResults | null;
+    pinnedItems?: RouteSearchResults[];
     initialItems?: RouteSearchResults[];
 }
 
 export type SearchBoxRef = { 
   reset: () => void;
+};
+
+export const getRouteSearchItemDisplayName = (item: RouteSearchResults) => {
+  switch (item.type) {
+    case 'route':
+      return item.routeName || 'Unnamed Route';
+    case 'sector':
+      return item.sectorName || item.routeName || 'Unnamed Sector';
+    case 'crag':
+      return item.cragName || item.routeName || 'Unnamed Crag';
+    default:
+      return 'Unknown';
+  }
+};
+
+export const getRouteSearchItemSelectedLabel = (item: RouteSearchResults) => {
+  const labelParts = [
+    getRouteSearchItemDisplayName(item),
+    item.type === 'route' ? item.gradeYds : null,
+    item.type !== 'crag' ? item.sectorName : null,
+    item.cragName,
+  ];
+
+  return labelParts.filter(Boolean).join(' · ');
+};
+
+export const getRouteSearchItemValue = (item: RouteSearchResults) => {
+  const cragPath = item.cragSlug ?? item.cragId;
+
+  if (item.type === 'route') {
+    return `${item.type}:${item.routeId}:${cragPath}`;
+  }
+  else if (item.type === 'sector') {
+    return `${item.type}:${item.sectorId}:${cragPath}`;
+  }
+  else if (item.type === 'crag') {
+    return `${item.type}:${item.cragId}:${cragPath}`;
+  }
+  else throw new Error(`Unknown item type: ${item.type}`);
+};
+
+export const mergeRouteSearchItems = (...itemGroups: Array<RouteSearchResults[] | undefined>) => {
+  const seen = new Set<string>();
+  const merged: RouteSearchResults[] = [];
+
+  for (const items of itemGroups) {
+    for (const item of items ?? []) {
+      const value = getRouteSearchItemValue(item);
+      if (!seen.has(value)) {
+        seen.add(value);
+        merged.push(item);
+      }
+    }
+  }
+
+  return merged;
+};
+
+export const RouteSearchOptionBadge = ({ type }: { type: string }) => {
+  switch (type) {
+    case 'route':
+      return <Badge size="xs" variant="light" color="blue" style={{ flexShrink: 0 }}>Route</Badge>;
+    case 'sector':
+      return <Badge size="xs" variant="light" color="green" style={{ flexShrink: 0 }}>Sector</Badge>;
+    case 'crag':
+      return <Badge size="xs" variant="light" color="orange" style={{ flexShrink: 0 }}>Crag</Badge>;
+    default:
+      return null;
+  }
+};
+
+const RouteSearchOptionWrapper = ({
+  children,
+  type,
+}: React.PropsWithChildren<{ type: string }>) => (
+  <Group gap="xs" wrap="nowrap" align="flex-start" style={{ width: '100%' }}>
+    <RouteSearchOptionBadge type={type} />
+    {children}
+  </Group>
+);
+
+export const RouteSearchOption = ({ item }: { item: RouteSearchResults }) => {
+  if (item.type === 'route') {
+    return (
+      <RouteSearchOptionWrapper type={item.type}>
+        <Box style={{ flexGrow: 1, minWidth: 0 }}>
+          {/* Mobile Layout for Route */}
+          <Stack
+            gap="xs"
+            hiddenFrom="sm"
+          >
+            <Group wrap="wrap" gap="xs" align="flex-start">
+              <Text size="sm" fw={500} lineClamp={1} title={getRouteSearchItemDisplayName(item)} style={{ flexGrow: 1, minWidth: '50px' /* Allow some space before wrapping grade */ }}>
+                {getRouteSearchItemDisplayName(item)}
+              </Text>
+              {item.gradeYds && (
+                <Badge size="xs" variant="outline" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {item.gradeYds}
+                </Badge>
+              )}
+            </Group>
+            {(item.sectorName || item.cragName) && (
+              <Group gap="xs" wrap="nowrap">
+                {item.sectorName && <Text size="xs" opacity={0.7}>{item.sectorName}</Text>}
+                {item.cragName && <Text size="xs" opacity={0.7}>{item.cragName}</Text>}
+              </Group>
+            )}
+          </Stack>
+
+          {/* Desktop Layout for Route */}
+          <Group
+            wrap="nowrap"
+            justify="space-between"
+            align="flex-start"
+            visibleFrom="sm"
+            style={{
+              flexGrow: 1,
+            }}
+          >
+            {/* Left part: Route Name + Grade */}
+            <Group
+              wrap="nowrap"
+              gap="xs"
+              align="center"
+              style={{ flexGrow: 1, minWidth: 0, marginRight: 'var(--mantine-spacing-xs)' }}
+            >
+              <Text
+                size="sm"
+                fw={500}
+                lineClamp={1}
+                title={getRouteSearchItemDisplayName(item)}
+                style={{ minWidth: 0 }}
+              >
+                {getRouteSearchItemDisplayName(item)}
+              </Text>
+              {item.gradeYds && (
+                <Badge
+                  size="xs"
+                  variant="outline"
+                  style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                >
+                  {item.gradeYds}
+                </Badge>
+              )}
+            </Group>
+
+            {/* Right part: Sector + Crag (only if they exist) */}
+            {(item.sectorName || item.cragName) && (
+              <Group
+                wrap="nowrap"
+                gap="xs"
+                style={{ flexShrink: 0 }}
+                align="center"
+              >
+                {item.sectorName && <Text size="xs" opacity={0.7}>{item.sectorName}</Text>}
+                {item.cragName && <Text size="xs" opacity={0.7}>{item.cragName}</Text>}
+              </Group>
+            )}
+          </Group>
+        </Box>
+      </RouteSearchOptionWrapper>
+    );
+  }
+
+  if (item.type === 'sector') {
+    return (
+      <RouteSearchOptionWrapper type={item.type}>
+        <Text size="sm" fw={500} lineClamp={1} title={getRouteSearchItemDisplayName(item)} style={{ flexGrow: 1, minWidth: 0 }}>
+          {getRouteSearchItemDisplayName(item)}
+        </Text>
+        {item.cragName && (
+          <Text size="xs" opacity={0.7} lineClamp={1} title={item.cragName} style={{ flexShrink: 0, marginLeft: 'var(--mantine-spacing-xs)' }}>
+            {item.cragName}
+          </Text>
+        )}
+      </RouteSearchOptionWrapper>
+    );
+  }
+
+  if (item.type === 'crag') {
+    return (
+      <RouteSearchOptionWrapper type={item.type}>
+        <Text size="sm" fw={500} lineClamp={1} title={getRouteSearchItemDisplayName(item)} style={{ flexGrow: 1, minWidth: 0 }}>
+          {getRouteSearchItemDisplayName(item)}
+        </Text>
+      </RouteSearchOptionWrapper>
+    );
+  }
+
+  return (
+    <RouteSearchOptionWrapper type={item.type}>
+      <Text size="sm">{getRouteSearchItemDisplayName(item)}</Text>
+    </RouteSearchOptionWrapper>
+  );
 };
 
 const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
@@ -24,12 +220,22 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
   onChange = () => { },
   searchMode = 'global',
   value,
+  selectedItem,
+  pinnedItems = [],
   initialItems,
 }, _ref) => {
   const fetcher = useFetcher<RouteSearchResults[]>();
   const [query, setQuery] = useState('');
-  const [items, setItems] = useState<RouteSearchResults[]>(initialItems ?? []);
-  const [isLookup, setIsLookup] = useState(false);
+
+  const items = useMemo(() => {
+    const searchResults = Array.isArray(fetcher.data) ? fetcher.data : [];
+    return mergeRouteSearchItems(
+      selectedItem ? [selectedItem] : undefined,
+      pinnedItems,
+      initialItems,
+      searchResults
+    );
+  }, [fetcher.data, initialItems, pinnedItems, selectedItem]);
 
   useImperativeHandle(_ref, () => ({
     reset() {
@@ -37,180 +243,17 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
     },
   }));
 
-  const getItemDisplayName = (item: RouteSearchResults) => {
-    switch (item.type) {
-      case 'route':
-        return item.routeName || 'Unnamed Route';
-      case 'sector':
-        return item.sectorName || item.routeName || 'Unnamed Sector';
-      case 'crag':
-        return item.cragName || item.routeName || 'Unnamed Crag';
-      default:
-        return 'Unknown';
-    }
-  };
-
-  const getItemValue = (item: RouteSearchResults) => {
-    const cragPath = item.cragSlug ?? item.cragId;
-
-    if (item.type === 'route') { 
-      return `${item.type}:${item.routeId}:${cragPath}`; 
-    }
-    else if (item.type === 'sector') { 
-      return `${item.type}:${item.sectorId}:${cragPath}`; 
-    }
-    else if (item.type === 'crag') { 
-      return `${item.type}:${item.cragId}:${cragPath}`; 
-    }
-    else throw new Error(`Unknown item type: ${item.type}`);
-  };
-
   const renderSelectOption: SelectProps['renderOption'] = ({ option }) => {
-    const item = items.find(item => getItemValue(item) === option.value);
+    const item = items.find(item => getRouteSearchItemValue(item) === option.value);
     if (!item) return null;
 
-    const getTypeBadge = (type: string) => {
-      switch (type) {
-        case 'route':
-          return <Badge size="xs" variant="light" color="blue" style={{ flexShrink: 0 }}>Route</Badge>;
-        case 'sector':
-          return <Badge size="xs" variant="light" color="green" style={{ flexShrink: 0 }}>Sector</Badge>;
-        case 'crag':
-          return <Badge size="xs" variant="light" color="orange" style={{ flexShrink: 0 }}>Crag</Badge>;
-        default:
-          return null;
-      }
-    };
-
-    // Common wrapper for all item types
-    const ItemWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-      <Group gap="xs" wrap="nowrap" align="flex-start" style={{ width: '100%' }}>
-        {getTypeBadge(item.type)}
-        {children}
-      </Group>
-    );
-    
-    if (item.type === 'route') {
-      return (
-        <ItemWrapper>
-          <Box style={{ flexGrow: 1, minWidth: 0 }}>
-            {/* Mobile Layout for Route */}
-            <Stack
-              gap="xs"
-              hiddenFrom="sm"
-            >
-              <Group wrap="wrap" gap="xs" align="flex-start">
-                <Text size="sm" fw={500} lineClamp={1} title={getItemDisplayName(item)} style={{ flexGrow: 1, minWidth: '50px' /* Allow some space before wrapping grade */ }}>
-                  {getItemDisplayName(item)}
-                </Text>
-                {item.gradeYds && (
-                  <Badge size="xs" variant="outline" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    {item.gradeYds}
-                  </Badge>
-                )}
-              </Group>
-              {(item.sectorName || item.cragName) && (
-                <Group gap="xs" wrap="nowrap">
-                  {item.sectorName && <Text size="xs" opacity={0.7}>{item.sectorName}</Text>}
-                  {item.cragName && <Text size="xs" opacity={0.7}>{item.cragName}</Text>}
-                </Group>
-              )}
-            </Stack>
-
-            {/* Desktop Layout for Route */}
-            <Group
-              wrap="nowrap"
-              justify="space-between"
-              align="flex-start"
-              visibleFrom="sm"
-              style={{
-                flexGrow: 1,
-              }}
-            >
-              {/* Left part: Route Name + Grade */}
-              <Group 
-                wrap="nowrap" 
-                gap="xs" 
-                align="center"
-                style={{ flexGrow: 1, minWidth: 0, marginRight: 'var(--mantine-spacing-xs)' }}
-              >
-                <Text 
-                  size="sm" 
-                  fw={500} 
-                  lineClamp={1} 
-                  title={getItemDisplayName(item)} 
-                  style={{ minWidth: 0 }}
-                >
-                  {getItemDisplayName(item)}
-                </Text>
-                {item.gradeYds && (
-                  <Badge 
-                    size="xs" 
-                    variant="outline" 
-                    style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-                  >
-                    {item.gradeYds}
-                  </Badge>
-                )}
-              </Group>
-
-              {/* Right part: Sector + Crag (only if they exist) */}
-              {(item.sectorName || item.cragName) && (
-                <Group 
-                  wrap="nowrap" 
-                  gap="xs" 
-                  style={{ flexShrink: 0 }}
-                  align="center"
-                >
-                  {item.sectorName && <Text size="xs" opacity={0.7}>{item.sectorName}</Text>}
-                  {item.cragName && <Text size="xs" opacity={0.7}>{item.cragName}</Text>}
-                </Group>
-              )}
-            </Group>
-          </Box>
-        </ItemWrapper>
-      );
-    }
-
-    if (item.type === 'sector') {
-      return (
-        <ItemWrapper>
-          <Text size="sm" fw={500} lineClamp={1} title={getItemDisplayName(item)} style={{ flexGrow: 1, minWidth: 0 }}>
-            {getItemDisplayName(item)}
-          </Text>
-          {item.cragName && (
-            <Text size="xs" opacity={0.7} lineClamp={1} title={item.cragName} style={{ flexShrink: 0, marginLeft: 'var(--mantine-spacing-xs)' }}>
-              {item.cragName}
-            </Text>
-          )}
-        </ItemWrapper>
-      );
-    }
-
-    if (item.type === 'crag') {
-      return (
-        <ItemWrapper>
-          <Text size="sm" fw={500} lineClamp={1} title={getItemDisplayName(item)} style={{ flexGrow: 1, minWidth: 0 }}>
-            {getItemDisplayName(item)}
-          </Text>
-        </ItemWrapper>
-      );
-    }
-
-    // Fallback for unknown type (should not happen with current data structure)
-    return (
-      <ItemWrapper>
-        <Text size="sm">{getItemDisplayName(item)}</Text>
-      </ItemWrapper>
-    );
+    return <RouteSearchOption item={item} />;
   };
 
   useEffect(() => {
-    console.log('Search useEffect triggered with query:', query);
     const debounceTime = query.length < 2 ? 1000 : 300;
     const handler = setTimeout(() => {
       if (query.trim().length > 1) {
-        console.log('Making API call for query:', query);
         fetcher.load(`/api/search?query=${encodeURIComponent(query)}&searchMode=${searchMode}`);
       }
     }, debounceTime);
@@ -218,23 +261,21 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
     return () => {
       clearTimeout(handler);
     };
-  }, [query, searchMode]);
+  }, [fetcher, query, searchMode]);
 
   // Check if we have a value but the corresponding item isn't in our items array
   useEffect(() => {
     // Only fetch if idle, to prevent re-triggering fetches on re-renders while a fetch is in-flight.
     if (value && fetcher.state === 'idle') {
-      const itemExists = items.find(item => getItemValue(item) === value);
+      const itemExists = items.find(item => getRouteSearchItemValue(item) === value);
       if (!itemExists) {
         // Extract routeId from value format "route:routeId:cragPath"
         const parts = value.split(':');
         if (parts.length >= 2 && parts[0] === 'route') {
           const routeId = parts[1];
-          console.log('Value set but item not found, fetching route data for:', routeId);
           // Use a form submission to fetch route data by ID
           const formData = new FormData();
           formData.append('routeId', routeId);
-          setIsLookup(true); // Flag that the next fetch is a lookup
           fetcher.submit(formData, {
             method: 'post',
             action: '/api/route'
@@ -242,39 +283,22 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
         }
       }
     }
-  }, [value, items, fetcher.state]);
-
-  useEffect(() => {
-    if (fetcher.data && Array.isArray(fetcher.data)) {
-      setItems(fetcher.data);
-    }
-  }, [fetcher.data]);
-
-  useEffect(() => {
-    console.log('Items state updated:', items);
-  }, [items]);
+  }, [fetcher, items, value]);
 
   const handleSearchChange = (q: string) => {
-    console.log('handleSearchChange called with:', q);
     setQuery(q);
   };
 
   const handleChange = (value: string | null) => {
-    console.log('handleChange called with:', value);
     if (!value) {
-      console.log('handleChange: clearing selection');
       onChange({ value: null, boltCount: null });
       return;
     }
 
-    const item = items.find(item => getItemValue(item) === value);
-    console.log('handleChange: found item:', item);
+    const item = items.find(item => getRouteSearchItemValue(item) === value);
     if (item) {
       const boltCount = item.type === 'route' ? Number(item.boltCount) : null;
-      console.log('handleChange: calling onChange with:', { value: getItemValue(item), boltCount });
-      onChange({ value: getItemValue(item), boltCount });
-    } else {
-      console.log('handleChange: item not found in items array');
+      onChange({ value: getRouteSearchItemValue(item), boltCount });
     }
   };
 
@@ -283,8 +307,8 @@ const RouteSearchBox = forwardRef<SearchBoxRef, RouteSearchBoxProps>(({
       label={label}
       name={name}
       data={items.map(item => ({ 
-        value: getItemValue(item),
-        label: getItemDisplayName(item)
+        value: getRouteSearchItemValue(item),
+        label: getRouteSearchItemSelectedLabel(item)
       }))}
       searchable
       searchValue={query}
