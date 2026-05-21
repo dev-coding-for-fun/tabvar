@@ -1,17 +1,17 @@
 import { reactRouter } from "@react-router/dev/vite";
 import { cloudflareDevProxy } from "@react-router/dev/vite/cloudflare";
 import { defineConfig } from "vitest/config";
-import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { sentryReactRouter } from "@sentry/react-router";
 
-const config = defineConfig({
+const config = defineConfig(async (configEnv) => ({
   plugins: [
     cloudflareDevProxy(),
     reactRouter(),
-    sentryVitePlugin({
+    ...(await sentryReactRouter({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       org: "tabvar-k0",
       project: "tabvar-app",
-    }),
+    }, configEnv)),
   ],
   resolve: {
     tsconfigPaths: true,
@@ -44,6 +44,6 @@ const config = defineConfig({
       ],
     },
   },
-});
+}));
 
 export default config;

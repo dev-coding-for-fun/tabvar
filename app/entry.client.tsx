@@ -1,4 +1,4 @@
-import { init, reactRouterTracingIntegration } from "@sentry/react-router";
+import * as Sentry from "@sentry/react-router";
 /**
  * By default, Remix will handle hydrating your app on the client for you.
  * You are free to delete this file if you'd like to, but if you ever want it revealed again, you can run `npx remix reveal` ✨
@@ -21,21 +21,19 @@ function getClientEnvironment() {
   }
 }
 
-init({
-    dsn: "https://73b48c35d2dc3946041ac5ebefafbbda@o4509392494723072.ingest.us.sentry.io/4509392495902720",
-    tracesSampleRate: 1,
-    environment: getClientEnvironment(), // Add environment tag
-    integrations: [reactRouterTracingIntegration()]
+Sentry.init({
+  dsn: "https://73b48c35d2dc3946041ac5ebefafbbda@o4509392494723072.ingest.us.sentry.io/4509392495902720",
+  environment: getClientEnvironment(),
+  integrations: [Sentry.reactRouterTracingIntegration()],
+  tracesSampleRate: 1.0,
+  tracePropagationTargets: [/^\//],
 });
 
-(async () => {
-
-  startTransition(() => {
-    hydrateRoot(
-      document,
-      <StrictMode>
-        <HydratedRouter />
-      </StrictMode>
-    );
-  });
-})();
+startTransition(() => {
+  hydrateRoot(
+    document,
+    <StrictMode>
+      <HydratedRouter onError={Sentry.sentryOnError} />
+    </StrictMode>
+  );
+});

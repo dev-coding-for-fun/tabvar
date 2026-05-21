@@ -28,7 +28,7 @@ import type { User } from "~/lib/models";
 import { UserProvider } from "./lib/hooks/useUser";
 import { EditorMenu } from "./components/EditorMenu";
 import RouteSearchBox from "./components/routeSearchBox";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { MapboxProvider } from "./contexts/MapboxContext";
 import GlobalBanner from "./components/GlobalBanner";
 
@@ -84,7 +84,11 @@ interface RootLoaderData {
 
 export const ErrorBoundary = () => {
   const error = useRouteError();
-  captureException(error);
+
+  useEffect(() => {
+    captureException(error);
+  }, [error]);
+
   return <div>Something went wrong</div>;
 };
 
