@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@alwaysmeticulous/recorder-loader": "^2.277.0",
-    "@aws-sdk/client-s3": "^3.1037.0",
+    "@aws-sdk/client-s3": "^3.1051.0",
     "@coji/remix-auth-google": "^4.2.0",
     "@google/generative-ai": "^0.24.1",
     "@hello-pangea/dnd": "^18.0.1",
@@ -35,7 +35,7 @@
     "@mapbox/togeojson": "^0.16.2",
     "@react-router/cloudflare": "^7.14.2",
     "@sentry/cloudflare": "^10.50.0",
-    "@sentry/react-router": "^10.50.0",
+    "@sentry/react-router": "^10.53.1",
     "@sentry/vite-plugin": "^5.2.0",
     "@tabler/icons-react": "^3.41.1",
     "@tiptap/extension-color": "^3.22.4",
@@ -50,7 +50,7 @@
     "date-fns-tz": "^3.2.0",
     "he": "^1.2.0",
     "isbot": "^5.1.39",
-    "kysely": "^0.28.16",
+    "kysely": "^0.28.17",
     "kysely-d1": "^0.4.0",
     "mantine-datatable": "^8.3.13",
     "mapbox-gl": "^3.22.0",
@@ -78,7 +78,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
-    "@typescript-eslint/parser": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.4",
     "@vitest/coverage-v8": "^4.1.6",
     "better-sqlite3": "^12.9.0",
     "eslint": "^8.57.1",
@@ -98,7 +98,7 @@
     "wrangler": "^4.85.0"
   },
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.13.0"
   },
   "packageManager": "npm@11.12.1"
 }
