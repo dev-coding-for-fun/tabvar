@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createContext, createGetRequest, createMockDb, readJson } from "~/test/helpers";
+import { createRouteArgs, createContext, createGetRequest, createMockDb, readJson } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
@@ -18,11 +18,11 @@ describe("api.issues loader", () => {
 
   it("throws 400 when cragid is missing", async () => {
     await expect(
-      loader({
+      loader(createRouteArgs({
         request: createGetRequest("https://example.com/api/issues"),
         context: createContext(),
         params: {},
-      })
+      }))
     ).rejects.toMatchObject({ status: 400 });
   });
 
@@ -45,11 +45,11 @@ describe("api.issues loader", () => {
     const db = createMockDb({ select: [{ execute: issues }] });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/api/issues?cragid=7"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual(issues);
     expect(db.selectFrom).toHaveBeenCalledWith("issue");

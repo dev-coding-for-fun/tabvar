@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createContext, createFormRequest, createMockDb } from "~/test/helpers";
+import { createRouteArgs, createContext, createFormRequest, createMockDb } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
@@ -17,11 +17,11 @@ describe("api.route action", () => {
   });
 
   it("returns 400 when routeId is missing", async () => {
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/api/route", {}),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(400);
@@ -34,11 +34,11 @@ describe("api.route action", () => {
     const db = createMockDb({ select: [{ executeTakeFirst: undefined }] });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/api/route", { routeId: "123" }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect((response as Response).status).toBe(200);
     await expect((response as Response).json()).resolves.toEqual([]);
@@ -66,11 +66,11 @@ describe("api.route action", () => {
     });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/api/route", { routeId: "123" }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect((response as Response).status).toBe(200);
     await expect((response as Response).json()).resolves.toEqual([

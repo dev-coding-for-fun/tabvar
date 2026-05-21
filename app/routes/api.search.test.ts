@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createContext, createGetRequest, createMockDb, readJson } from "~/test/helpers";
+import { createRouteArgs, createContext, createGetRequest, createMockDb, readJson } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
@@ -17,11 +17,11 @@ describe("api.search loader", () => {
   });
 
   it("returns 400 when query is missing", async () => {
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/api/search"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(400);
@@ -34,11 +34,11 @@ describe("api.search loader", () => {
   it("returns 400 for an invalid search mode", async () => {
     mocks.getDB.mockReturnValue(createMockDb());
 
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/api/search?query=ace&searchMode=bad"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(400);
@@ -71,11 +71,11 @@ describe("api.search loader", () => {
     });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest(url),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual([row]);
     expect(db.selectFrom).toHaveBeenCalledTimes(expectedSelects);
@@ -85,11 +85,11 @@ describe("api.search loader", () => {
     const db = createMockDb({ select: [{ execute: [] }] });
     mocks.getDB.mockReturnValue(db);
 
-    await loader({
+    await loader(createRouteArgs({
       request: createGetRequest("https://example.com/api/search?query=ace!!"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(db.__queries[0].where).toHaveBeenCalledWith(expect.anything(), "match", '"ace" *');
   });

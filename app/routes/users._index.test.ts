@@ -7,6 +7,7 @@ import {
   createUser,
   getStatus,
   readJson,
+  createRouteArgs,
 } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
@@ -32,11 +33,11 @@ describe("users._index loader", () => {
   it("returns 403 data for non-admin users", async () => {
     mocks.requireUser.mockResolvedValue(createUser({ role: "member" }));
 
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/users"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(403);
     expect(await readJson(response)).toMatchObject({
@@ -54,11 +55,11 @@ describe("users._index loader", () => {
     mocks.getDB.mockReturnValue(db);
     mocks.requireUser.mockResolvedValue(createUser({ role: "admin" }));
 
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/users"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual({ users, invites });
     expect(db.selectFrom).toHaveBeenCalledWith("user");
@@ -75,11 +76,11 @@ describe("users._index action", () => {
   it("returns 403 for non-admin users", async () => {
     mocks.requireUser.mockResolvedValue(createUser({ role: "member" }));
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/users", { action: "set_role" }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(403);
     expect(await readJson(response)).toEqual({
@@ -93,7 +94,7 @@ describe("users._index action", () => {
     });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/users", {
         action: "delete_user",
         uid: "user-2",
@@ -101,7 +102,7 @@ describe("users._index action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual({ success: true });
     expect(db.deleteFrom).toHaveBeenCalledWith("signin_event");
@@ -109,7 +110,7 @@ describe("users._index action", () => {
   });
 
   it("skips deleting the protected account", async () => {
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/users", {
         action: "delete_user",
         uid: "protected",
@@ -117,7 +118,7 @@ describe("users._index action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual({ success: true });
     expect(mocks.getDB).not.toHaveBeenCalled();
@@ -127,7 +128,7 @@ describe("users._index action", () => {
     const db = createMockDb({ update: [{ execute: undefined }] });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/users", {
         action: "set_role",
         uid: "user-2",
@@ -135,7 +136,7 @@ describe("users._index action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual({ success: true });
     expect(db.updateTable).toHaveBeenCalledWith("user");
@@ -148,7 +149,7 @@ describe("users._index action", () => {
     });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/users", {
         action: "create_invite",
         invite_email: "one@example.com; two@example.com",
@@ -157,7 +158,7 @@ describe("users._index action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual({ success: true, message: "Invite created." });
     expect(db.insertInto).toHaveBeenCalledTimes(2);
@@ -176,7 +177,7 @@ describe("users._index action", () => {
     const db = createMockDb({ insert: [{ execute: new Error("unique failed") }] });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/users", {
         action: "create_invite",
         invite_email: "one@example.com",
@@ -184,7 +185,7 @@ describe("users._index action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(500);
     expect(await readJson(response)).toEqual({
@@ -197,25 +198,25 @@ describe("users._index action", () => {
     const db = createMockDb({ delete: [{ execute: undefined }] });
     mocks.getDB.mockReturnValue(db);
 
-    const deleteResponse = await action({
+    const deleteResponse = await action(createRouteArgs({
       request: createFormRequest("https://example.com/users", {
         action: "delete_invite",
         inviteId: "one@example.com",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(deleteResponse)).toEqual({ success: true, message: "Invite deleted." });
     expect(db.deleteFrom).toHaveBeenCalledWith("user_invite");
 
-    const redirectResponse = await action({
+    const redirectResponse = await action(createRouteArgs({
       request: createFormRequest("https://example.com/users", {
         action: "unknown",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(redirectResponse).toBeInstanceOf(Response);
     expect((redirectResponse as Response).status).toBe(302);

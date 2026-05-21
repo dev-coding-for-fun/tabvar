@@ -7,6 +7,7 @@ import {
   createUser,
   getStatus,
   readJson,
+  createRouteArgs,
 } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
@@ -49,11 +50,11 @@ describe("topos._index loader", () => {
     mocks.getDB.mockReturnValue(db);
     mocks.getAuthenticator.mockReturnValue({ isAuthenticated: vi.fn().mockResolvedValue(user) });
 
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/topos"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(response).toEqual({ crags, user });
     expect(db.selectFrom).toHaveBeenCalledWith("crag");
@@ -68,11 +69,11 @@ describe("topos._index action", () => {
   it("rejects unauthorized users", async () => {
     mocks.getAuthenticator.mockReturnValue({ isAuthenticated: vi.fn().mockResolvedValue(null) });
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos", { action: "create_crag" }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(403);
     expect(await readJson(response)).toEqual({ error: "Unauthorized" });
@@ -83,11 +84,11 @@ describe("topos._index action", () => {
       isAuthenticated: vi.fn().mockResolvedValue(createUser({ role: "admin" })),
     });
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos", { action: "create_crag" }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(400);
     expect(await readJson(response)).toEqual({ error: "Name is required" });
@@ -113,14 +114,14 @@ describe("topos._index action", () => {
       isAuthenticated: vi.fn().mockResolvedValue(createUser({ role: "super" })),
     });
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos", {
         action: "create_crag",
         name: "New Crag",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(200);
     expect(await readJson(response)).toEqual({
@@ -143,7 +144,7 @@ describe("topos._index action", () => {
       isAuthenticated: vi.fn().mockResolvedValue(createUser({ role: "admin" })),
     });
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos", {
         action: "update_position",
         cragId: "5",
@@ -152,7 +153,7 @@ describe("topos._index action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(200);
     expect(await readJson(response)).toEqual({ success: true });

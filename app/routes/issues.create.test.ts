@@ -7,6 +7,7 @@ import {
   createUser,
   getStatus,
   readJson,
+  createRouteArgs,
 } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
@@ -36,11 +37,11 @@ describe("issues.create loader", () => {
   });
 
   it("returns null initialRoute when no routeId is supplied", async () => {
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/issues/create"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual({ initialRoute: null });
     expect(mocks.getDB).not.toHaveBeenCalled();
@@ -50,11 +51,11 @@ describe("issues.create loader", () => {
     const db = createMockDb({ select: [{ executeTakeFirst: undefined }] });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/issues/create?routeId=100"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual({ initialRoute: null });
   });
@@ -81,11 +82,11 @@ describe("issues.create loader", () => {
     });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/issues/create?routeId=100"),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(await readJson(response)).toEqual({
       initialRoute: {
@@ -113,13 +114,13 @@ describe("issues.create action", () => {
   });
 
   it("rejects missing route selection", async () => {
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/issues/create", {
         issueType: "Bolts",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(400);
     expect(await readJson(response)).toMatchObject({
@@ -129,14 +130,14 @@ describe("issues.create action", () => {
   });
 
   it("rejects invalid issue type", async () => {
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/issues/create", {
         route: "route:100",
         issueType: "Bad Type",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(400);
     expect(await readJson(response)).toMatchObject({
@@ -151,7 +152,7 @@ describe("issues.create action", () => {
     });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/issues/create", {
         route: "route:100",
         issueType: "Bolts",
@@ -161,7 +162,7 @@ describe("issues.create action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(302);
@@ -195,7 +196,7 @@ describe("issues.create action", () => {
       url: "https://issues.example.com/bolt.jpg",
     });
 
-    await action({
+    await action(createRouteArgs({
       request: createFormRequest("https://example.com/issues/create", {
         route: "route:100",
         issueType: "Bolts",
@@ -203,7 +204,7 @@ describe("issues.create action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(mocks.uploadFileToR2).toHaveBeenCalledWith(
       expect.anything(),

@@ -6,6 +6,7 @@ import {
   createUser,
   getStatus,
   readJson,
+  createRouteArgs,
 } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
@@ -52,14 +53,14 @@ describe("issues.manage action", () => {
   it("returns 403 for users outside moderation roles", async () => {
     mocks.requireUser.mockResolvedValue(createUser({ role: "anonymous" }));
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/issues/manage", {
         action: "accept",
         issueId: "10",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(403);
     expect(await readJson(response)).toMatchObject({
@@ -82,7 +83,7 @@ describe("issues.manage action", () => {
     });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/issues/manage", {
         action: actionName,
         issueId: "10",
@@ -91,7 +92,7 @@ describe("issues.manage action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(200);
     expect(await readJson(response)).toMatchObject({
@@ -111,7 +112,7 @@ describe("issues.manage action", () => {
   it("keeps the current claim action gap visible", async () => {
     mocks.requireUser.mockResolvedValue(createUser({ role: "member" }));
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/issues/manage", {
         action: "claim",
         issueId: "10",
@@ -119,7 +120,7 @@ describe("issues.manage action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(400);
     expect(await readJson(response)).toMatchObject({
@@ -132,14 +133,14 @@ describe("issues.manage action", () => {
   it("requires admin role for permanent delete", async () => {
     mocks.requireUser.mockResolvedValue(createUser({ role: "member" }));
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/issues/manage", {
         action: "delete",
         issueId: "10",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(403);
     expect(await readJson(response)).toMatchObject({
@@ -160,14 +161,14 @@ describe("issues.manage action", () => {
     });
     mocks.getDB.mockReturnValue(db);
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/issues/manage", {
         action: "delete",
         issueId: "10",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
 
     expect(getStatus(response)).toBe(200);
     expect(await readJson(response)).toMatchObject({

@@ -5,6 +5,7 @@ import {
   createGetRequest,
   createMockDb,
   createUser,
+  createRouteArgs,
 } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
@@ -89,11 +90,11 @@ describe("topos.$crag loader", () => {
 
   it("throws 400 without a crag identifier", async () => {
     await expect(
-      loader({
+      loader(createRouteArgs({
         request: createGetRequest("https://example.com/topos/"),
         context: createContext(),
         params: {},
-      })
+      }))
     ).rejects.toMatchObject({ status: 400 });
   });
 
@@ -102,11 +103,11 @@ describe("topos.$crag loader", () => {
     mocks.getDB.mockReturnValue(db);
 
     await expect(
-      loader({
+      loader(createRouteArgs({
         request: createGetRequest("https://example.com/topos/1?foo=bar"),
         context: createContext(),
         params: { crag: "1" },
-      })
+      }))
     ).rejects.toMatchObject({ status: 301 });
   });
 
@@ -115,11 +116,11 @@ describe("topos.$crag loader", () => {
     const user = createUser({ role: "member" });
     mocks.getAuthenticator.mockReturnValue({ isAuthenticated: vi.fn().mockResolvedValue(user) });
 
-    const response = await loader({
+    const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/topos/test-crag"),
       context: createContext(),
       params: { crag: "test-crag" },
-    });
+    }));
 
     expect(response).toMatchObject({
       crag: { id: 1, name: "Test Crag" },
@@ -132,11 +133,11 @@ describe("topos.$crag loader", () => {
     mocks.loadCragBySlug.mockRejectedValue(new Error("not found"));
 
     await expect(
-      loader({
+      loader(createRouteArgs({
         request: createGetRequest("https://example.com/topos/missing"),
         context: createContext(),
         params: { crag: "missing" },
-      })
+      }))
     ).rejects.toMatchObject({ status: 404 });
   });
 });
@@ -150,14 +151,14 @@ describe("topos.$crag action", () => {
   it("returns a permission error for non-editor users", async () => {
     mocks.requireUser.mockResolvedValue(createUser({ role: "member" }));
 
-    const response = await action({
+    const response = await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos/test-crag", {
         action: "create_sector",
         cragId: "1",
       }),
       context: createContext(),
       params: { crag: "test-crag" },
-    });
+    }));
 
     expect(response).toEqual({
       error: "You do not have the required permissions to access this page.",
@@ -170,7 +171,7 @@ describe("topos.$crag action", () => {
     mocks.deleteSector.mockResolvedValue({ success: true });
 
     await expect(
-      action({
+      action(createRouteArgs({
         request: createFormRequest("https://example.com/topos/test-crag", {
           action: "create_sector",
           cragId: "1",
@@ -178,11 +179,11 @@ describe("topos.$crag action", () => {
         }),
         context: createContext(),
         params: {},
-      })
+      }))
     ).resolves.toEqual({ success: true, sector: { id: 1 } });
     expect(mocks.createSector).toHaveBeenCalledWith(expect.anything(), 1, "New Sector");
 
-    await action({
+    await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos/test-crag", {
         action: "update_sector_name",
         sectorId: "2",
@@ -190,17 +191,17 @@ describe("topos.$crag action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
     expect(mocks.updateSectorName).toHaveBeenCalledWith(expect.anything(), 2, "Renamed");
 
-    await action({
+    await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos/test-crag", {
         action: "delete_sector",
         sectorId: "2",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
     expect(mocks.deleteSector).toHaveBeenCalledWith(expect.anything(), 2);
   });
 
@@ -209,7 +210,7 @@ describe("topos.$crag action", () => {
     mocks.updateRoute.mockResolvedValue({ success: true });
     mocks.deleteRoute.mockResolvedValue({ success: true });
 
-    await action({
+    await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos/test-crag", {
         action: "create_route",
         sectorId: "2",
@@ -218,13 +219,13 @@ describe("topos.$crag action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
     expect(mocks.createRoute).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ sectorId: 2, name: "New Route", gradeYds: "5.10a" })
     );
 
-    await action({
+    await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos/test-crag", {
         action: "update_route",
         routeId: "3",
@@ -232,20 +233,20 @@ describe("topos.$crag action", () => {
       }),
       context: createContext(),
       params: {},
-    });
+    }));
     expect(mocks.updateRoute).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ id: 3, name: "Updated Route" })
     );
 
-    await action({
+    await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos/test-crag", {
         action: "delete_route",
         routeId: "3",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
     expect(mocks.deleteRoute).toHaveBeenCalledWith(expect.anything(), 3);
   });
 
@@ -255,7 +256,7 @@ describe("topos.$crag action", () => {
     mocks.deleteCrag.mockResolvedValue({ success: true });
 
     await expect(
-      action({
+      action(createRouteArgs({
         request: createFormRequest("https://example.com/topos/test-crag", {
           action: "update_crag_name",
           cragId: "1",
@@ -263,18 +264,18 @@ describe("topos.$crag action", () => {
         }),
         context: createContext(),
         params: {},
-      })
+      }))
     ).resolves.toEqual({ success: true });
     expect(db.updateTable).toHaveBeenCalledWith("crag");
 
-    await action({
+    await action(createRouteArgs({
       request: createFormRequest("https://example.com/topos/test-crag", {
         action: "delete_crag",
         cragId: "1",
       }),
       context: createContext(),
       params: {},
-    });
+    }));
     expect(mocks.deleteCrag).toHaveBeenCalledWith(expect.anything(), 1);
   });
 });

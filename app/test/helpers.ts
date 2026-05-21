@@ -1,4 +1,4 @@
-import type { AppLoadContext } from "react-router";
+import type { ActionFunctionArgs, AppLoadContext, LoaderFunctionArgs } from "react-router";
 import { vi, type Mock } from "vitest";
 import type { User } from "~/lib/models";
 
@@ -91,6 +91,14 @@ export function createFormRequest(
     method: "POST",
     body: formData,
   });
+}
+
+export function createRouteArgs(args: {
+  request: Request;
+  context: AppLoadContext;
+  params: Record<string, string | undefined>;
+}): ActionFunctionArgs & LoaderFunctionArgs {
+  return args as ActionFunctionArgs & LoaderFunctionArgs;
 }
 
 export async function readJson(value: unknown) {
