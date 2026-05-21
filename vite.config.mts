@@ -1,6 +1,6 @@
 import { reactRouter } from "@react-router/dev/vite";
 import { cloudflareDevProxy } from "@react-router/dev/vite/cloudflare";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 
 const config = defineConfig({
@@ -28,6 +28,21 @@ const config = defineConfig({
   },
   build: {
     sourcemap: true,
+  },
+  test: {
+    environment: "happy-dom",
+    setupFiles: ["./vitest.setup.ts"],
+    include: ["app/**/*.test.{ts,tsx}"],
+    exclude: ["node_modules", "build", ".react-router", "dist"],
+    coverage: {
+      reporter: ["text", "html"],
+      exclude: [
+        "app/test/**",
+        "**/*.test.{ts,tsx}",
+        ".react-router/**",
+        "build/**",
+      ],
+    },
   },
 });
 

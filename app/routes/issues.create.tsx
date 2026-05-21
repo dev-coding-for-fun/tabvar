@@ -152,7 +152,7 @@ export default function CreateIssue() {
 
   const getInitialRouteValue = () => {
     if (!initialRoute) return null;
-    return `route:${initialRoute.routeId}:${initialRoute.cragId}`;
+    return `route:${initialRoute.routeId}:${initialRoute.cragSlug ?? initialRoute.cragId}`;
   }
 
   const [selectedRoute, setSelectedRoute] = useState<string | null>(getInitialRouteValue());
