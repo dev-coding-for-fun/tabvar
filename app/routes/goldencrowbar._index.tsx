@@ -4,7 +4,7 @@ import type { MetaFunction } from "react-router";
 import { publicPageMeta } from "~/lib/seo";
 
 const GOLDCROW_DESC =
-  "Announcing the winners of the 2025 Golden Crowbar Award, recognizing outstanding contributions to Alberta's climbing community.";
+  "Announcing the winners of the 2025 Golden Crowbar Award, recognizing outstanding contributions to the Bow Valley's climbing community.";
 
 export const meta: MetaFunction = () => {
   return publicPageMeta({
