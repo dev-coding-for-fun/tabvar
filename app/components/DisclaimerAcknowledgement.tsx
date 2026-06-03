@@ -5,7 +5,7 @@ import { useUser } from '~/lib/hooks/useUser';
 const GUEST_DISCLAIMER_ACK_KEY = 'tabvar.disclaimerAcknowledgedAt';
 
 export const DISCLAIMER_TITLE = 'Important Safety Notice';
-export const DISCLAIMER_MESSAGE = "Rock climbing is a potentially dangerous sport, and anyone who does not fully recognize this fact should not use any of the information provided herein. The information only provides the location and approximate path followed by the various climbs and offers no advice, expressed or implied, as to how they may be safely ascended or descended. The contents of the information provided are subject to errors and omissions and to changes that may take place over time. Anyone in doubt of their ability to safely climb and descend from any of these routes is strongly advised to not go on the route or to use the services of a registered mountain guide.";
+export const DISCLAIMER_MESSAGE = "WARNING: CLIMBING IS INHERENTLY DANGEROUS. TABVAR and its volunteers work hard to fund and maintain fixed hardware in the Bow Valley, but due to the scale of the area and limited resources, we cannot guarantee the safety of any route. Fixed hardware degrades, rock is dynamic, and bolts can fail without warning. Route descriptions are user-submitted and not vetted. Your safety is entirely your own responsibility. By using this guide, you assume all risks of injury or death and explicitly release the author, TABVAR, and its volunteers from all liability, INCLUDING LIABILITY ARISING FROM THEIR NEGLIGENCE.";
 export const DISCLAIMER_ACKNOWLEDGEMENT_LABEL = 'I have read and understand this safety notice.';
 
 interface DisclaimerAcknowledgementContextValue {

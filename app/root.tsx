@@ -100,6 +100,7 @@ export default function App() {
   const searchBoxRef = useRef<{ reset: () => void }>(null);
   const [drawerOpened, { toggle: toggleDrawer, close: closeDrawer }] = useDisclosure(false);
   const isMobile = useMediaQuery('(max-width: 1100px)', true, { getInitialValueInEffect: false });
+  const isToposRoute = location.pathname === '/topos' || location.pathname.startsWith('/topos/');
 
   const handleSearchSelect = useCallback((selected: { value: string | null; boltCount: number | null }) => {
     if (selected.value) {
@@ -243,7 +244,7 @@ export default function App() {
                     )}
                   </div>
                 </header>
-                {location.pathname !== '/goldencrowbar' && <GlobalBanner />}
+                {isToposRoute && <GlobalBanner />}
                 <Box style={{ flexGrow: 1 }}>
                   <EditorMenu />
                   <Outlet />
