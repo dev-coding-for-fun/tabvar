@@ -21,6 +21,10 @@ interface UploadFileResult {
   type: string;
 }
 
+interface UploadFileOptions {
+  keyPrefix?: string;
+}
+
 async function getFileBuffer(file: File | Blob): Promise<Buffer> {
   // Both File and Blob objects have arrayBuffer method
   const arrayBuffer = await file.arrayBuffer();
@@ -40,6 +44,7 @@ export async function uploadFileToR2(
   file: File | Blob,
   bucketName: string,
   bucketDomain: string,
+  options: UploadFileOptions = {},
 ): Promise<UploadFileResult> {
   const buffer = await getFileBuffer(file);
   const client = getS3Client(context);
@@ -54,9 +59,15 @@ export async function uploadFileToR2(
     contentType = 'application/gpx+xml';
   }
 
+  const normalizedPrefix = options.keyPrefix
+    ?.split('/')
+    .filter(Boolean)
+    .join('/');
+  const objectKey = normalizedPrefix ? `${normalizedPrefix}/${decodedFileName}` : decodedFileName;
+
   const params = {
     Bucket: bucketName,
-    Key: decodedFileName, // Use the decoded filename as the key
+    Key: objectKey,
     Body: buffer,
     ContentType: contentType,
   };
@@ -64,13 +75,13 @@ export async function uploadFileToR2(
   const command = new PutObjectCommand(params);
   await client.send(command);
 
-  // Encode the filename component for the URL to match R2's storage
-  const encodedFileName = encodeURIComponent(decodedFileName);
-  const fileUrl = `${bucketDomain}/${encodedFileName}`;
+  // Encode each path segment while preserving any object-key prefixes.
+  const encodedObjectKey = objectKey.split('/').map(encodeURIComponent).join('/');
+  const fileUrl = `${bucketDomain}/${encodedObjectKey}`;
 
   return {
     url: fileUrl, // Use the encoded URL
-    name: decodedFileName, // Return the clean, decoded filename
+    name: objectKey,
     type: contentType,
   };
 }

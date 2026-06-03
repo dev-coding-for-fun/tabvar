@@ -286,6 +286,19 @@ export interface TopoAttachment {
   url: string;
 }
 
+export interface TopoSubmission {
+  client: string;
+  created_at: Generated<string>;
+  id: string;
+  kind: string;
+  payload: string;
+  review_notes: string | null;
+  reviewed_at: string | null;
+  reviewed_by_uid: string | null;
+  status: Generated<string>;
+  uid: string;
+}
+
 export interface TopobuilderConnectTicket {
   created_at: Generated<string>;
   expires_at: string;
@@ -355,6 +368,7 @@ export interface DB {
   sector_attachment: SectorAttachment;
   signin_event: SigninEvent;
   topo_attachment: TopoAttachment;
+  topo_submission: TopoSubmission;
   topobuilder_connect_ticket: TopobuilderConnectTicket;
   user: User;
   user_invite: UserInvite;

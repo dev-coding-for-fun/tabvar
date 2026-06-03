@@ -1,4 +1,5 @@
 import type { AppLoadContext } from "react-router";
+import { getDB } from "./db";
 
 const TICKET_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_RETURN_TO_ALLOWLIST = ["topobuilder:"];
@@ -17,10 +18,16 @@ type TopobuilderEnv = {
 
 export type ApiErrorCode =
   | "bad_request"
+  | "invalid_submission"
   | "invalid_return_to"
   | "invalid_ticket"
   | "invalid_token"
   | "method_not_allowed";
+
+export type ApiTokenUser = {
+  tokenId: string;
+  uid: string;
+};
 
 function getEnv(context: AppLoadContext): TopobuilderEnv {
   return context.cloudflare.env as unknown as TopobuilderEnv;
@@ -115,6 +122,45 @@ export function bearerToken(request: Request) {
   const header = request.headers.get("Authorization");
   const match = header?.match(/^Bearer\s+(.+)$/i);
   return match?.[1] ?? null;
+}
+
+export async function requireApiToken(
+  request: Request,
+  context: AppLoadContext,
+  headers?: HeadersInit,
+): Promise<ApiTokenUser> {
+  const token = bearerToken(request);
+  if (!token) {
+    throw apiError("invalid_token", 401, "A bearer token is required.", headers);
+  }
+
+  const db = getDB(context);
+  const now = new Date().toISOString();
+  const tokenHash = await hashSecret(token);
+  const existingToken = await db.selectFrom("api_token")
+    .select(["id", "uid"])
+    .where("token_hash", "=", tokenHash)
+    .where("client", "=", "topobuilder")
+    .where("revoked_at", "is", null)
+    .where((eb) => eb.or([
+      eb("expires_at", "is", null),
+      eb("expires_at", ">", now),
+    ]))
+    .executeTakeFirst();
+
+  if (!existingToken) {
+    throw apiError("invalid_token", 401, "The bearer token is invalid.", headers);
+  }
+
+  await db.updateTable("api_token")
+    .set({ last_used_at: now })
+    .where("id", "=", existingToken.id)
+    .execute();
+
+  return {
+    tokenId: existingToken.id,
+    uid: existingToken.uid,
+  };
 }
 
 export function corsHeaders(request: Request, context: AppLoadContext) {

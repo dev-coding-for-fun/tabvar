@@ -158,3 +158,16 @@ export interface TopoAttachment {
     crags: Crag[];
     createdAt?: string | null;
 }
+
+export interface TopoSubmission {
+    id: string;
+    uid: string;
+    client: string;
+    status: string;
+    kind: string;
+    payload: string;
+    createdAt?: string | null;
+    reviewedByUid?: string | null;
+    reviewedAt?: string | null;
+    reviewNotes?: string | null;
+}
