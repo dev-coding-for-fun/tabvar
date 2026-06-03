@@ -1,6 +1,6 @@
 import { ActionIcon, Group, Image, Modal, Paper, Stack, Text, useMantineTheme, FileButton, LoadingOverlay, Button } from "@mantine/core";
 import { IconPaperclip, IconX, IconFileTypePdf, IconPhoto, IconRoute, IconDownload } from "@tabler/icons-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import { notifications } from "@mantine/notifications";
 import type { TopoAttachment } from "~/lib/models";
@@ -9,6 +9,12 @@ import type { LightboxProps } from "yet-another-react-lightbox-lite";
 import "yet-another-react-lightbox-lite/styles.css";
 import { GpxMapViewer } from "./GpxMapViewer";
 import { useMapboxContext } from "~/contexts/MapboxContext";
+import {
+  DISCLAIMER_TITLE,
+  DisclaimerAcknowledgementForm,
+  DisclaimerMessage,
+  useDisclaimerAcknowledgement,
+} from "./DisclaimerAcknowledgement";
 
 interface TopoGalleryProps {
   attachments: TopoAttachment[];
@@ -29,13 +35,86 @@ export function TopoGallery({
 }: TopoGalleryProps) {
   const theme = useMantineTheme();
   const { mapboxAccessToken, mapboxStyleUrl } = useMapboxContext();
+  const { isAcknowledged } = useDisclaimerAcknowledgement();
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | undefined>(undefined);
   const [deleteAttachmentId, setDeleteAttachmentId] = useState<number | null>(null);
   const [selectedGpxAttachment, setSelectedGpxAttachment] = useState<TopoAttachment | null>(null);
   const [isGpxModalOpen, setIsGpxModalOpen] = useState(false);
+  const [pendingDownload, setPendingDownload] = useState<TopoAttachment | null>(null);
+  const pendingDownloadRef = useRef<TopoAttachment | null>(null);
   const fetcher = useFetcher();
 
   const imageAttachments = attachments.filter(attachment => attachment.type.startsWith('image/'));
+
+  useEffect(() => {
+    pendingDownloadRef.current = pendingDownload;
+  }, [pendingDownload]);
+
+  const getAttachmentUrl = (attachment: TopoAttachment) => (
+    attachment.url.startsWith('http') ? attachment.url : `https://${attachment.url}`
+  );
+
+  const downloadAttachment = (attachment: TopoAttachment, extension?: string) => {
+    const url = getAttachmentUrl(attachment);
+    const link = document.createElement('a');
+    const filename = attachment.name || url.split('/').pop() || `attachment${extension ?? ''}`;
+
+    link.href = url;
+    link.download = extension && !filename.endsWith(extension) ? `${filename}${extension}` : filename;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const continueAttachmentDownload = (attachment: TopoAttachment) => {
+    const type = attachment.type;
+
+    if (type.startsWith('image/')) {
+      const imageIndex = imageAttachments.findIndex(img => img.id === attachment.id);
+      if (imageIndex >= 0) {
+        setSelectedImageIndex(imageIndex);
+      }
+      return;
+    }
+
+    if (type === 'application/gpx+xml') {
+      if (mapboxAccessToken && mapboxStyleUrl) {
+        setSelectedGpxAttachment(attachment);
+        setIsGpxModalOpen(true);
+      } else {
+        notifications.show({
+          title: 'Map Unavailable',
+          message: 'Map configuration is missing.',
+          color: 'orange'
+        });
+      }
+      return;
+    }
+
+    downloadAttachment(attachment);
+  };
+
+  const requestAttachmentDownload = (attachment: TopoAttachment) => {
+    if (isAcknowledged) {
+      continueAttachmentDownload(attachment);
+      return;
+    }
+
+    setPendingDownload(attachment);
+  };
+
+  const handleDisclaimerAcknowledged = () => {
+    const attachment = pendingDownloadRef.current;
+
+    if (!attachment) {
+      return;
+    }
+
+    continueAttachmentDownload(attachment);
+    setPendingDownload(null);
+  };
 
   const handleDeleteClick = (attachment: TopoAttachment) => {
     setDeleteAttachmentId(attachment.id);
@@ -208,6 +287,19 @@ export function TopoGallery({
         </Stack>
       </Modal>
 
+      <Modal
+        opened={pendingDownload !== null}
+        onClose={() => setPendingDownload(null)}
+        title={DISCLAIMER_TITLE}
+        size="lg"
+      >
+        <DisclaimerMessage />
+        <DisclaimerAcknowledgementForm
+          buttonLabel="Acknowledge & Download"
+          onAcknowledged={handleDisclaimerAcknowledged}
+        />
+      </Modal>
+
       {/* GPX Map Modal */}
       <Modal
         opened={isGpxModalOpen}
@@ -231,14 +323,7 @@ export function TopoGallery({
               onClick={(e) => {
                 e.stopPropagation();
                 if (!selectedGpxAttachment) return;
-                const link = document.createElement('a');
-                const url = selectedGpxAttachment.url.startsWith('http') ? selectedGpxAttachment.url : `https://${selectedGpxAttachment.url}`;
-                link.href = url;
-                const filename = selectedGpxAttachment.name || url.split('/').pop() || `track.gpx`;
-                link.download = filename.endsWith('.gpx') ? filename : `${filename}.gpx`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                downloadAttachment(selectedGpxAttachment, '.gpx');
               }}
             >
               <IconDownload size={20} />
@@ -266,8 +351,8 @@ export function TopoGallery({
       >
         <LoadingOverlay visible={fetcher.state !== 'idle'} />
         
-        {attachments.map((attachment, index) => {
-          const attachmentUrl = attachment.url.startsWith('http') ? attachment.url : `https://${attachment.url}`;
+        {attachments.map((attachment) => {
+          const attachmentUrl = getAttachmentUrl(attachment);
           const type = attachment.type;
 
           return (
@@ -293,25 +378,8 @@ export function TopoGallery({
                 textDecoration: 'none',
               }}
               onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
-                if (type.startsWith('image/')) {
-                  e.preventDefault();
-                  const imageIndex = imageAttachments.findIndex(img => img.id === attachment.id);
-                  setSelectedImageIndex(imageIndex);
-                } else if (type === 'application/gpx+xml') {
-                  e.preventDefault();
-                  if (mapboxAccessToken && mapboxStyleUrl) {
-                    setSelectedGpxAttachment(attachment);
-                    setIsGpxModalOpen(true);
-                  } else {
-                    notifications.show({
-                      title: 'Map Unavailable',
-                      message: 'Map configuration is missing.',
-                      color: 'orange'
-                    });
-                  }
-                }
-                // For PDF and all other types, do nothing here,
-                // allow default <a> tag behavior (target="_blank" will open new tab)
+                e.preventDefault();
+                requestAttachmentDownload(attachment);
               }}
             >
               {type.startsWith('image/') ? (

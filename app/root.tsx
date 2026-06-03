@@ -31,6 +31,7 @@ import RouteSearchBox from "./components/routeSearchBox";
 import { useCallback, useEffect, useRef } from "react";
 import { MapboxProvider } from "./contexts/MapboxContext";
 import GlobalBanner from "./components/GlobalBanner";
+import { DisclaimerAcknowledgementProvider } from "./components/DisclaimerAcknowledgement";
 
 const theme = createTheme({
   primaryColor: 'blue',
@@ -146,7 +147,8 @@ export default function App() {
           <Notifications position="top-center" />
           <UserProvider user={user}>
             <MapboxProvider accessToken={mapboxAccessToken} styleUrl={mapboxStyleUrl}>
-              <Box style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+              <DisclaimerAcknowledgementProvider>
+                <Box style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
                 <header>
                   <Drawer opened={drawerOpened} onClose={closeDrawer} title="Navigation" padding="md" size="md">
                     <Stack>
@@ -252,7 +254,8 @@ export default function App() {
                   |
                   <a href="https://github.com/dev-coding-for-fun/tabvar/discussions/categories/ideas" target="_blank" rel="noopener noreferrer" style={{ marginLeft: '0.5rem' }}>suggest a feature</a>
                 </footer>
-              </Box>
+                </Box>
+              </DisclaimerAcknowledgementProvider>
             </MapboxProvider>
           </UserProvider>
         </MantineProvider>
