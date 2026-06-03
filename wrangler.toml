@@ -63,6 +63,7 @@ pages_build_output_dir = "./build/client"
 [env.preview.vars]
 ENVIRONMENT = "preview"
 route = "dev.tabvar.org/*"
+TOPOBUILDER_RETURN_TO_ALLOWLIST = "topobuilder:,http://localhost:8081,http://localhost:19006"
 
 [[env.preview.r2_buckets]]
 binding = "TABVAR_ISSUES_UPLOADS"
@@ -97,6 +98,7 @@ ISSUES_BUCKET_DOMAIN="https://files.issues.tabvar.org"
 TOPOS_BUCKET_DOMAIN="https://files.tabvar.org"
 ISSUES_BUCKET_NAME="tabvar-issues-uploads"
 TOPOS_BUCKET_NAME="tabvar-topos"
+TOPOBUILDER_RETURN_TO_ALLOWLIST="topobuilder:"
 
 [[env.production.d1_databases]]
 binding = "DB"

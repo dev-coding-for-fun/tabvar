@@ -50,7 +50,7 @@ export function createUser(overrides: Partial<User> = {}): User {
   };
 }
 
-export function createContext(env: Partial<Env> = {}): AppLoadContext {
+export function createContext(env: Partial<Env> & Record<string, unknown> = {}): AppLoadContext {
   return {
     cloudflare: {
       env: {

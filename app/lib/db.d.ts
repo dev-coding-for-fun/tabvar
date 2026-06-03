@@ -19,6 +19,18 @@ export interface _CfMETADATA {
   value: Buffer | null;
 }
 
+export interface ApiToken {
+  client: string;
+  created_at: Generated<string>;
+  expires_at: string | null;
+  id: string;
+  last_used_at: string | null;
+  name: string | null;
+  revoked_at: string | null;
+  token_hash: string;
+  uid: string;
+}
+
 export interface AttachmentAuditLog {
   action: string;
   after_name: string | null;
@@ -274,6 +286,16 @@ export interface TopoAttachment {
   url: string;
 }
 
+export interface TopobuilderConnectTicket {
+  created_at: Generated<string>;
+  expires_at: string;
+  id: string;
+  return_to: string;
+  ticket_hash: string;
+  uid: string;
+  used_at: string | null;
+}
+
 export interface User {
   avatar_url: string | null;
   created_at: Generated<string | null>;
@@ -307,6 +329,7 @@ export interface Vote {
 export interface DB {
   _cf_KV: _CfKV;
   _cf_METADATA: _CfMETADATA;
+  api_token: ApiToken;
   attachment_audit_log: AttachmentAuditLog;
   campaign: Campaign;
   campaign_candidate: CampaignCandidate;
@@ -332,6 +355,7 @@ export interface DB {
   sector_attachment: SectorAttachment;
   signin_event: SigninEvent;
   topo_attachment: TopoAttachment;
+  topobuilder_connect_ticket: TopobuilderConnectTicket;
   user: User;
   user_invite: UserInvite;
   vote: Vote;
