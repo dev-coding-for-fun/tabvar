@@ -1,5 +1,5 @@
 import { ActionIcon, Group, Stack, Tooltip } from "@mantine/core";
-import { IconFileUpload, IconDatabase, IconUsers, IconDownload } from "@tabler/icons-react";
+import { IconChecklist, IconDatabase, IconUsers } from "@tabler/icons-react";
 import { Link } from "react-router";
 import { useUser } from "~/lib/hooks/useUser";
 
@@ -27,15 +27,15 @@ export function EditorMenu() {
         zIndex: 1000
       }}
     >
-      <Tooltip label="Upload Topos" position="right">
+      <Tooltip label="Approve Topos" position="right">
         <ActionIcon
           component={Link}
-          to="/topos/attach"
+          to="/admin/submissions"
           variant="light"
           color="blue"
           size="lg"
         >
-          <IconFileUpload size={20} />
+          <IconChecklist size={20} />
         </ActionIcon>
       </Tooltip>
 
