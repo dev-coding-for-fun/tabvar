@@ -520,15 +520,23 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         }
     });
     
-    // Build per-issue status history from the audit log (rows that changed status)
-    const issueIds = Array.from(issuesMap.keys());
-    if (issueIds.length > 0) {
+    // Build per-issue status history from the audit log (rows that changed status).
+    // Join against `issue` rather than passing an `issue_id IN (...)` list so the
+    // query carries no bound parameters — D1 rejects queries with more than 100,
+    // which an unbounded id list would exceed on large datasets.
+    if (issuesMap.size > 0) {
         const auditLogs = await db.selectFrom('issue_audit_log')
-            .select(['issue_id', 'before_status', 'after_status', 'timestamp', 'user_display_name'])
-            .where('issue_id', 'in', issueIds)
-            .where('after_status', 'is not', null)
-            .orderBy('timestamp', 'asc')
-            .orderBy('id', 'asc')
+            .innerJoin('issue', 'issue.id', 'issue_audit_log.issue_id')
+            .select([
+                'issue_audit_log.issue_id as issue_id',
+                'issue_audit_log.before_status as before_status',
+                'issue_audit_log.after_status as after_status',
+                'issue_audit_log.timestamp as timestamp',
+                'issue_audit_log.user_display_name as user_display_name',
+            ])
+            .where('issue_audit_log.after_status', 'is not', null)
+            .orderBy('issue_audit_log.timestamp', 'asc')
+            .orderBy('issue_audit_log.id', 'asc')
             .execute();
 
         const logsByIssue = new Map<number, typeof auditLogs>();
