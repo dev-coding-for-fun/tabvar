@@ -436,6 +436,9 @@ export const action: ActionFunction = async ({ request, context }) => {
                 break;
 
             }
+            case "claim":
+                // TODO: implement claiming. Replace this line with the real claim logic.
+                return data({ success: false, message: 'Claiming issues is not implemented yet.' });
             default:
                 return data({ success: false, message: 'Invalid action' }, { status: 400 });
         }
