@@ -40,8 +40,12 @@ async function findOrCreateGoogleUser(context: AppLoadContext, tokens: Parameter
     const profile = await GoogleStrategy.userProfile(tokens);
     const db = getDB(context);
     const { id, displayName, emails, photos } = profile;
-    const email = emails[0].value;
-    const avatarUrl = photos[0].value;
+    const email = emails?.[0]?.value;
+    const avatarUrl = photos?.[0]?.value ?? null;
+
+    if (!email) {
+        throw new Error("Google profile did not include an email address");
+    }
 
     let user = await db.selectFrom('user')
         .select([
