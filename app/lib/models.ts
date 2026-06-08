@@ -84,11 +84,19 @@ export interface ImportNotes {
     uploadResult?: string | null;
 }
 
+export interface StatusHistoryEntry {
+    status: string;
+    timestamp?: string | null;
+    userDisplayName?: string | null;
+}
+
 export interface Issue {
     id: number;
     routeId: number;
     route?: Route;
     attachments?: IssueAttachment[];
+    statusHistory?: StatusHistoryEntry[];
+    lastUpdated?: string | null;
     issueType: string;
     subIssueType?: string | null;
     status: string;

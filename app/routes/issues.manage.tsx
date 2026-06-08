@@ -1,17 +1,19 @@
-import { Badge, Box, Button, Center, Container, Group, Text, Image, rem, Modal, Stack, Title, Tooltip, TextInput, ActionIcon, Anchor, SegmentedControl } from "@mantine/core";
+import { Badge, type BadgeProps, Box, Button, Center, Collapse, Container, Group, Text, Image, rem, Modal, Stack, Timeline, Title, Tooltip, TextInput, ActionIcon, Anchor, SegmentedControl } from "@mantine/core";
+import { TruncatedTooltip } from "~/components/TruncatedTooltip";
+import { useIsTruncated } from "~/components/useIsTruncated";
 import { notifications } from "@mantine/notifications";
 import { ActionFunction, AppLoadContext, LoaderFunction, data, type MetaFunction } from "react-router";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import { DataTable, type DataTableColumn, type DataTableSortStatus } from "mantine-datatable";
 import { getDB } from "~/lib/db";
 import { requireUser } from "~/lib/auth.server";
-import { IconArchive, IconArrowBack, IconCheck, IconClick, IconEdit, IconFileX, IconFlag, IconRubberStamp, IconTrafficCone } from "@tabler/icons-react";
+import { IconArchive, IconArrowBack, IconCheck, IconChevronDown, IconChevronUp, IconClick, IconEdit, IconFileX, IconFlag, IconRubberStamp, IconTrafficCone } from "@tabler/icons-react";
 import IssueDetailsModal from "~/components/issueDetailModal";
 import { useDisclosure } from "@mantine/hooks";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { deleteFromR2 } from "~/lib/s3.server";
-import { Issue, Route, User, RouteSearchResults, type IssueAttachment } from "~/lib/models";
+import { Issue, Route, User, RouteSearchResults, type IssueAttachment, type StatusHistoryEntry } from "~/lib/models";
 import { privatePageMeta } from "~/lib/seo";
 
 const StatusActions: React.FC<{
@@ -518,6 +520,55 @@ export const loader: LoaderFunction = async ({ request, context }) => {
         }
     });
     
+    // Build per-issue status history from the audit log (rows that changed status)
+    const issueIds = Array.from(issuesMap.keys());
+    if (issueIds.length > 0) {
+        const auditLogs = await db.selectFrom('issue_audit_log')
+            .select(['issue_id', 'before_status', 'after_status', 'timestamp', 'user_display_name'])
+            .where('issue_id', 'in', issueIds)
+            .where('after_status', 'is not', null)
+            .orderBy('timestamp', 'asc')
+            .orderBy('id', 'asc')
+            .execute();
+
+        const logsByIssue = new Map<number, typeof auditLogs>();
+        auditLogs.forEach((log) => {
+            const arr = logsByIssue.get(log.issue_id) ?? [];
+            arr.push(log);
+            logsByIssue.set(log.issue_id, arr);
+        });
+
+        issuesMap.forEach((issue, id) => {
+            const logs = logsByIssue.get(id) ?? [];
+            const history: StatusHistoryEntry[] = [];
+
+            if (logs.length > 0) {
+                // The first transition's "before" value is the status the issue was created with
+                history.push({
+                    status: logs[0].before_status ?? issue.status,
+                    timestamp: issue.createdAt,
+                    userDisplayName: null,
+                });
+                logs.forEach((log) => {
+                    history.push({
+                        status: log.after_status as string,
+                        timestamp: log.timestamp,
+                        userDisplayName: log.user_display_name,
+                    });
+                });
+            } else {
+                history.push({
+                    status: issue.status,
+                    timestamp: issue.createdAt,
+                    userDisplayName: null,
+                });
+            }
+
+            issue.statusHistory = history;
+            issue.lastUpdated = history[history.length - 1]?.timestamp ?? issue.createdAt;
+        });
+    }
+
     const issues: Issue[] = Array.from(issuesMap.values());
 
     return {
@@ -530,27 +581,7 @@ export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Manage i
 
 const TruncatableDescription: React.FC<{ description: string, fz: string }> = ({ description, fz }) => {
     const [expanded, setExpanded] = useState(false);
-    const [isTruncated, setIsTruncated] = useState(false);
-    const textRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!textRef.current) return;
-
-        const checkTruncation = () => {
-            const element = textRef.current;
-            if (element) {
-                setIsTruncated(
-                    element.scrollHeight > element.clientHeight ||
-                    element.scrollWidth > element.clientWidth
-                );
-            }
-        };
-
-        const resizeObserver = new ResizeObserver(checkTruncation);
-        resizeObserver.observe(textRef.current);
-
-        return () => resizeObserver.disconnect();
-    }, []);
+    const { ref, isTruncated } = useIsTruncated<HTMLDivElement>();
 
     const toggleExpanded = () => setExpanded(!expanded);
 
@@ -558,7 +589,7 @@ const TruncatableDescription: React.FC<{ description: string, fz: string }> = ({
         <Box>
             <Text
                 fz={fz}
-                ref={textRef}
+                ref={ref}
                 lineClamp={expanded ? undefined : 3}
                 mb={4}
             >
@@ -570,6 +601,76 @@ const TruncatableDescription: React.FC<{ description: string, fz: string }> = ({
                 </Button>
             )}
         </Box>
+    );
+};
+
+// SQLite CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" in UTC without a timezone marker,
+// while other timestamps are stored as ISO strings. Normalize both before formatting.
+function formatDateTime(value?: string | null): string {
+    if (!value) return "—";
+    const normalized = value.includes("T") ? value : value.replace(" ", "T") + "Z";
+    const date = new Date(normalized);
+    if (isNaN(date.getTime())) return value;
+    return date.toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    });
+}
+
+// Mantine clips the inner label, not the badge root
+const BADGE_LABEL_SELECTOR = ".mantine-Badge-label";
+
+const TruncatableBadge: React.FC<BadgeProps & { children: React.ReactNode }> = ({ children, ...props }) => (
+    <TruncatedTooltip label={children} truncationSelector={BADGE_LABEL_SELECTOR} withArrow fz="xs">
+        <Badge {...props}>{children}</Badge>
+    </TruncatedTooltip>
+);
+
+const statusBadge = (status: string) => (
+    <TruncatableBadge size="xs" color={`status-${status.toLowerCase().replace(" ", "-")}`}>{status}</TruncatableBadge>
+);
+
+const StatusCell: React.FC<{ issue: Issue }> = ({ issue }) => {
+    const [expanded, setExpanded] = useState(false);
+    const history = issue.statusHistory ?? [];
+    const hasHistory = history.length > 1;
+    // Show most recent first
+    const ordered = [...history].reverse();
+
+    return (
+        <Stack gap={6}>
+            <Group gap={4} wrap="nowrap" justify="space-between">
+                {statusBadge(issue.status)}
+                {hasHistory && (
+                    <Tooltip label={expanded ? "Hide history" : "Show history"}>
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="sm"
+                            onClick={() => setExpanded((value) => !value)}
+                            aria-label={expanded ? "Hide status history" : "Show status history"}
+                        >
+                            {expanded ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+                        </ActionIcon>
+                    </Tooltip>
+                )}
+            </Group>
+            <Collapse expanded={expanded}>
+                <Timeline bulletSize={12} lineWidth={2} active={ordered.length} mt={4}>
+                    {ordered.map((entry: StatusHistoryEntry, index) => (
+                        <Timeline.Item key={index} title={statusBadge(entry.status)}>
+                            <Text fz="xs" c="dimmed">{formatDateTime(entry.timestamp)}</Text>
+                            {entry.userDisplayName && (
+                                <Text fz="xs" c="dimmed">by {entry.userDisplayName}</Text>
+                            )}
+                        </Timeline.Item>
+                    ))}
+                </Timeline>
+            </Collapse>
+        </Stack>
     );
 };
 
@@ -759,8 +860,8 @@ export default function IssuesManager() {
                                         </Tooltip>)}
                                     <Text fz={fz}>{record.route?.name}</Text>
                                     <Group gap={4} wrap="nowrap">
-                                        <Badge size="xs" color="sector-color">{record.route?.sectorName}</Badge>
-                                        <Badge size="xs" color="crag-color">{record.route?.cragName}</Badge>
+                                        <TruncatableBadge size="xs" color="sector-color">{record.route?.sectorName}</TruncatableBadge>
+                                        <TruncatableBadge size="xs" color="crag-color">{record.route?.cragName}</TruncatableBadge>
                                     </Group>
                                 </Group>
                         },
@@ -770,6 +871,7 @@ export default function IssuesManager() {
                         },
                         {
                             accessor: "subIssueType",
+                            title: "Sub Type"
                         },
                         {
                             accessor: "description",
@@ -796,8 +898,14 @@ export default function IssuesManager() {
                         },
                         {
                             accessor: "status",
-                            render: (record) =>
-                                <Badge size="xs" color={`status-${record.status.toLowerCase().replace(" ", "-")}`}>{record.status}</Badge>,
+                            render: (record) => <StatusCell issue={record} />,
+                            width: '170px',
+                            sortable: true,
+                        },
+                        {
+                            accessor: "lastUpdated",
+                            title: "Last Updated",
+                            render: (record) => <Text fz={fz}>{formatDateTime(record.lastUpdated)}</Text>,
                             width: '150px',
                             sortable: true,
                         },
