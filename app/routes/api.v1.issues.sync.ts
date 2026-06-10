@@ -13,6 +13,7 @@ import {
   mapExternalIssueRef,
   modifyIssue,
   modifyIssueStatus,
+  toApiIssue,
 } from "~/lib/issues.server";
 import type { Issue } from "~/lib/models";
 
@@ -53,29 +54,6 @@ function actorFrom(tokenUser: ApiTokenUserWithRole) {
 async function loadServerIssue(context: ActionFunctionArgs["context"], issueId: number) {
   const db = getDB(context);
   return db.selectFrom("issue").selectAll().where("id", "=", issueId).executeTakeFirst();
-}
-
-function mapIssue(row: Record<string, unknown>) {
-  return {
-    id: Number(row.id),
-    routeId: row.route_id,
-    cragId: row.crag_id ?? null,
-    issueType: row.issue_type,
-    subIssueType: row.sub_issue_type ?? null,
-    status: row.status,
-    lastStatus: row.last_status ?? null,
-    description: row.description ?? null,
-    boltsAffected: row.bolts_affected ?? null,
-    isFlagged: Boolean(row.is_flagged),
-    flaggedMessage: row.flagged_message ?? null,
-    reportedBy: row.reported_by ?? null,
-    reportedByUid: row.reported_by_uid ?? null,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at ?? null,
-    lastModified: row.last_modified ?? null,
-    approvedAt: row.approved_at ?? null,
-    archivedAt: row.archived_at ?? null,
-  };
 }
 
 /**
@@ -167,7 +145,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
       if (existingId) {
         const existing = await loadServerIssue(context, existingId);
         return jsonResponse(
-          { status: "applied", serverId: existingId, issue: existing ? mapIssue(existing) : null },
+          { status: "applied", serverId: existingId, issue: existing ? toApiIssue(existing) : null },
           { headers },
         );
       }
@@ -190,7 +168,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
 
     const created = await loadServerIssue(context, newId);
     return jsonResponse(
-      { status: "applied", serverId: newId, issue: created ? mapIssue(created) : null },
+      { status: "applied", serverId: newId, issue: created ? toApiIssue(created) : null },
       { status: 201, headers },
     );
   }
@@ -215,7 +193,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   // Server wins: reject if the server row changed since the client's base.
   if (serverIssue.updated_at && serverIssue.updated_at > body.baseUpdatedAt) {
     return jsonResponse(
-      { status: "conflict", serverId: body.issueId, issue: mapIssue(serverIssue) },
+      { status: "conflict", serverId: body.issueId, issue: toApiIssue(serverIssue) },
       { status: 409, headers },
     );
   }
@@ -250,7 +228,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
 
   const updated = await loadServerIssue(context, body.issueId);
   return jsonResponse(
-    { status: "applied", serverId: body.issueId, issue: updated ? mapIssue(updated) : null },
+    { status: "applied", serverId: body.issueId, issue: updated ? toApiIssue(updated) : null },
     { headers },
   );
 };

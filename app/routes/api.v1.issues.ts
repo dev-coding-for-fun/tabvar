@@ -6,6 +6,7 @@ import {
   jsonResponse,
   requireApiTokenUser,
 } from "~/lib/apiAuth.server";
+import { toApiIssue, type ApiIssue } from "~/lib/issues.server";
 
 type SyncAttachment = {
   id: number;
@@ -14,25 +15,7 @@ type SyncAttachment = {
   type: string;
 };
 
-type SyncIssue = {
-  id: number;
-  routeId: number;
-  cragId: number | null;
-  issueType: string;
-  subIssueType: string | null;
-  status: string;
-  lastStatus: string | null;
-  description: string | null;
-  boltsAffected: string | null;
-  isFlagged: boolean;
-  flaggedMessage: string | null;
-  reportedBy: string | null;
-  reportedByUid: string | null;
-  createdAt: string;
-  updatedAt: string | null;
-  lastModified: string | null;
-  approvedAt: string | null;
-  archivedAt: string | null;
+type SyncIssue = ApiIssue & {
   attachments: SyncAttachment[];
 };
 
@@ -101,27 +84,7 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   for (const row of rows) {
     const issueId = Number(row.id);
     if (!issuesMap.has(issueId)) {
-      issuesMap.set(issueId, {
-        id: issueId,
-        routeId: row.route_id,
-        cragId: row.crag_id ?? null,
-        issueType: row.issue_type,
-        subIssueType: row.sub_issue_type ?? null,
-        status: row.status,
-        lastStatus: row.last_status ?? null,
-        description: row.description ?? null,
-        boltsAffected: row.bolts_affected ?? null,
-        isFlagged: Boolean(row.is_flagged),
-        flaggedMessage: row.flagged_message ?? null,
-        reportedBy: row.reported_by ?? null,
-        reportedByUid: row.reported_by_uid ?? null,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at ?? null,
-        lastModified: row.last_modified ?? null,
-        approvedAt: row.approved_at ?? null,
-        archivedAt: row.archived_at ?? null,
-        attachments: [],
-      });
+      issuesMap.set(issueId, { ...toApiIssue(row), attachments: [] });
     }
 
     if (row.updated_at && (!maxUpdatedAt || row.updated_at > maxUpdatedAt)) {

@@ -13,6 +13,77 @@ import type { Issue, User } from "./models";
  */
 export type IssueMutationSource = "web" | (string & {});
 
+/**
+ * Wire-format issue DTO shared by the /api/v1/issues endpoints (delta pull and
+ * sync push). Deliberately distinct from the domain `Issue` in models.ts: this
+ * is a versioned external contract, so changes to it should be intentional.
+ */
+export type ApiIssue = {
+  id: number;
+  routeId: number;
+  cragId: number | null;
+  issueType: string;
+  subIssueType: string | null;
+  status: string;
+  lastStatus: string | null;
+  description: string | null;
+  boltsAffected: string | null;
+  isFlagged: boolean;
+  flaggedMessage: string | null;
+  reportedBy: string | null;
+  reportedByUid: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  lastModified: string | null;
+  approvedAt: string | null;
+  archivedAt: string | null;
+};
+
+type IssueRowForApi = {
+  id: number | bigint;
+  route_id: number;
+  crag_id: number | null;
+  issue_type: string;
+  sub_issue_type: string | null;
+  status: string;
+  last_status: string | null;
+  description: string | null;
+  bolts_affected: string | null;
+  is_flagged: number | null;
+  flagged_message: string | null;
+  reported_by: string | null;
+  reported_by_uid: string | null;
+  created_at: string;
+  updated_at: string | null;
+  last_modified: string | null;
+  approved_at: string | null;
+  archived_at: string | null;
+};
+
+/** Maps a DB `issue` row (snake_case) to the wire-format ApiIssue. */
+export function toApiIssue(row: IssueRowForApi): ApiIssue {
+  return {
+    id: Number(row.id),
+    routeId: row.route_id,
+    cragId: row.crag_id ?? null,
+    issueType: row.issue_type,
+    subIssueType: row.sub_issue_type ?? null,
+    status: row.status,
+    lastStatus: row.last_status ?? null,
+    description: row.description ?? null,
+    boltsAffected: row.bolts_affected ?? null,
+    isFlagged: Boolean(row.is_flagged),
+    flaggedMessage: row.flagged_message ?? null,
+    reportedBy: row.reported_by ?? null,
+    reportedByUid: row.reported_by_uid ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? null,
+    lastModified: row.last_modified ?? null,
+    approvedAt: row.approved_at ?? null,
+    archivedAt: row.archived_at ?? null,
+  };
+}
+
 type IssueActor = Pick<User, "uid" | "displayName" | "role">;
 
 export async function createIssue(
