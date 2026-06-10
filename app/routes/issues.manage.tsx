@@ -644,16 +644,23 @@ const statusBadge = (status: string) => (
     <TruncatableBadge size="xs" color={`status-${status.toLowerCase().replace(" ", "-")}`}>{status}</TruncatableBadge>
 );
 
+const statusMeta = (entry?: StatusHistoryEntry) => {
+    if (!entry) return null;
+    const when = formatDateTime(entry.timestamp);
+    return entry.userDisplayName ? `${when} by ${entry.userDisplayName}` : when;
+};
+
 const StatusCell: React.FC<{ issue: Issue }> = ({ issue }) => {
     const [expanded, setExpanded] = useState(false);
     const history = issue.statusHistory ?? [];
-    const hasHistory = history.length > 1;
-    // Show most recent first
-    const ordered = [...history].reverse();
+    const current = history[history.length - 1];
+    // Older states, most recent first; the current state is shown above
+    const priorStates = history.slice(0, -1).reverse();
+    const hasHistory = priorStates.length > 0;
 
     return (
-        <Stack gap={6}>
-            <Group gap={4} wrap="nowrap" justify="space-between">
+        <Stack gap={4}>
+            <Group gap={4} wrap="nowrap">
                 {statusBadge(issue.status)}
                 {hasHistory && (
                     <Tooltip label={expanded ? "Hide history" : "Show history"}>
@@ -669,18 +676,18 @@ const StatusCell: React.FC<{ issue: Issue }> = ({ issue }) => {
                     </Tooltip>
                 )}
             </Group>
-            <Collapse expanded={expanded}>
-                <Timeline bulletSize={12} lineWidth={2} active={ordered.length} mt={4}>
-                    {ordered.map((entry: StatusHistoryEntry, index) => (
-                        <Timeline.Item key={index} title={statusBadge(entry.status)}>
-                            <Text fz="xs" c="dimmed">{formatDateTime(entry.timestamp)}</Text>
-                            {entry.userDisplayName && (
-                                <Text fz="xs" c="dimmed">by {entry.userDisplayName}</Text>
-                            )}
-                        </Timeline.Item>
-                    ))}
-                </Timeline>
-            </Collapse>
+            <Text fz="xs" c="dimmed">{statusMeta(current)}</Text>
+            {hasHistory && (
+                <Collapse expanded={expanded}>
+                    <Timeline bulletSize={12} lineWidth={2} active={priorStates.length} mt={4}>
+                        {priorStates.map((entry: StatusHistoryEntry, index) => (
+                            <Timeline.Item key={index} title={statusBadge(entry.status)}>
+                                <Text fz="xs" c="dimmed">{statusMeta(entry)}</Text>
+                            </Timeline.Item>
+                        ))}
+                    </Timeline>
+                </Collapse>
+            )}
         </Stack>
     );
 };
@@ -910,14 +917,7 @@ export default function IssuesManager() {
                         {
                             accessor: "status",
                             render: (record) => <StatusCell issue={record} />,
-                            width: '170px',
-                            sortable: true,
-                        },
-                        {
-                            accessor: "lastUpdated",
-                            title: "Last Updated",
-                            render: (record) => <Text fz={fz}>{formatDateTime(record.lastUpdated)}</Text>,
-                            width: '150px',
+                            width: '180px',
                             sortable: true,
                         },
                         {
