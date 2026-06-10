@@ -125,7 +125,7 @@ describe("issues.manage action", () => {
     expect(getStatus(response)).toBe(400);
     expect(await readJson(response)).toMatchObject({
       success: false,
-      message: "Invalid action",
+      message: "Claiming issues is not implemented yet.",
     });
     expect(mocks.getDB).not.toHaveBeenCalled();
   });

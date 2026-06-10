@@ -95,7 +95,7 @@ export interface ExternalCragRef {
 
 export interface ExternalIssueRef {
   external_id: string;
-  external_route_id: string;
+  external_route_id: string | null;
   local_id: number | null;
   source: string;
   sync_data: Generated<number | null>;
@@ -154,6 +154,7 @@ export interface Issue {
   route_id: number;
   status: string;
   sub_issue_type: string | null;
+  updated_at: Generated<string | null>;
 }
 
 export interface IssueAttachment {

@@ -109,6 +109,6 @@ describe("api.topobuilder.connect.complete action", () => {
 
     expect(response.status).toBe(204);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:8081");
-    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("POST, OPTIONS");
+    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, OPTIONS");
   });
 });

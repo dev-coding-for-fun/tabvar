@@ -1,77 +1,31 @@
 import type { AppLoadContext } from "react-router";
-import { getDB } from "./db";
+import { isAllowedOrigin } from "./apiAuth.server";
 
 const TICKET_TTL_MS = 5 * 60 * 1000;
-const DEFAULT_RETURN_TO_ALLOWLIST = ["topobuilder:"];
-const DEV_RETURN_TO_ALLOWLIST = [
-  "exp:",
-  "http://localhost:8081",
-  "http://localhost:19006",
-  "http://127.0.0.1:8081",
-  "http://127.0.0.1:19006",
-];
 
-type TopobuilderEnv = {
-  ENVIRONMENT?: string;
-  TOPOBUILDER_RETURN_TO_ALLOWLIST?: string;
-};
+// Generic API auth helpers now live in apiAuth.server.ts. They are re-exported
+// here so existing TopoBuilder routes/tests keep importing from one place.
+export {
+  apiError,
+  bearerToken,
+  corsHeaders,
+  hashSecret,
+  jsonResponse,
+  requireApiToken,
+  requireApiTokenUser,
+} from "./apiAuth.server";
+export type {
+  ApiErrorCode,
+  ApiTokenUser,
+  ApiTokenUserWithRole,
+} from "./apiAuth.server";
 
-export type ApiErrorCode =
-  | "bad_request"
-  | "invalid_submission"
-  | "invalid_return_to"
-  | "invalid_ticket"
-  | "invalid_token"
-  | "method_not_allowed";
-
-export type ApiTokenUser = {
-  tokenId: string;
-  uid: string;
-};
-
-function getEnv(context: AppLoadContext): TopobuilderEnv {
-  return context.cloudflare.env as unknown as TopobuilderEnv;
-}
-
-function configuredAllowlist(context: AppLoadContext) {
-  const env = getEnv(context);
-  const configured = env.TOPOBUILDER_RETURN_TO_ALLOWLIST
-    ?.split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean) ?? [];
-
-  const defaults = env.ENVIRONMENT === "production"
-    ? DEFAULT_RETURN_TO_ALLOWLIST
-    : [...DEFAULT_RETURN_TO_ALLOWLIST, ...DEV_RETURN_TO_ALLOWLIST];
-
-  return [...defaults, ...configured];
-}
-
-function urlMatchesEntry(url: URL, value: string, entry: string) {
-  if (entry.endsWith(":")) {
-    return url.protocol === entry;
-  }
-
-  if (entry.endsWith("://")) {
-    return value.startsWith(entry);
-  }
-
-  try {
-    return url.origin === new URL(entry).origin;
-  } catch {
-    return false;
-  }
-}
-
+/**
+ * TopoBuilder connect callbacks are validated against the same client allowlist
+ * used for CORS. Kept as a named wrapper for the connect flow's call sites.
+ */
 export function isAllowedTopobuilderReturnTo(value: string, context: AppLoadContext) {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return false;
-  }
-
-  return configuredAllowlist(context).some((entry) => urlMatchesEntry(url, value, entry));
+  return isAllowedOrigin(value, context);
 }
 
 export function addQueryParam(url: string, key: string, value: string) {
@@ -94,85 +48,6 @@ export function generateSecret(prefix: "tb_ticket" | "tb_token") {
   return `${prefix}_${base64Url(bytes)}`;
 }
 
-export async function hashSecret(secret: string) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 export function ticketExpiresAt(now = Date.now()) {
   return new Date(now + TICKET_TTL_MS).toISOString();
-}
-
-export function jsonResponse(body: unknown, init: ResponseInit = {}) {
-  const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
-  return new Response(JSON.stringify(body), {
-    ...init,
-    headers,
-  });
-}
-
-export function apiError(code: ApiErrorCode, status: number, message: string, headers?: HeadersInit) {
-  return jsonResponse({ error: code, message }, { status, headers });
-}
-
-export function bearerToken(request: Request) {
-  const header = request.headers.get("Authorization");
-  const match = header?.match(/^Bearer\s+(.+)$/i);
-  return match?.[1] ?? null;
-}
-
-export async function requireApiToken(
-  request: Request,
-  context: AppLoadContext,
-  headers?: HeadersInit,
-): Promise<ApiTokenUser> {
-  const token = bearerToken(request);
-  if (!token) {
-    throw apiError("invalid_token", 401, "A bearer token is required.", headers);
-  }
-
-  const db = getDB(context);
-  const now = new Date().toISOString();
-  const tokenHash = await hashSecret(token);
-  const existingToken = await db.selectFrom("api_token")
-    .select(["id", "uid"])
-    .where("token_hash", "=", tokenHash)
-    .where("client", "=", "topobuilder")
-    .where("revoked_at", "is", null)
-    .where((eb) => eb.or([
-      eb("expires_at", "is", null),
-      eb("expires_at", ">", now),
-    ]))
-    .executeTakeFirst();
-
-  if (!existingToken) {
-    throw apiError("invalid_token", 401, "The bearer token is invalid.", headers);
-  }
-
-  await db.updateTable("api_token")
-    .set({ last_used_at: now })
-    .where("id", "=", existingToken.id)
-    .execute();
-
-  return {
-    tokenId: existingToken.id,
-    uid: existingToken.uid,
-  };
-}
-
-export function corsHeaders(request: Request, context: AppLoadContext) {
-  const headers = new Headers();
-  const origin = request.headers.get("Origin");
-
-  if (origin && isAllowedTopobuilderReturnTo(origin, context)) {
-    headers.set("Access-Control-Allow-Origin", origin);
-    headers.set("Vary", "Origin");
-  }
-
-  headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
-  return headers;
 }

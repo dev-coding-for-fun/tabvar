@@ -9,6 +9,7 @@ import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
 import { requireUser } from "~/lib/auth.server";
 import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
 import { getDB } from "~/lib/db";
+import { createIssue } from "~/lib/issues.server";
 import { RouteSearchResults } from "~/lib/models";
 import { uploadFileToR2 } from "~/lib/s3.server";
 import { privatePageMeta } from "~/lib/seo";
@@ -110,23 +111,16 @@ export const action: ActionFunction = async ({ request, context }) => {
   ));
 
   const db = getDB(context);
-  const issueResult = await db
-    .insertInto('issue')
-    .values({
-      route_id: Number(routeId),
-      issue_type: issueType,
-      sub_issue_type: subIssueType,
-      description: notes,
-      bolts_affected: boltNumbers || null,
-      status: "In Moderation",
-      reported_by_uid: user.uid,
-      reported_by: user.displayName,
-      last_modified: new Date().toISOString(),
-    })
-    .returning('id')
-    .executeTakeFirstOrThrow();
-
-  const issueId = issueResult.id;
+  const issueId = await createIssue(context, {
+    routeId: Number(routeId),
+    issueType,
+    subIssueType,
+    description: notes,
+    boltsAffected: boltNumbers || null,
+    status: "In Moderation",
+    reportedByUid: user.uid,
+    reportedBy: user.displayName,
+  });
 
   if (!issueId) {
     return data({ success: false, message: 'Failed to submit issue' }, { status: 500 });
