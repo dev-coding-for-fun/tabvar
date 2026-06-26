@@ -71,6 +71,7 @@ export interface Crag {
   stats_active_issue_count: number | null;
   stats_issue_flagged: number | null;
   stats_public_issue_count: number | null;
+  updated_at: Generated<string | null>;
 }
 
 export interface CragAttachment {
@@ -214,6 +215,7 @@ export interface Route {
   sector_name: string | null;
   sort_order: number | null;
   status: string | null;
+  updated_at: Generated<string | null>;
   year: number | null;
 }
 
@@ -265,6 +267,7 @@ export interface Sector {
   name: string;
   notes: string | null;
   sort_order: number | null;
+  updated_at: Generated<string | null>;
 }
 
 export interface SectorAttachment {

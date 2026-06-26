@@ -1,7 +1,6 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { redirect } from "react-router";
 import { createContext, createGetRequest, createMockDb, createRouteArgs, createUser, getStatus, readJson } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
@@ -37,7 +36,12 @@ describe("connect.topobuilder loader", () => {
   });
 
   it("uses the existing login redirect when the user is not signed in", async () => {
-    const loginRedirect = redirect("/login?redirectTo=%2Fconnect%2Ftopobuilder");
+    const loginRedirect = new Response(null, {
+      status: 302,
+      headers: {
+        Location: "/login?redirectTo=%2Fconnect%2Ftopobuilder%3Freturn_to%3Dtopobuilder%253A%252F%252Ftabvar-connect",
+      },
+    });
     mocks.requireUser.mockRejectedValue(loginRedirect);
 
     await expect(loader(createRouteArgs({
@@ -52,20 +56,13 @@ describe("connect.topobuilder loader", () => {
     mocks.getDB.mockReturnValue(db);
     mocks.requireUser.mockResolvedValue(createUser({ uid: "user-123" }));
 
-    let response: Response | null = null;
-    try {
-      await loader(createRouteArgs({
-        request: createGetRequest("https://example.com/connect/topobuilder?return_to=topobuilder%3A%2F%2Ftabvar-connect%3Fsource%3Dsettings"),
-        context: createContext(),
-        params: {},
-      }));
-    } catch (error) {
-      response = error as Response;
-    }
+    const response = await loader(createRouteArgs({
+      request: createGetRequest("https://example.com/connect/topobuilder?return_to=topobuilder%3A%2F%2Ftabvar-connect%3Fsource%3Dsettings"),
+      context: createContext(),
+      params: {},
+    })) as { callbackUrl: string };
 
-    expect(response?.status).toBe(302);
-    const location = response?.headers.get("Location");
-    expect(location).toContain("topobuilder://tabvar-connect?source=settings&ticket=tb_ticket_");
+    expect(response.callbackUrl).toContain("topobuilder://tabvar-connect?source=settings&ticket=tb_ticket_");
     expect(db.insertInto).toHaveBeenCalledWith("topobuilder_connect_ticket");
     expect(db.__queries[0].values).toHaveBeenCalledWith(expect.objectContaining({
       uid: "user-123",

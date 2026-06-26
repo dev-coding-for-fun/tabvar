@@ -160,7 +160,136 @@ Re-pull, reconcile, and retry with the new `baseUpdatedAt`.
 
 ---
 
-## 3. Upload attachments
+## 3. Pull topo catalog data
+
+Issues reference topo objects by foreign key. Pull these catalogs before or
+alongside issue sync so clients can resolve `cragId`, `sectorId`, and `routeId`.
+
+These endpoints support delta pulls with the same inclusive `since` cursor
+pattern as issues: omit `since` for an initial pull, then store the returned
+`serverTime` and pass it on the next request. Clients should dedupe/upsert by
+`id`.
+
+Topo deletion tombstones are not exposed yet. If topo objects can be deleted,
+clients should still perform an occasional full refresh to remove stale local
+catalog records.
+
+Each topo object includes `attachments: []`. Attachment payloads are not
+populated yet, but the field is reserved so future attachment sync can fill the
+array without changing the response contract.
+
+### Pull crags
+
+```
+GET /api/v1/crags?since=<cursor>
+```
+
+- `since` *(optional)* — a `serverTime` cursor from a previous crag pull. The
+  filter is **inclusive** (`updatedAt >= since`).
+
+**Response `200`**
+
+```json
+{
+  "crags": [
+    {
+      "id": 7,
+      "name": "Sunny Crag",
+      "slug": "sunny-crag",
+      "latitude": 51.123,
+      "longitude": -115.456,
+      "notes": "South-facing limestone.",
+      "statsActiveIssueCount": 2,
+      "statsIssueFlagged": 0,
+      "statsPublicIssueCount": 4,
+      "createdAt": "2026-06-01 00:00:00",
+      "updatedAt": "2026-06-09 10:00:00",
+      "attachments": []
+    }
+  ],
+  "serverTime": "2026-06-09 11:00:00"
+}
+```
+
+### Pull sectors
+
+```
+GET /api/v1/sectors?since=<cursor>
+```
+
+- `since` *(optional)* — a `serverTime` cursor from a previous sector pull. The
+  filter is **inclusive** (`updatedAt >= since`).
+
+**Response `200`**
+
+```json
+{
+  "sectors": [
+    {
+      "id": 12,
+      "cragId": 7,
+      "name": "Main Wall",
+      "latitude": null,
+      "longitude": null,
+      "notes": null,
+      "sortOrder": 10,
+      "createdAt": "2026-06-01 00:00:00",
+      "updatedAt": "2026-06-09 10:00:00",
+      "attachments": []
+    }
+  ],
+  "serverTime": "2026-06-09 11:00:00"
+}
+```
+
+### Pull routes
+
+```
+GET /api/v1/routes?since=<cursor>
+```
+
+- `since` *(optional)* — a `serverTime` cursor from a previous route pull. The
+  filter is **inclusive** (`updatedAt >= since`).
+
+**Response `200`**
+
+```json
+{
+  "routes": [
+    {
+      "id": 456,
+      "cragId": 7,
+      "sectorId": 12,
+      "name": "Solar Flare",
+      "altNames": null,
+      "gradeYds": "5.11a",
+      "status": "active",
+      "latitude": null,
+      "longitude": null,
+      "notes": "Classic.",
+      "sortOrder": 20,
+      "boltCount": 9,
+      "pitchCount": 1,
+      "routeLength": 30,
+      "climbStyle": "sport",
+      "year": 2020,
+      "routeBuiltDate": null,
+      "firstAscentBy": "A. Climber",
+      "firstAscentDate": null,
+      "cragName": "Sunny Crag",
+      "sectorName": "Main Wall",
+      "createdAt": "2026-06-01 00:00:00",
+      "updatedAt": "2026-06-09 10:00:00",
+      "attachments": []
+    }
+  ],
+  "serverTime": "2026-06-09 11:00:00"
+}
+```
+
+---
+
+## 4. Upload issue attachments
 
 ```
 POST /api/v1/issues/<issueId>/attachments
@@ -187,10 +316,15 @@ Content-Type: multipart/form-data
 
 ## Typical client flow
 
-1. `GET /api/v1/issues` (no `since`) → seed local store, save `serverTime`.
-2. On reconnect: for each local change, `POST /api/v1/issues/sync`. On `201`
+1. `GET /api/v1/crags`, `/api/v1/sectors`, and `/api/v1/routes` with no
+   `since` → seed the local topo catalog and save each `serverTime`.
+2. `GET /api/v1/issues` (no `since`) → seed local issue store, save
+   `serverTime`.
+3. On reconnect: refresh topo catalogs, then for each local issue change,
+   `POST /api/v1/issues/sync`. On `201`
    for creates, map your `externalId` → `serverId`, then upload any queued
    photos to `/api/v1/issues/<serverId>/attachments`.
-3. Handle `409` by re-pulling and reconciling (server wins).
-4. Periodically `GET /api/v1/issues?since=<serverTime>` and upsert/remove by
-   `id`.
+4. Handle `409` by re-pulling and reconciling (server wins).
+5. Periodically `GET /api/v1/issues?since=<serverTime>` and
+   `GET /api/v1/{crags,sectors,routes}?since=<serverTime>` and upsert/remove
+   by `id` where tombstones are available.

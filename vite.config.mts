@@ -7,6 +7,10 @@ const config = defineConfig(async (configEnv) => {
   const isTest = configEnv.mode === "test";
 
   return {
+    server: {
+      // IPv4 loopback so adb reverse (tcp:PORT tcp:PORT) can reach the dev server.
+      host: "127.0.0.1",
+    },
     plugins: [
       ...(!isTest ? [cloudflareDevProxy(), reactRouter()] : []),
       ...(await sentryReactRouter({
