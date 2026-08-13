@@ -356,6 +356,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
             'is_flagged',
             'flagged_message',
             'bolts_affected',
+            'issue.reported_by',
             'issue_attachment.id as attachment_id',
             'issue_attachment.url',
             'issue_attachment.name as attachment_name',
@@ -390,6 +391,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                 flaggedMessage: row.flagged_message ?? undefined,
                 boltsAffected: row.bolts_affected ?? undefined,
                 createdAt: row.created_at ?? "",
+                reportedBy: row.reported_by ?? null,
                 attachments: []
             } as Issue);
         }
@@ -445,7 +447,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                 history.push({
                     status: logs[0].before_status ?? issue.status,
                     timestamp: issue.createdAt,
-                    userDisplayName: null,
+                    userDisplayName: issue.reportedBy ?? null,
                 });
                 logs.forEach((log) => {
                     history.push({
@@ -458,7 +460,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                 history.push({
                     status: issue.status,
                     timestamp: issue.createdAt,
-                    userDisplayName: null,
+                    userDisplayName: issue.reportedBy ?? null,
                 });
             }
 
@@ -540,7 +542,7 @@ const statusMeta = (entry?: StatusHistoryEntry) => {
 const StatusCell: React.FC<{ issue: Issue }> = ({ issue }) => {
     const [expanded, setExpanded] = useState(false);
     const history = issue.statusHistory ?? [];
-    const current = history[history.length - 1];
+    const submitted = history[0];
     // Older states, most recent first; the current state is shown above
     const priorStates = history.slice(0, -1).reverse();
     const hasHistory = priorStates.length > 0;
@@ -563,7 +565,7 @@ const StatusCell: React.FC<{ issue: Issue }> = ({ issue }) => {
                     </Tooltip>
                 )}
             </Group>
-            <Text fz="xs" c="dimmed">{statusMeta(current)}</Text>
+            <Text fz="xs" c="dimmed">{statusMeta(submitted)}</Text>
             {hasHistory && (
                 <Collapse expanded={expanded}>
                     <Timeline bulletSize={12} lineWidth={2} active={priorStates.length} mt={4}>

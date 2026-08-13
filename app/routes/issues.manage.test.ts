@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createContext,
   createFormRequest,
+  createGetRequest,
   createMockDb,
   createUser,
   getStatus,
@@ -31,7 +32,7 @@ vi.mock("~/components/issueDetailModal", () => ({
   default: () => null,
 }));
 
-import { action } from "./issues.manage";
+import { action, loader } from "./issues.manage";
 
 const existingIssue = {
   id: 10,
@@ -44,6 +45,122 @@ const existingIssue = {
   route_id: 99,
   status: "Reported",
 };
+
+describe("issues.manage loader", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requireUser.mockResolvedValue(createUser({ role: "member" }));
+  });
+
+  it("attributes status history 'by' to the submitter, not the moderator who approved", async () => {
+    const db = createMockDb({
+      select: [
+        {
+          execute: [{
+            id: 10,
+            route_id: 99,
+            route_name: "The Nose",
+            sector_name: "El Cap",
+            crag_name: "Yosemite",
+            issue_type: "Bolts",
+            sub_issue_type: "Loose bolt",
+            status: "Reported",
+            last_status: "In Moderation",
+            description: "Spinner",
+            is_flagged: 0,
+            flagged_message: null,
+            bolts_affected: "2",
+            reported_by: "Alice Submitter",
+            attachment_id: null,
+            url: null,
+            attachment_name: null,
+            created_at: "2026-04-01T10:00:00.000Z",
+          }],
+        },
+        {
+          execute: [{
+            issue_id: 10,
+            before_status: "In Moderation",
+            after_status: "Reported",
+            timestamp: "2026-04-03T15:00:00.000Z",
+            user_display_name: "Bob Moderator",
+          }],
+        },
+      ],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await loader(createRouteArgs({
+      request: createGetRequest("https://example.com/issues/manage"),
+      context: createContext(),
+      params: {},
+    }));
+
+    const payload = await readJson(response) as { issues: Array<{
+      reportedBy: string | null;
+      statusHistory: Array<{ status: string; userDisplayName: string | null }>;
+    }> };
+    expect(payload.issues).toHaveLength(1);
+    expect(payload.issues[0].reportedBy).toBe("Alice Submitter");
+    expect(payload.issues[0].statusHistory).toEqual([
+      expect.objectContaining({
+        status: "In Moderation",
+        userDisplayName: "Alice Submitter",
+      }),
+      expect.objectContaining({
+        status: "Reported",
+        userDisplayName: "Bob Moderator",
+      }),
+    ]);
+  });
+
+  it("still attributes an unmoderated issue to the submitter when there is no audit history", async () => {
+    const db = createMockDb({
+      select: [
+        {
+          execute: [{
+            id: 11,
+            route_id: 99,
+            route_name: "The Nose",
+            sector_name: "El Cap",
+            crag_name: "Yosemite",
+            issue_type: "Bolts",
+            sub_issue_type: "Loose bolt",
+            status: "In Moderation",
+            last_status: null,
+            description: "Spinner",
+            is_flagged: 0,
+            flagged_message: null,
+            bolts_affected: "2",
+            reported_by: "Alice Submitter",
+            attachment_id: null,
+            url: null,
+            attachment_name: null,
+            created_at: "2026-04-01T10:00:00.000Z",
+          }],
+        },
+        { execute: [] },
+      ],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await loader(createRouteArgs({
+      request: createGetRequest("https://example.com/issues/manage"),
+      context: createContext(),
+      params: {},
+    }));
+
+    const payload = await readJson(response) as { issues: Array<{
+      statusHistory: Array<{ status: string; userDisplayName: string | null }>;
+    }> };
+    expect(payload.issues[0].statusHistory).toEqual([
+      expect.objectContaining({
+        status: "In Moderation",
+        userDisplayName: "Alice Submitter",
+      }),
+    ]);
+  });
+});
 
 describe("issues.manage action", () => {
   beforeEach(() => {
