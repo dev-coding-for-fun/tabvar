@@ -32,7 +32,7 @@ vi.mock("~/components/issueDetailModal", () => ({
   default: () => null,
 }));
 
-import { action, loader } from "./issues.manage";
+import { action, loader, submittedAttribution, workflowAuditEntries } from "./issues.manage";
 
 const existingIssue = {
   id: 10,
@@ -159,6 +159,39 @@ describe("issues.manage loader", () => {
         userDisplayName: "Alice Submitter",
       }),
     ]);
+  });
+});
+
+describe("issues.manage status attribution", () => {
+  it("uses only the submitter for the table row, even if history starts with a moderator", () => {
+    const issue = {
+      createdAt: "2026-04-01T10:00:00.000Z",
+      reportedBy: "Alice Submitter",
+      statusHistory: [
+        { status: "Reported", timestamp: "2026-04-03T15:00:00.000Z", userDisplayName: "Bob Moderator" },
+      ],
+    };
+
+    expect(submittedAttribution(issue)).toEqual({
+      status: "submitted",
+      timestamp: "2026-04-01T10:00:00.000Z",
+      userDisplayName: "Alice Submitter",
+    });
+    expect(submittedAttribution(issue).userDisplayName).not.toBe("Bob Moderator");
+  });
+
+  it("keeps approvers and later workflow actors in the audit trail only", () => {
+    const history = [
+      { status: "In Moderation", timestamp: "2026-04-01T10:00:00.000Z", userDisplayName: "Alice Submitter" },
+      { status: "Reported", timestamp: "2026-04-03T15:00:00.000Z", userDisplayName: "Bob Moderator" },
+      { status: "Completed", timestamp: "2026-04-10T12:00:00.000Z", userDisplayName: "Carol Completer" },
+    ];
+
+    expect(workflowAuditEntries(history)).toEqual([
+      expect.objectContaining({ status: "Completed", userDisplayName: "Carol Completer" }),
+      expect.objectContaining({ status: "Reported", userDisplayName: "Bob Moderator" }),
+    ]);
+    expect(workflowAuditEntries(history).map((entry) => entry.userDisplayName)).not.toContain("Alice Submitter");
   });
 });
 

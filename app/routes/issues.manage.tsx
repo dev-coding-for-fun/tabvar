@@ -539,13 +539,24 @@ const statusMeta = (entry?: StatusHistoryEntry) => {
     return entry.userDisplayName ? `${when} by ${entry.userDisplayName}` : when;
 };
 
+/** Table-row attribution: submitter only. Never use audit-log actors here. */
+export function submittedAttribution(issue: Pick<Issue, "createdAt" | "reportedBy">): StatusHistoryEntry {
+    return {
+        status: "submitted",
+        timestamp: issue.createdAt ?? null,
+        userDisplayName: issue.reportedBy ?? null,
+    };
+}
+
+/** Status changes after submission (approvals, etc.). Shown only in the expanded audit trail. */
+export function workflowAuditEntries(history: StatusHistoryEntry[] = []): StatusHistoryEntry[] {
+    return history.slice(1).reverse();
+}
+
 const StatusCell: React.FC<{ issue: Issue }> = ({ issue }) => {
     const [expanded, setExpanded] = useState(false);
-    const history = issue.statusHistory ?? [];
-    const submitted = history[0];
-    // Older states, most recent first; the current state is shown above
-    const priorStates = history.slice(0, -1).reverse();
-    const hasHistory = priorStates.length > 0;
+    const auditEntries = workflowAuditEntries(issue.statusHistory);
+    const hasHistory = auditEntries.length > 0;
 
     return (
         <Stack gap={4}>
@@ -565,11 +576,11 @@ const StatusCell: React.FC<{ issue: Issue }> = ({ issue }) => {
                     </Tooltip>
                 )}
             </Group>
-            <Text fz="xs" c="dimmed">{statusMeta(submitted)}</Text>
+            <Text fz="xs" c="dimmed">{statusMeta(submittedAttribution(issue))}</Text>
             {hasHistory && (
                 <Collapse expanded={expanded}>
-                    <Timeline bulletSize={12} lineWidth={2} active={priorStates.length} mt={4}>
-                        {priorStates.map((entry: StatusHistoryEntry, index) => (
+                    <Timeline bulletSize={12} lineWidth={2} active={auditEntries.length} mt={4}>
+                        {auditEntries.map((entry: StatusHistoryEntry, index) => (
                             <Timeline.Item key={index} title={statusBadge(entry.status)}>
                                 <Text fz="xs" c="dimmed">{statusMeta(entry)}</Text>
                             </Timeline.Item>
