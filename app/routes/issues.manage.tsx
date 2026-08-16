@@ -10,9 +10,9 @@ import { requireUser } from "~/lib/auth.server";
 import { IconArchive, IconArrowBack, IconCheck, IconChevronDown, IconChevronUp, IconClick, IconEdit, IconFileX, IconFlag, IconRubberStamp, IconTrafficCone } from "@tabler/icons-react";
 import IssueDetailsModal from "~/components/issueDetailModal";
 import { useDisclosure } from "@mantine/hooks";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PERMISSION_ERROR } from "~/lib/constants";
-import { Issue, Route, User, RouteSearchResults, type IssueAttachment, type StatusHistoryEntry } from "~/lib/models";
+import { Issue, Route, User, type IssueAttachment, type StatusHistoryEntry } from "~/lib/models";
 import { deleteIssue, modifyIssue, modifyIssueStatus } from "~/lib/issues.server";
 import { privatePageMeta } from "~/lib/seo";
 
@@ -553,6 +553,38 @@ export function workflowAuditEntries(history: StatusHistoryEntry[] = []): Status
     return history.slice(1).reverse();
 }
 
+export function issueMatchesSearch(
+    issue: { route?: { name?: string | null; sectorName?: string | null; cragName?: string | null } | null },
+    query: string
+): boolean {
+    const trimmed = query.trim();
+    if (trimmed.length === 0) return true;
+    const haystack = [
+        issue.route?.name,
+        issue.route?.sectorName,
+        issue.route?.cragName,
+    ].filter(Boolean).join(" ").toLowerCase();
+    return trimmed.toLowerCase().split(/\s+/).every((term) => haystack.includes(term));
+}
+
+export function issueMatchesStatusFilter(issue: Pick<Issue, "status">, statusFilter: string): boolean {
+    const lowerCaseStatus = issue.status.toLowerCase();
+    switch (statusFilter.toLowerCase()) {
+        case "all":
+            return lowerCaseStatus !== "archived";
+        case "public":
+            return lowerCaseStatus === "reported" || lowerCaseStatus === "viewed";
+        case "in moderation":
+            return lowerCaseStatus === "in moderation";
+        case "complete":
+            return lowerCaseStatus === "completed";
+        case "archived":
+            return lowerCaseStatus === "archived";
+        default:
+            return true;
+    }
+}
+
 const StatusCell: React.FC<{ issue: Issue }> = ({ issue }) => {
     const [expanded, setExpanded] = useState(false);
     const auditEntries = workflowAuditEntries(issue.statusHistory);
@@ -600,9 +632,6 @@ export default function IssuesManager() {
     const [openIssue, setOpenIssue] = useState<Issue>();
     const [selectedResult, setSelectedResult] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [displayIssues, setDisplayIssues] = useState<Issue[]>(issues);
-    const [baseFilteredIssues, setBaseFilteredIssues] = useState<Issue[]>(issues);
-    const searchFetcher = useFetcher<RouteSearchResults[]>();
     const [sortStatus, setSortStatus] = useState<DataTableSortStatus<Issue>>({ columnAccessor: 'id', direction: 'asc' });
     const [statusFilter, setStatusFilter] = useState<string>(statusFilterOptions[0]);
     const [imageOverlay, setImageOverlay] = useState<{ isOpen: boolean; url: string }>({
@@ -611,68 +640,32 @@ export default function IssuesManager() {
     });
     const fz = "sm";
 
-    useEffect(() => {
-        let filtered = [...issues];
-
-        if (searchFetcher.data && searchQuery.length > 1) {
-            const searchResults = searchFetcher.data;
-            filtered = filtered.filter(issue =>
-                searchResults.some(route => issue.routeId === route.routeId)
-            );
-        } else if (searchQuery.length > 1 && !searchFetcher.data && searchFetcher.state === 'idle') {
-            filtered = [];
-        }
-
-        const lowerCaseStatusFilter = statusFilter.toLowerCase();
-        if (lowerCaseStatusFilter !== 'all') {
-            filtered = filtered.filter(issue => {
-                const lowerCaseStatus = issue.status.toLowerCase();
-                switch (lowerCaseStatusFilter) {
-                    case 'public':
-                        return lowerCaseStatus === 'reported' || lowerCaseStatus === 'viewed';
-                    case 'in moderation':
-                        return lowerCaseStatus === 'in moderation';
-                    case 'complete':
-                        return lowerCaseStatus === 'completed';
-                    case 'archived':
-                        return lowerCaseStatus === 'archived';
-                    default:
-                        return true;
-                }
-            });
-        } else {
-            filtered = filtered.filter(issue => issue.status.toLowerCase() !== 'archived');
-        }
-
-        setBaseFilteredIssues(filtered);
-
-    }, [issues, searchQuery, searchFetcher.data, searchFetcher.state, statusFilter]);
-
-    useEffect(() => {
-        const data = [...baseFilteredIssues];
+    const displayIssues = useMemo(() => {
+        const filtered = issues.filter(
+            (issue) => issueMatchesSearch(issue, searchQuery) && issueMatchesStatusFilter(issue, statusFilter)
+        );
         const { columnAccessor, direction } = sortStatus;
 
-        data.sort((a, b) => {
-            let valueA: any;
-            let valueB: any;
+        return [...filtered].sort((a, b) => {
+            let valueA: unknown;
+            let valueB: unknown;
 
             if (columnAccessor === 'route.name') {
                 valueA = a.route?.name?.toLowerCase() ?? '';
                 valueB = b.route?.name?.toLowerCase() ?? '';
             } else {
-                const accessor = columnAccessor as Exclude<keyof Issue, 'route'>; 
+                const accessor = columnAccessor as Exclude<keyof Issue, 'route'>;
                 valueA = a[accessor];
                 valueB = b[accessor];
             }
 
-            const comparison = 
+            const comparison =
                 typeof valueA === 'number' && typeof valueB === 'number' ? valueA - valueB :
                 String(valueA ?? '').localeCompare(String(valueB ?? ''));
 
             return direction === 'asc' ? comparison : -comparison;
         });
-        setDisplayIssues(data);
-    }, [baseFilteredIssues, sortStatus]);
+    }, [issues, searchQuery, statusFilter, sortStatus]);
 
     const renderActions: DataTableColumn<Issue>['render'] = (record: Issue) => (
         <Group gap={4} justify="right" wrap="nowrap">
@@ -719,29 +712,7 @@ export default function IssuesManager() {
                     mt="md"
                     placeholder="Filter by route, sector, or crag..."
                     value={searchQuery}
-                    onChange={(event) => {
-                        const query = event.currentTarget.value;
-                        setSearchQuery(query);
-                        if (query.length > 1) {
-                            searchFetcher.load(`/api/search?query=${encodeURIComponent(query)}&limit=500`);
-                        } else {
-                            setBaseFilteredIssues(issues.filter(issue => {
-                                const lowerCaseStatusFilter = statusFilter.toLowerCase();
-                                if (lowerCaseStatusFilter !== 'all') {
-                                    const lowerCaseStatus = issue.status.toLowerCase();
-                                    switch (lowerCaseStatusFilter) {
-                                        case 'public': return lowerCaseStatus === 'reported' || lowerCaseStatus === 'viewed';
-                                        case 'in moderation': return lowerCaseStatus === 'in moderation';
-                                        case 'complete': return lowerCaseStatus === 'completed';
-                                        case 'archived': return lowerCaseStatus === 'archived';
-                                        default: return true;
-                                    }
-                                } else {
-                                    return issue.status.toLowerCase() !== 'archived';
-                                }
-                            }));
-                        }
-                    }}
+                    onChange={(event) => setSearchQuery(event.currentTarget.value)}
                 />
 
                 <SegmentedControl

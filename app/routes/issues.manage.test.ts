@@ -32,7 +32,7 @@ vi.mock("~/components/issueDetailModal", () => ({
   default: () => null,
 }));
 
-import { action, loader, submittedAttribution, workflowAuditEntries } from "./issues.manage";
+import { action, issueMatchesSearch, issueMatchesStatusFilter, loader, submittedAttribution, workflowAuditEntries } from "./issues.manage";
 
 const existingIssue = {
   id: 10,
@@ -192,6 +192,33 @@ describe("issues.manage status attribution", () => {
       expect.objectContaining({ status: "Reported", userDisplayName: "Bob Moderator" }),
     ]);
     expect(workflowAuditEntries(history).map((entry) => entry.userDisplayName)).not.toContain("Alice Submitter");
+  });
+});
+
+describe("issues.manage table filters", () => {
+  const issue = {
+    status: "Reported",
+    route: { name: "The Nose", sectorName: "El Cap", cragName: "Yosemite" },
+  };
+
+  it("matches route, sector, or crag without waiting on a search request", () => {
+    expect(issueMatchesSearch(issue, "nose")).toBe(true);
+    expect(issueMatchesSearch(issue, "el cap")).toBe(true);
+    expect(issueMatchesSearch(issue, "yosemite")).toBe(true);
+    expect(issueMatchesSearch(issue, "nose yosemite")).toBe(true);
+    expect(issueMatchesSearch(issue, "half dome")).toBe(false);
+  });
+
+  it("treats an empty query as a match", () => {
+    expect(issueMatchesSearch(issue, "  ")).toBe(true);
+  });
+
+  it("hides archived issues from the All status filter", () => {
+    expect(issueMatchesStatusFilter({ status: "Reported" }, "All")).toBe(true);
+    expect(issueMatchesStatusFilter({ status: "Archived" }, "All")).toBe(false);
+    expect(issueMatchesStatusFilter({ status: "Archived" }, "Archived")).toBe(true);
+    expect(issueMatchesStatusFilter({ status: "Viewed" }, "Public")).toBe(true);
+    expect(issueMatchesStatusFilter({ status: "Completed" }, "Complete")).toBe(true);
   });
 });
 
