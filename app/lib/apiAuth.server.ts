@@ -9,6 +9,7 @@ const DEV_ORIGIN_ALLOWLIST = [
   "http://127.0.0.1:8081",
   "http://127.0.0.1:19006",
 ];
+const LAST_USED_UPDATE_MS = 24 * 60 * 60 * 1000;
 
 type ApiAuthEnv = {
   ENVIRONMENT?: string;
@@ -130,10 +131,11 @@ export async function requireApiToken(
   }
 
   const db = getDB(context);
-  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
   const tokenHash = await hashSecret(token);
   let query = db.selectFrom("api_token")
-    .select(["id", "uid", "client"])
+    .select(["id", "uid", "client", "last_used_at"])
     .where("token_hash", "=", tokenHash)
     .where("revoked_at", "is", null)
     .where((eb) => eb.or([
@@ -151,10 +153,13 @@ export async function requireApiToken(
     throw apiError("invalid_token", 401, "The bearer token is invalid.", headers);
   }
 
-  await db.updateTable("api_token")
-    .set({ last_used_at: now })
-    .where("id", "=", existingToken.id)
-    .execute();
+  const lastUsedMs = Date.parse(existingToken.last_used_at ?? "");
+  if (!Number.isFinite(lastUsedMs) || nowMs - lastUsedMs >= LAST_USED_UPDATE_MS) {
+    await db.updateTable("api_token")
+      .set({ last_used_at: now })
+      .where("id", "=", existingToken.id)
+      .execute();
+  }
 
   return {
     tokenId: existingToken.id,

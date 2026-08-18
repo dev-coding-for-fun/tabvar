@@ -27,7 +27,7 @@ describe("requireApiToken (client-agnostic)", () => {
 
   it("accepts a valid token from any client and returns its client", async () => {
     const db = createMockDb({
-      select: [{ executeTakeFirst: { id: "tok-1", uid: "user-9", client: "someclient" } }],
+      select: [{ executeTakeFirst: { id: "tok-1", uid: "user-9", client: "someclient", last_used_at: null } }],
       update: [{ execute: [] }],
     });
     mocks.getDB.mockReturnValue(db);
@@ -38,6 +38,41 @@ describe("requireApiToken (client-agnostic)", () => {
     // No client filter should be applied unless requested.
     expect(db.__queries[0].where).not.toHaveBeenCalledWith("client", "=", expect.anything());
     expect(db.updateTable).toHaveBeenCalledWith("api_token");
+  });
+
+  it("skips last_used_at when the token was used within a day", async () => {
+    const db = createMockDb({
+      select: [{ executeTakeFirst: {
+        id: "tok-1",
+        uid: "user-9",
+        client: "someclient",
+        last_used_at: new Date().toISOString(),
+      } }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    await requireApiToken(bearerRequest("anytoken"), createContext());
+
+    expect(db.updateTable).not.toHaveBeenCalled();
+  });
+
+  it("writes last_used_at when the previous timestamp is older than a day", async () => {
+    const yesterday = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    const db = createMockDb({
+      select: [{ executeTakeFirst: {
+        id: "tok-1",
+        uid: "user-9",
+        client: "someclient",
+        last_used_at: yesterday,
+      } }],
+      update: [{ execute: [] }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    await requireApiToken(bearerRequest("anytoken"), createContext());
+
+    expect(db.updateTable).toHaveBeenCalledWith("api_token");
+    expect(db.__queries[1].set).toHaveBeenCalledWith({ last_used_at: expect.any(String) });
   });
 
   it("applies a client filter when one is provided", async () => {
@@ -75,7 +110,7 @@ describe("requireApiTokenUser", () => {
   it("resolves the linked user's role and display name", async () => {
     const db = createMockDb({
       select: [
-        { executeTakeFirst: { id: "tok-1", uid: "user-9", client: "topobuilder" } },
+        { executeTakeFirst: { id: "tok-1", uid: "user-9", client: "topobuilder", last_used_at: null } },
         { executeTakeFirst: { role: "admin", display_name: "Ada" } },
       ],
       update: [{ execute: [] }],
