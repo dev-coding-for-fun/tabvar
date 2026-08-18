@@ -30,7 +30,7 @@ describe("api.topobuilder.disconnect action", () => {
 
   it("revokes a valid token", async () => {
     const db = createMockDb({
-      select: [{ executeTakeFirst: { id: "token-1", uid: "user-1", client: "topobuilder" } }],
+      select: [{ executeTakeFirst: { id: "token-1", uid: "user-1", client: "topobuilder", last_used_at: null } }],
       update: [{ execute: [] }, { execute: [] }],
     });
     mocks.getDB.mockReturnValue(db);
