@@ -187,4 +187,87 @@ describe("api.v1.issues.sync action (push)", () => {
 
     expect(response.status).toBe(400);
   });
+
+  it("clears nullable content fields when the client sends null", async () => {
+    const db = createMockDb({
+      select: [
+        { executeTakeFirst: fullIssueRow({ updated_at: "2026-06-09 10:00:00" }) },
+        { executeTakeFirstOrThrow: fullIssueRow({ updated_at: "2026-06-09 10:00:00" }) },
+        {
+          executeTakeFirst: fullIssueRow({
+            description: null,
+            bolts_affected: null,
+            flagged_message: null,
+            sub_issue_type: null,
+            updated_at: "2026-06-09 12:00:00",
+          }),
+        },
+      ],
+      update: [{ execute: [] }],
+      insert: [{ execute: [] }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = (await action(createRouteArgs({
+      request: jsonRequest({
+        op: "update",
+        issueId: 1,
+        baseUpdatedAt: "2026-06-09 10:00:00",
+        fields: {
+          description: null,
+          boltsAffected: null,
+          flaggedMessage: null,
+          subIssueType: null,
+        },
+      }),
+      context: createContext(),
+      params: {},
+    }))) as Response;
+
+    expect(response.status).toBe(200);
+    expect(db.__queries[2].set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: null,
+        bolts_affected: null,
+        flagged_message: null,
+        sub_issue_type: null,
+        issue_type: "Bolts",
+      }),
+    );
+  });
+
+  it("keeps existing values for content fields omitted from the update", async () => {
+    const db = createMockDb({
+      select: [
+        { executeTakeFirst: fullIssueRow({ updated_at: "2026-06-09 10:00:00" }) },
+        { executeTakeFirstOrThrow: fullIssueRow({ updated_at: "2026-06-09 10:00:00" }) },
+        { executeTakeFirst: fullIssueRow({ description: "only this changed", updated_at: "2026-06-09 12:00:00" }) },
+      ],
+      update: [{ execute: [] }],
+      insert: [{ execute: [] }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = (await action(createRouteArgs({
+      request: jsonRequest({
+        op: "update",
+        issueId: 1,
+        baseUpdatedAt: "2026-06-09 10:00:00",
+        fields: { description: "only this changed" },
+      }),
+      context: createContext(),
+      params: {},
+    }))) as Response;
+
+    expect(response.status).toBe(200);
+    expect(db.__queries[2].set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: "only this changed",
+        bolts_affected: "2",
+        flagged_message: null,
+        sub_issue_type: "Rusted",
+        issue_type: "Bolts",
+      }),
+    );
+  });
 });

@@ -51,6 +51,14 @@ function actorFrom(tokenUser: ApiTokenUserWithRole) {
   };
 }
 
+/**
+ * Partial-update merge: omit (`undefined`) keeps the current server value;
+ * explicit `null` (or any other sent value) is applied, including clears.
+ */
+function providedOr<T>(incoming: T | undefined, existing: T): T {
+  return incoming !== undefined ? incoming : existing;
+}
+
 async function loadServerIssue(context: ActionFunctionArgs["context"], issueId: number) {
   const db = getDB(context);
   return db.selectFrom("issue").selectAll().where("id", "=", issueId).executeTakeFirst();
@@ -214,12 +222,12 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
       context,
       body.issueId,
       {
-        issueType: fields.issueType ?? serverIssue.issue_type,
-        subIssueType: fields.subIssueType ?? serverIssue.sub_issue_type,
-        description: fields.description ?? serverIssue.description,
-        boltsAffected: fields.boltsAffected ?? serverIssue.bolts_affected,
-        isFlagged: fields.isFlagged ?? Boolean(serverIssue.is_flagged),
-        flaggedMessage: fields.flaggedMessage ?? serverIssue.flagged_message,
+        issueType: providedOr(fields.issueType, serverIssue.issue_type),
+        subIssueType: providedOr(fields.subIssueType, serverIssue.sub_issue_type),
+        description: providedOr(fields.description, serverIssue.description),
+        boltsAffected: providedOr(fields.boltsAffected, serverIssue.bolts_affected),
+        isFlagged: providedOr(fields.isFlagged, Boolean(serverIssue.is_flagged)),
+        flaggedMessage: providedOr(fields.flaggedMessage, serverIssue.flagged_message),
       },
       actorFrom(tokenUser),
       tokenUser.client,
