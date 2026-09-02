@@ -88,6 +88,11 @@ export type RolesType = typeof userRoles[number]['value'];
 //if these are modified, there are also triggers in the database that need to be updated
 export type StatusType = 'In Moderation' | 'Reported' | "Viewed" | "Completed" | "Archived" | "Claimed" | "Deleted";
 
+// Statuses hidden from the public topo pages. Must match the stats_public_issue_count
+// exclusions in the crag stats triggers (migrations/0058_add_issue_sync.sql), otherwise the
+// route cards disagree with the issue count badge in the crag header. Compared lowercase
+// because historical rows (and the Sloper import) use inconsistent casing.
+export const HIDDEN_TOPO_ISSUE_STATUSES = ['archived', 'closed', 'completed', 'deleted', 'in moderation'];
 
 export const issueTypes = [
     { value: 'Bolts', label: 'Bolts (#)' },

@@ -16,6 +16,9 @@ interface RouteCardProps {
 export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
     const fetcher = useFetcher();
 
+    // The loader hides closed and unmoderated issues, and sorts flagged ones first.
+    const primaryIssue = route.issues[0];
+
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'link';
@@ -127,7 +130,7 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                 </Grid.Col>
 
                 {/* Row 3: Issues Display */}
-                {route.issues.length > 0 && (
+                {primaryIssue && (
                     <Grid.Col span={12} mt="xs">
                         <Stack gap="xs">
                             <Group gap="xs" wrap="nowrap">
@@ -135,14 +138,14 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                                 <Badge 
                                     color="red" 
                                     variant="light"
-                                    title={route.issues[0].description ?? undefined}
+                                    title={primaryIssue.description ?? undefined}
                                 >
-                                    {route.issues[0].issueType}{route.issues[0].subIssueType ? ` - ${route.issues[0].subIssueType}` : ''}
+                                    {primaryIssue.issueType}{primaryIssue.subIssueType ? ` - ${primaryIssue.subIssueType}` : ''}
                                 </Badge>
                             </Group>
-                            {route.issues[0].flaggedMessage && (
+                            {primaryIssue.flaggedMessage && (
                                 <Text size="sm" c="red.7" fw={500}>
-                                    ⚠️ Safety Notice: {route.issues[0].flaggedMessage}
+                                    ⚠️ Safety Notice: {primaryIssue.flaggedMessage}
                                 </Text>
                             )}
                         </Stack>

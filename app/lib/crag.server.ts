@@ -3,6 +3,21 @@ import { getDB } from "./db";
 import type { Crag, Sector, Route, Issue, IssueAttachment, TopoAttachment } from "./models";
 import { redirect } from "react-router";
 import { sql } from "kysely";
+import { HIDDEN_TOPO_ISSUE_STATUSES } from "./constants";
+
+function groupBy<T, K>(items: T[], getKey: (item: T) => K): Map<K, T[]> {
+    const groups = new Map<K, T[]>();
+    for (const item of items) {
+        const key = getKey(item);
+        const group = groups.get(key);
+        if (group) {
+            group.push(item);
+        } else {
+            groups.set(key, [item]);
+        }
+    }
+    return groups;
+}
 
 async function loadAttachmentsForIssues(db: ReturnType<typeof getDB>, issues: Issue[]): Promise<void> {
     const issueIds = issues.map(issue => issue.id);
@@ -19,27 +34,23 @@ async function loadAttachmentsForIssues(db: ReturnType<typeof getDB>, issues: Is
             'url',
             'created_at as createdAt'
         ])
-        .orderBy('issue_id')
+        .orderBy('id')
         .execute() as IssueAttachment[];
 
-    // Populate attachments using sequential scan
-    let attachmentIndex = 0;
+    const attachmentsByIssue = groupBy(attachments, attachment => attachment.issueId);
     issues.forEach(issue => {
-        issue.attachments = [];
-        while (attachmentIndex < attachments.length && attachments[attachmentIndex].issueId === issue.id) {
-            const attachment = attachments[attachmentIndex];
+        issue.attachments = attachmentsByIssue.get(issue.id) ?? [];
+        issue.attachments.forEach(attachment => {
             attachment.issue = issue;
-            issue.attachments.push(attachment);
-            attachmentIndex++;
-        }
+        });
     });
 }
 
 async function loadIssuesForCrag(db: ReturnType<typeof getDB>, crag: Crag): Promise<void> {
-
     const issues = await db
         .selectFrom('issue')
         .where('crag_id', '=', crag.id)
+        .where(eb => eb(sql<string>`lower(status)`, 'not in', HIDDEN_TOPO_ISSUE_STATUSES))
         .select([
             'id',
             'description',
@@ -54,20 +65,18 @@ async function loadIssuesForCrag(db: ReturnType<typeof getDB>, crag: Crag): Prom
             'last_modified as lastModified',
             'reported_at as reportedAt',
         ])
-        .orderBy('route_id')
+        // Route cards surface the first issue only, so flagged safety notices must sort first.
+        .orderBy('is_flagged', 'desc')
+        .orderBy('id', 'desc')
         .execute() as Issue[];
 
-    // Populate issues using sequential scan
-    let issueIndex = 0;
+    const issuesByRoute = groupBy(issues, issue => issue.routeId);
     crag.sectors.forEach(sector => {
         sector.routes.forEach(route => {
-            route.issues = [];
-            while (issueIndex < issues.length && issues[issueIndex].routeId === route.id) {
-                const issue = issues[issueIndex];
+            route.issues = issuesByRoute.get(route.id) ?? [];
+            route.issues.forEach(issue => {
                 issue.route = route;
-                route.issues.push(issue);
-                issueIndex++;
-            }
+            });
         });
     });
 
@@ -254,7 +263,6 @@ async function loadRoutesForCrag(db: ReturnType<typeof getDB>, crag: Crag, attac
     });
 
     await loadAttachmentsForRoutes(db, routes, attachmentMap);
-    await loadIssuesForCrag(db, crag); // Ensure issues are loaded onto the mapped routes
 }
 
 async function loadSectorsForCrag(db: ReturnType<typeof getDB>, crag: Crag): Promise<void> {
@@ -315,6 +323,7 @@ async function loadCrag(context: AppLoadContext, identifier: number | string, lo
     await loadAttachmentsForCrag(db, crag);
     // Load the full hierarchy
     await loadSectorsForCrag(db, crag);
+    await loadIssuesForCrag(db, crag);
     return crag;
 }
 
