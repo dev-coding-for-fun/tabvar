@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
   requireUser: vi.fn(),
   uploadFileToR2: vi.fn(),
+  evaluateIssueModeration: vi.fn(),
 }));
 
 vi.mock("~/lib/db", () => ({
@@ -26,6 +27,10 @@ vi.mock("~/lib/auth.server", () => ({
 
 vi.mock("~/lib/s3.server", () => ({
   uploadFileToR2: mocks.uploadFileToR2,
+}));
+
+vi.mock("~/lib/moderation.server", () => ({
+  evaluateIssueModeration: mocks.evaluateIssueModeration,
 }));
 
 import { action, loader } from "./issues.create";
@@ -114,6 +119,7 @@ describe("issues.create action", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireUser.mockResolvedValue(createUser({ uid: "reporter-1", displayName: "Reporter" }));
+    mocks.evaluateIssueModeration.mockResolvedValue("In Moderation");
   });
 
   it("rejects missing route selection", async () => {
@@ -147,6 +153,46 @@ describe("issues.create action", () => {
       success: false,
       message: "Issue type missing, please select one",
     });
+  });
+
+  it("creates an issue in Reported status when auto-moderation passes", async () => {
+    mocks.evaluateIssueModeration.mockResolvedValue("Reported");
+    const db = createMockDb({
+      insert: [{ executeTakeFirstOrThrow: { id: 55 } }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await action(createRouteArgs({
+      request: createFormRequest("https://example.com/issues/create", {
+        route: "route:100",
+        issueType: "Bolts",
+        subIssueType: "Loose bolt",
+        notes: "Spinner on bolt 2",
+        boltNumbers: "2",
+      }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).status).toBe(302);
+    expect(mocks.evaluateIssueModeration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        routeId: 100,
+        issueType: "Bolts",
+        subIssueType: "Loose bolt",
+        description: "Spinner on bolt 2",
+        boltsAffected: "2",
+        reportedByUid: "reporter-1",
+      })
+    );
+    expect(db.__queries[0].values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        route_id: 100,
+        status: "Reported",
+      })
+    );
   });
 
   it("creates an issue and redirects on success", async () => {

@@ -10,6 +10,7 @@ import { requireUser } from "~/lib/auth.server";
 import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 import { createIssue } from "~/lib/issues.server";
+import { evaluateIssueModeration } from "~/lib/moderation.server";
 import { RouteSearchResults } from "~/lib/models";
 import { uploadFileToR2 } from "~/lib/s3.server";
 import { privatePageMeta } from "~/lib/seo";
@@ -110,6 +111,15 @@ export const action: ActionFunction = async ({ request, context }) => {
     uploadFileToR2(context, file, env.ISSUES_BUCKET_NAME, env.ISSUES_BUCKET_DOMAIN)
   ));
 
+  const status = await evaluateIssueModeration(context, {
+    routeId: Number(routeId),
+    issueType,
+    subIssueType,
+    description: notes,
+    boltsAffected: boltNumbers || null,
+    reportedByUid: user.uid,
+  });
+
   const db = getDB(context);
   const issueId = await createIssue(context, {
     routeId: Number(routeId),
@@ -117,7 +127,7 @@ export const action: ActionFunction = async ({ request, context }) => {
     subIssueType,
     description: notes,
     boltsAffected: boltNumbers || null,
-    status: "In Moderation",
+    status,
     reportedByUid: user.uid,
     reportedBy: user.displayName,
   });
