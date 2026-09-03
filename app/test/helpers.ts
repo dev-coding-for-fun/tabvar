@@ -101,9 +101,9 @@ export function createRouteArgs(args: {
   return args as ActionFunctionArgs & LoaderFunctionArgs;
 }
 
-export async function readJson(value: unknown) {
+export async function readJson<T = any>(value: unknown): Promise<T> {
   if (value instanceof Response) {
-    return value.json();
+    return (await value.json()) as T;
   }
   if (
     value &&
@@ -112,10 +112,10 @@ export async function readJson(value: unknown) {
     value.type === "DataWithResponseInit" &&
     "data" in value
   ) {
-    return value.data;
+    return (value as { data: T }).data;
   }
 
-  return value;
+  return value as T;
 }
 
 export function getStatus(value: unknown) {
