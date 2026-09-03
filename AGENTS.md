@@ -62,6 +62,14 @@ Agents working in this codebase **must** adhere to the following rules:
   - `readJson(response)`: Reads and parses data from either a raw `Response` or a `DataWithResponseInit` object.
   - `createUser(...)`: Mock authenticated user generator.
 
+### D. Dependency Cascades & Collaborative Planning
+- **STOP AND UPDATE THE USER**: Whenever an upgrade, refactor, or new capability triggers a cascading dependency chain (e.g. a major framework bump requiring runtime version changes, dev-server plugin replacements, breaking context/typing shifts, or cascading deprecations across multiple layers), **do not proceed autonomously**.
+- **PLAN FIRST**:
+  1. Halt code modifications and destructive actions immediately.
+  2. Clearly communicate the full chain of affected layers, breaking changes, and trade-offs to the user.
+  3. Formulate an explicit, step-by-step implementation plan.
+  4. Obtain user review and explicit alignment before touching dependencies or modifying code.
+
 ---
 
 ## 3. Cloudflare Wrangler & D1 Database Workflow
