@@ -59,7 +59,7 @@ describe("api.v1.issues.$id.attachments action", () => {
     }))) as Response;
 
     expect(response.status).toBe(201);
-    const body = await response.json();
+    const body = (await response.json()) as any;
     expect(body.attachments).toHaveLength(1);
     expect(body.attachments[0]).toMatchObject({ id: 5, url: "https://issues.example.com/bolt.jpg" });
   });

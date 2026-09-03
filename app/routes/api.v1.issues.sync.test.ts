@@ -148,7 +148,7 @@ describe("api.v1.issues.sync action (push)", () => {
     }))) as Response;
 
     expect(response.status).toBe(409);
-    const body = await response.json();
+    const body = (await response.json()) as any;
     expect(body.status).toBe("conflict");
     expect(body.serverId).toBe(1);
   });
@@ -172,7 +172,7 @@ describe("api.v1.issues.sync action (push)", () => {
     }))) as Response;
 
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = (await response.json()) as any;
     expect(body.status).toBe("applied");
     expect(body.issue.status).toBe("Deleted");
     expect(db.updateTable).toHaveBeenCalledWith("issue");

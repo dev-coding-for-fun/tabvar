@@ -78,7 +78,7 @@ describe("api.v1.issues loader (pull)", () => {
     }))) as Response;
 
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = (await response.json()) as any;
     expect(body.issues).toHaveLength(2);
     expect(body.issues[0].attachments).toHaveLength(2);
     expect(body.issues[1].status).toBe("Deleted");
