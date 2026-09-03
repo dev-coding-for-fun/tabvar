@@ -16,6 +16,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typegen": "wrangler types && kysely-codegen --out-file app/lib/db.d.ts",
+    "verify": "npm run typecheck && npm test",
+    "db:list:local": "wrangler d1 migrations list DB --local",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "preview": "npm run build && wrangler pages dev",
     "cf-typegen": "wrangler types",
     "knip": "knip"

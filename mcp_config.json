@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "tabvar-d1-sqlite": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "--db-path",
+        "X:/Documents/GitHub/demofinder/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/a96ffa9677cea748d3fdc28bccaf9b3d568b3d1d1f1c7fcc73d477e3c40aca64.sqlite"
+      ]
+    }
+  }
+}

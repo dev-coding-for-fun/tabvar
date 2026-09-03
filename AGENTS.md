@@ -122,15 +122,16 @@ Production migrations are automated in CI during Cloudflare Pages builds (`npm r
 
 | Purpose | Command | Notes |
 | :--- | :--- | :--- |
+| **Verify All (Fast)** | `npm run verify` | Runs `typecheck && test` (~3.5s, run before finishing tasks) |
 | **Start Dev Server** | `npm run dev` | Runs React Router dev server on `127.0.0.1` |
-| **Run All Tests** | `npm test` | Runs Vitest once (fast, ~4s) |
+| **Run All Tests** | `npm test` | Runs Vitest once (fast, ~3s) |
 | **Run Specific Test** | `npx vitest run <path-to-test>` | E.g. `npx vitest run app/routes/api.issues.test.ts` |
 | **Run Tests in Watch Mode** | `npm run test:watch` | Vitest interactive watcher |
 | **Typecheck** | `npm run typecheck` | Runs `react-router typegen && tsc` |
 | **Lint** | `npm run lint` | ESLint |
 | **Database Codegen** | `npm run typegen` | Runs `wrangler types` and `kysely-codegen` |
-| **List Local Migrations** | `npx wrangler d1 migrations list DB --local` | Checks unapplied local migrations |
-| **Apply Local Migrations** | `npx wrangler d1 migrations apply DB --local` | Executes pending local migrations |
+| **List Local Migrations** | `npm run db:list:local` | (or `npx wrangler d1 migrations list DB --local`) |
+| **Apply Local Migrations** | `npm run db:migrate:local` | (or `npx wrangler d1 migrations apply DB --local`) |
 | **Build Project** | `npm run build` | Compiles client and server bundles |
 
 ---

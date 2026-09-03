@@ -1,0 +1,16 @@
+{
+  "production-safety-gate": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .agents/scripts/safety-gate.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
