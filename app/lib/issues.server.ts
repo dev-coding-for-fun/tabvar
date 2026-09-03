@@ -168,38 +168,71 @@ export async function modifyIssue(
   const db = getDB(context);
   const issue = await db.selectFrom('issue').selectAll()
     .where('id', '=', issueId).executeTakeFirstOrThrow();
+
+  const issueUpdates: Record<string, unknown> = {
+    last_modified: new Date().toISOString(),
+  };
+
+  if (updates.issueType !== undefined) issueUpdates.issue_type = updates.issueType;
+  if (updates.subIssueType !== undefined) issueUpdates.sub_issue_type = updates.subIssueType;
+  if (updates.description !== undefined) issueUpdates.description = updates.description;
+  if (updates.isFlagged !== undefined) issueUpdates.is_flagged = updates.isFlagged ? 1 : 0;
+  if (updates.flaggedMessage !== undefined) issueUpdates.flagged_message = updates.flaggedMessage;
+  if (updates.boltsAffected !== undefined) issueUpdates.bolts_affected = updates.boltsAffected;
+
+  if (updates.status !== undefined) {
+    issueUpdates.status = updates.status;
+    if (updates.lastStatus !== undefined) issueUpdates.last_status = updates.lastStatus;
+    if (updates.approvedAt !== undefined) issueUpdates.approved_at = updates.approvedAt;
+    if (updates.approvedByUid !== undefined) issueUpdates.approved_by_uid = updates.approvedByUid;
+    if (updates.archivedAt !== undefined) issueUpdates.archived_at = updates.archivedAt;
+    if (updates.archivedByUid !== undefined) issueUpdates.archived_by_uid = updates.archivedByUid;
+  }
+
   await db.updateTable('issue')
-    .set({
-      issue_type: updates.issueType,
-      sub_issue_type: updates.subIssueType,
-      description: updates.description,
-      is_flagged: updates.isFlagged ? 1 : 0,
-      flagged_message: updates.flaggedMessage,
-      bolts_affected: updates.boltsAffected,
-      last_modified: new Date().toISOString(),
-    })
+    .set(issueUpdates as any)
     .where('id', '=', issueId)
     .execute();
+
+  const auditLogValues: Record<string, unknown> = {
+    issue_id: issueId,
+    action: "update",
+    uid: user.uid,
+    user_display_name: user.displayName,
+    user_role: user.role,
+  };
+
+  if (updates.issueType !== undefined) {
+    auditLogValues.before_issue_type = issue.issue_type;
+    auditLogValues.after_issue_type = updates.issueType;
+  }
+  if (updates.subIssueType !== undefined) {
+    auditLogValues.before_sub_issue_type = issue.sub_issue_type;
+    auditLogValues.after_sub_issue_type = updates.subIssueType;
+  }
+  if (updates.description !== undefined) {
+    auditLogValues.before_description = issue.description;
+    auditLogValues.after_description = updates.description;
+  }
+  if (updates.isFlagged !== undefined) {
+    auditLogValues.before_is_flagged = issue.is_flagged;
+    auditLogValues.after_is_flagged = updates.isFlagged ? 1 : 0;
+  }
+  if (updates.flaggedMessage !== undefined) {
+    auditLogValues.before_flagged_message = issue.flagged_message;
+    auditLogValues.after_flagged_message = updates.flaggedMessage;
+  }
+  if (updates.boltsAffected !== undefined) {
+    auditLogValues.before_bolts_affected = issue.bolts_affected;
+    auditLogValues.after_bolts_affected = updates.boltsAffected;
+  }
+  if (updates.status !== undefined) {
+    auditLogValues.before_status = issue.status;
+    auditLogValues.after_status = updates.status;
+  }
+
   await db.insertInto('issue_audit_log')
-    .values({
-      issue_id: issueId,
-      action: "update",
-      uid: user.uid,
-      user_display_name: user.displayName,
-      user_role: user.role,
-      before_issue_type: issue.issue_type,
-      after_issue_type: updates.issueType,
-      before_sub_issue_type: issue.sub_issue_type,
-      after_sub_issue_type: updates.subIssueType,
-      before_description: issue.description,
-      after_description: updates.description,
-      before_is_flagged: issue.is_flagged,
-      after_is_flagged: updates.isFlagged ? 1 : 0,
-      before_flagged_message: issue.flagged_message,
-      after_flagged_message: updates.flaggedMessage,
-      before_bolts_affected: issue.bolts_affected,
-      after_bolts_affected: updates.boltsAffected,
-    })
+    .values(auditLogValues as any)
     .execute();
 }
 
@@ -211,34 +244,7 @@ export async function modifyIssueStatus(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _source: IssueMutationSource = "web",
 ) {
-  const db = getDB(context);
-  // Fetch the current issue state *before* updating for the audit log
-  const issue = await db.selectFrom('issue').selectAll()
-    .where('id', '=', issueId).executeTakeFirstOrThrow();
-
-  await db.updateTable('issue')
-    .set({
-      status: updates.status,
-      last_status: updates.lastStatus,
-      approved_at: updates.approvedAt,
-      approved_by_uid: updates.approvedByUid,
-      archived_at: updates.archivedAt,
-      archived_by_uid: updates.archivedByUid,
-      last_modified: new Date().toISOString(),
-    })
-    .where('id', '=', issueId)
-    .execute();
-
-  await db.insertInto('issue_audit_log')
-    .values({
-      issue_id: issueId,
-      action: "update",
-      uid: user.uid,
-      user_display_name: user.displayName,
-      user_role: user.role,
-      before_status: issue.status,
-      after_status: updates.status,
-    }).execute();
+  return modifyIssue(context, issueId, updates, user, _source);
 }
 
 /**

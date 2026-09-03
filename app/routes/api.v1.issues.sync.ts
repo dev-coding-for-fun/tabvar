@@ -12,7 +12,6 @@ import {
   findIssueIdByExternalRef,
   mapExternalIssueRef,
   modifyIssue,
-  modifyIssueStatus,
   toApiIssue,
 } from "~/lib/issues.server";
 import type { Issue } from "~/lib/models";
@@ -104,9 +103,9 @@ async function readBody(request: Request): Promise<SyncMutation | null> {
  * Body: { op, externalId?, issueId?, baseUpdatedAt?, fields }
  *   - op "create": creates an issue. externalId (the client's offline UUID) maps
  *     it via external_issue_ref for idempotent retries.
- *   - op "update": edits content fields. Requires baseUpdatedAt.
- *   - op "status": transitions status (a soft delete is op "status" with
- *     status "Deleted"). Requires baseUpdatedAt.
+ *   - op "update": edits content fields, status, or both simultaneously. Requires baseUpdatedAt.
+ *   - op "status": alias for "update" targeting status (a soft delete is op "status" or
+ *     op "update" with status "Deleted"). Requires baseUpdatedAt and fields.status.
  *
  * Conflicts are server-wins: if the server row is newer than baseUpdatedAt the
  * change is rejected with 409 and the current server issue.
@@ -206,33 +205,49 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     );
   }
 
-  if (body.op === "status") {
-    if (!fields.status) {
-      return apiError("bad_request", 400, "fields.status is required for a status change.", headers);
-    }
-    await modifyIssueStatus(
-      context,
-      body.issueId,
+  const hasContentFields =
+    fields.issueType !== undefined ||
+    fields.subIssueType !== undefined ||
+    fields.description !== undefined ||
+    fields.boltsAffected !== undefined ||
+    fields.isFlagged !== undefined ||
+    fields.flaggedMessage !== undefined;
+
+  const hasStatusField = fields.status !== undefined;
+
+  if (body.op === "status" && !hasStatusField) {
+    return apiError("bad_request", 400, "fields.status is required for a status change.", headers);
+  }
+
+  if (!hasContentFields && !hasStatusField) {
+    return apiError("bad_request", 400, "At least one field or status must be provided for update.", headers);
+  }
+
+  const updates: Partial<Issue> = {};
+
+  if (hasContentFields) {
+    updates.issueType = providedOr(fields.issueType, serverIssue.issue_type);
+    updates.subIssueType = providedOr(fields.subIssueType, serverIssue.sub_issue_type);
+    updates.description = providedOr(fields.description, serverIssue.description);
+    updates.boltsAffected = providedOr(fields.boltsAffected, serverIssue.bolts_affected);
+    updates.isFlagged = providedOr(fields.isFlagged, Boolean(serverIssue.is_flagged));
+    updates.flaggedMessage = providedOr(fields.flaggedMessage, serverIssue.flagged_message);
+  }
+
+  if (hasStatusField && fields.status) {
+    Object.assign(
+      updates,
       buildStatusUpdates(fields.status, serverIssue.status, tokenUser.uid),
-      actorFrom(tokenUser),
-      tokenUser.client,
-    );
-  } else {
-    await modifyIssue(
-      context,
-      body.issueId,
-      {
-        issueType: providedOr(fields.issueType, serverIssue.issue_type),
-        subIssueType: providedOr(fields.subIssueType, serverIssue.sub_issue_type),
-        description: providedOr(fields.description, serverIssue.description),
-        boltsAffected: providedOr(fields.boltsAffected, serverIssue.bolts_affected),
-        isFlagged: providedOr(fields.isFlagged, Boolean(serverIssue.is_flagged)),
-        flaggedMessage: providedOr(fields.flaggedMessage, serverIssue.flagged_message),
-      },
-      actorFrom(tokenUser),
-      tokenUser.client,
     );
   }
+
+  await modifyIssue(
+    context,
+    body.issueId,
+    updates,
+    actorFrom(tokenUser),
+    tokenUser.client,
+  );
 
   const updated = await loadServerIssue(context, body.issueId);
   return jsonResponse(

@@ -270,4 +270,114 @@ describe("api.v1.issues.sync action (push)", () => {
       }),
     );
   });
+
+  it("updates both content fields and status in a single update operation", async () => {
+    const db = createMockDb({
+      select: [
+        { executeTakeFirst: fullIssueRow({ updated_at: "2026-06-09 10:00:00" }) },
+        { executeTakeFirstOrThrow: fullIssueRow({ updated_at: "2026-06-09 10:00:00" }) },
+        {
+          executeTakeFirst: fullIssueRow({
+            description: "replaced spinner",
+            status: "Completed",
+            updated_at: "2026-06-09 12:00:00",
+          }),
+        },
+      ],
+      update: [{ execute: [] }],
+      insert: [{ execute: [] }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = (await action(createRouteArgs({
+      request: jsonRequest({
+        op: "update",
+        issueId: 1,
+        baseUpdatedAt: "2026-06-09 10:00:00",
+        fields: {
+          description: "replaced spinner",
+          status: "Completed",
+        },
+      }),
+      context: createContext(),
+      params: {},
+    }))) as Response;
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.status).toBe("applied");
+    expect(body.issue.description).toBe("replaced spinner");
+    expect(body.issue.status).toBe("Completed");
+
+    // Both content fields and status-transition fields were updated in one call
+    expect(db.__queries[2].set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: "replaced spinner",
+        status: "Completed",
+        last_status: "Reported",
+        archived_by_uid: "u1",
+      }),
+    );
+  });
+
+  it("updates status via op 'update' without content fields", async () => {
+    const db = createMockDb({
+      select: [
+        { executeTakeFirst: fullIssueRow({ updated_at: "2026-06-09 10:00:00" }) },
+        { executeTakeFirstOrThrow: fullIssueRow({ updated_at: "2026-06-09 10:00:00" }) },
+        {
+          executeTakeFirst: fullIssueRow({
+            status: "Viewed",
+            updated_at: "2026-06-09 12:00:00",
+          }),
+        },
+      ],
+      update: [{ execute: [] }],
+      insert: [{ execute: [] }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = (await action(createRouteArgs({
+      request: jsonRequest({
+        op: "update",
+        issueId: 1,
+        baseUpdatedAt: "2026-06-09 10:00:00",
+        fields: { status: "Viewed" },
+      }),
+      context: createContext(),
+      params: {},
+    }))) as Response;
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.status).toBe("applied");
+    expect(body.issue.status).toBe("Viewed");
+    expect(db.__queries[2].set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "Viewed",
+        last_status: "Reported",
+        approved_by_uid: "u1",
+      }),
+    );
+  });
+
+  it("rejects op 'update' when neither content fields nor status are provided", async () => {
+    const db = createMockDb({
+      select: [{ executeTakeFirst: fullIssueRow({ updated_at: "2026-06-09 10:00:00" }) }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = (await action(createRouteArgs({
+      request: jsonRequest({
+        op: "update",
+        issueId: 1,
+        baseUpdatedAt: "2026-06-09 10:00:00",
+        fields: {},
+      }),
+      context: createContext(),
+      params: {},
+    }))) as Response;
+
+    expect(response.status).toBe(400);
+  });
 });
