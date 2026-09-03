@@ -1,4 +1,4 @@
-import { captureException } from "@sentry/react-router";
+import { captureException } from "@sentry/core";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, useNavigate, useRouteError, useLocation } from "react-router";
 import '@mantine/core/styles.layer.css';
 import 'mantine-datatable/styles.layer.css';

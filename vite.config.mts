@@ -21,16 +21,6 @@ const config = defineConfig(async (configEnv) => {
     ],
   resolve: {
     tsconfigPaths: true,
-    alias: {
-      // Alias Node.js core modules to their prefixed versions
-      'util': 'node:util',
-      'buffer': 'node:buffer',
-      'path': 'node:path',
-      'stream': 'node:stream',
-      'events': 'node:events',
-      'crypto': 'node:crypto',
-      // Add other necessary aliases here
-    }
   },
     ssr: {
       resolve: {

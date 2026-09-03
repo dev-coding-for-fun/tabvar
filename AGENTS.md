@@ -9,7 +9,7 @@ Welcome to **demofinder** (also known as **tabvar**). This document is the autho
 | Layer | Technology | Details |
 | :--- | :--- | :--- |
 | **Framework** | React Router v8 | SSR enabled (`react-router.config.ts`), Vite-powered, SingleFetch mode |
-| **Runtime** | Cloudflare Pages & Workers | Edge runtime (`nodejs_compat` compatibility flag) |
+| **Runtime** | Cloudflare Workers with Static Assets | Edge runtime (`nodejs_compat` compatibility flag, migrating from Pages) |
 | **Database** | Cloudflare D1 | Serverless SQLite managed via Wrangler and queried via **Kysely** |
 | **Storage** | Cloudflare R2 | S3-compatible bucket for topos and issue attachments |
 | **UI** | Mantine v9 | `@mantine/core`, `@mantine/dates`, `@mantine/tiptap`, Tabler Icons, Mapbox GL |
@@ -47,7 +47,8 @@ Agents working in this codebase **must** adhere to the following rules:
   ```
 
 ### B. Cloudflare Edge Runtime Constraints
-- The backend runs on Cloudflare Workers / Pages edge infrastructure via `@cloudflare/vite-plugin`.
+- The backend runs on Cloudflare Workers edge infrastructure (`workers/app.ts`) serving static assets from `build/client`.
+- Local development is powered by `@cloudflare/vite-plugin` running the Worker environment natively in `workerd`.
 - **DO NOT** import non-polyfilled Node.js built-ins (`node:fs`, `child_process`, etc.) into `app/` routes or server libraries.
 - For supported Node built-ins (`crypto`, `buffer`, `util`, `path`, `stream`), use the `node:` prefix (e.g. `import crypto from "node:crypto"`).
 - **DO NOT** read secrets from `process.env`. Access environment variables and bindings via `context.cloudflare.env` (typed via `RouterContextProvider` augmentation in `load-context.ts`):
@@ -147,6 +148,7 @@ Production migrations are automated in CI during Cloudflare Pages builds (`npm r
 | **List Local Migrations** | `npm run db:list:local` | (or `npx wrangler d1 migrations list DB --local`) |
 | **Apply Local Migrations** | `npm run db:migrate:local` | (or `npx wrangler d1 migrations apply DB --local`) |
 | **Build Project** | `npm run build` | Compiles client and server bundles |
+| **Deploy Worker (Side-by-Side)** | `npm run deploy:worker` | Builds and deploys to Cloudflare Workers |
 
 ---
 
@@ -154,6 +156,8 @@ Production migrations are automated in CI during Cloudflare Pages builds (`npm r
 
 ```
 demofinder/
+├── .agents/
+│   └── skills/           # Repository skills (d1-migration, issue-sync-api, rr7-route-creator, test-writing)
 ├── app/
 │   ├── components/       # Mantine UI components (GlobalBanner, TopoGallery, etc.)
 │   ├── contexts/         # React contexts (e.g. search context)
@@ -173,11 +177,14 @@ demofinder/
 │   │   └── admin.*       # Administrative routes and queries
 │   └── test/
 │       └── helpers.ts    # Fluent mock database, request, and context helpers
+├── workers/
+│   └── app.ts            # Cloudflare Workers entry point for React Router v8
 ├── docs/
 │   └── issue-sync-api.md # Comprehensive spec for the v1 mobile sync API
 ├── migrations/           # Sequentially numbered D1 SQL migrations (0001_...)
 ├── scripts/              # Build and production migration runners
-├── wrangler.toml         # Cloudflare Pages, D1, and R2 bindings configuration
+├── mcp_config.json       # MCP server definitions (D1 SQLite, Cloudflare docs/bindings/builds)
+├── wrangler.toml         # Cloudflare Workers, Assets, D1, and R2 bindings configuration
 ├── load-context.ts       # Augmentation for React Router RouterContextProvider
 └── react-router.config.ts# React Router v8 configuration (SSR enabled)
 ```
