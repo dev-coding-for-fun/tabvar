@@ -8,7 +8,7 @@ Welcome to **demofinder** (also known as **tabvar**). This document is the autho
 
 | Layer | Technology | Details |
 | :--- | :--- | :--- |
-| **Framework** | React Router v7 | SSR enabled (`react-router.config.ts`), Vite-powered, SingleFetch mode |
+| **Framework** | React Router v8 | SSR enabled (`react-router.config.ts`), Vite-powered, SingleFetch mode |
 | **Runtime** | Cloudflare Pages & Workers | Edge runtime (`nodejs_compat` compatibility flag) |
 | **Database** | Cloudflare D1 | Serverless SQLite managed via Wrangler and queried via **Kysely** |
 | **Storage** | Cloudflare R2 | S3-compatible bucket for topos and issue attachments |
@@ -22,15 +22,15 @@ Welcome to **demofinder** (also known as **tabvar**). This document is the autho
 
 Agents working in this codebase **must** adhere to the following rules:
 
-### A. React Router v7 SingleFetch Conventions
-- **DO NOT** import from `@remix-run/*`. Always import from `react-router`.
+### A. React Router v8 Conventions
+- **DO NOT** import from `@remix-run/*` or `react-router-dom` (removed in v8). Always import directly from `react-router` (or `react-router/dom` for DOM-specific providers).
 - **DO NOT** use `json(...)` or `defer(...)` in loaders or actions.
 - **DO** return raw plain objects directly from loaders and actions:
   ```ts
   // ❌ INCORRECT (Legacy Remix pattern)
   return json({ issues });
 
-  // ✅ CORRECT (React Router v7 SingleFetch)
+  // ✅ CORRECT (React Router v8 SingleFetch)
   return { issues };
   ```
 - **DO** use `data(payload, { status, headers })` from `react-router` only when you must set custom status codes or HTTP headers:
@@ -39,12 +39,18 @@ Agents working in this codebase **must** adhere to the following rules:
 
   return data({ error: "Unauthorized" }, { status: 401 });
   ```
+- **DO** use `loaderData` (not `data`) in `meta` functions:
+  ```ts
+  export const meta: MetaFunction<typeof loader> = ({ loaderData }) => {
+    return [{ title: loaderData?.title }];
+  };
+  ```
 
 ### B. Cloudflare Edge Runtime Constraints
-- The backend runs on Cloudflare Workers / Pages edge infrastructure.
+- The backend runs on Cloudflare Workers / Pages edge infrastructure via `@cloudflare/vite-plugin`.
 - **DO NOT** import non-polyfilled Node.js built-ins (`node:fs`, `child_process`, etc.) into `app/` routes or server libraries.
 - For supported Node built-ins (`crypto`, `buffer`, `util`, `path`, `stream`), use the `node:` prefix (e.g. `import crypto from "node:crypto"`).
-- **DO NOT** read secrets from `process.env`. Access environment variables and bindings via `context.cloudflare.env`:
+- **DO NOT** read secrets from `process.env`. Access environment variables and bindings via `context.cloudflare.env` (typed via `RouterContextProvider` augmentation in `load-context.ts`):
   ```ts
   export async function loader({ context }: Route.LoaderArgs) {
     const env = context.cloudflare.env;
@@ -160,7 +166,7 @@ demofinder/
 │   │   ├── moderation.server.ts # Gemini AI auto-moderation logic
 │   │   ├── attachment.server.ts # S3/R2 presigned upload URL helpers
 │   │   └── topoSync.server.ts   # TopoBuilder sync utilities
-│   ├── routes/           # React Router v7 file-system routes
+│   ├── routes/           # React Router v8 file-system routes
 │   │   ├── api.v1.*      # External & mobile JSON endpoints (TopoBuilder sync)
 │   │   ├── issues.*      # Issue creation, listing, and management routes
 │   │   ├── topos.*       # Crag topo visualization and JSON importer
@@ -172,8 +178,8 @@ demofinder/
 ├── migrations/           # Sequentially numbered D1 SQL migrations (0001_...)
 ├── scripts/              # Build and production migration runners
 ├── wrangler.toml         # Cloudflare Pages, D1, and R2 bindings configuration
-├── load-context.ts       # Augmentation for React Router AppLoadContext
-└── react-router.config.ts# React Router v7 configuration (SSR enabled)
+├── load-context.ts       # Augmentation for React Router RouterContextProvider
+└── react-router.config.ts# React Router v8 configuration (SSR enabled)
 ```
 
 ---

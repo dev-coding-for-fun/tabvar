@@ -72,7 +72,7 @@ export const loader: LoaderFunction = async ({ params, context, request }): Prom
 };
 
 export const meta: MetaFunction<typeof loader> = (args) => {
-  const data = args.data as CragPageData | undefined;
+  const data = args.loaderData as CragPageData | undefined;
   if (!data?.crag) {
     return [
       { title: pageTitle("Topos") },

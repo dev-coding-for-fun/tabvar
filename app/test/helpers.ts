@@ -1,4 +1,5 @@
-import type { ActionFunctionArgs, AppLoadContext, LoaderFunctionArgs } from "react-router";
+import { type ActionFunctionArgs, type LoaderFunctionArgs, RouterContextProvider } from "react-router";
+import type { AppLoadContext } from "~/../load-context";
 import { vi, type Mock } from "vitest";
 import type { User } from "~/lib/models";
 
@@ -51,7 +52,8 @@ export function createUser(overrides: Partial<User> = {}): User {
 }
 
 export function createContext(env: Partial<Env> & Record<string, unknown> = {}): AppLoadContext {
-  return {
+  const context = new RouterContextProvider();
+  Object.assign(context, {
     cloudflare: {
       env: {
         COOKIE_SECRET: "test-secret",
@@ -67,7 +69,8 @@ export function createContext(env: Partial<Env> & Record<string, unknown> = {}):
         ...env,
       },
     },
-  } as unknown as AppLoadContext;
+  });
+  return context;
 }
 
 export function createGetRequest(url = "https://example.com/") {
@@ -98,7 +101,11 @@ export function createRouteArgs(args: {
   context: AppLoadContext;
   params: Record<string, string | undefined>;
 }): ActionFunctionArgs & LoaderFunctionArgs {
-  return args as ActionFunctionArgs & LoaderFunctionArgs;
+  return {
+    ...args,
+    url: new URL(args.request.url),
+    pattern: "",
+  } as ActionFunctionArgs & LoaderFunctionArgs;
 }
 
 export async function readJson<T = any>(value: unknown): Promise<T> {

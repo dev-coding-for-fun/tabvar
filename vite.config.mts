@@ -1,5 +1,5 @@
 import { reactRouter } from "@react-router/dev/vite";
-import { cloudflareDevProxy } from "@react-router/dev/vite/cloudflare";
+import { cloudflare } from "@cloudflare/vite-plugin";
 import { defineConfig } from "vitest/config";
 import { sentryReactRouter } from "@sentry/react-router";
 
@@ -12,7 +12,7 @@ const config = defineConfig(async (configEnv) => {
       host: "127.0.0.1",
     },
     plugins: [
-      ...(!isTest ? [cloudflareDevProxy(), reactRouter()] : []),
+      ...(!isTest ? [cloudflare({ viteEnvironment: { name: "ssr" } }), reactRouter()] : []),
       ...(await sentryReactRouter({
         authToken: process.env.SENTRY_AUTH_TOKEN,
         org: "tabvar-k0",
@@ -32,9 +32,14 @@ const config = defineConfig(async (configEnv) => {
       // Add other necessary aliases here
     }
   },
-  build: {
-    sourcemap: true,
-  },
+    ssr: {
+      resolve: {
+        conditions: ["worker", "workerd"],
+      },
+    },
+    build: {
+      sourcemap: true,
+    },
   test: {
     environment: "happy-dom",
     setupFiles: ["./vitest.setup.ts"],

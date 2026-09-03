@@ -1,19 +1,19 @@
 ---
 name: rr7-route-creator
 description: >-
-  Use this skill when adding or refactoring React Router v7 routes, loaders, actions,
+  Use this skill when adding or refactoring React Router v8 routes, loaders, actions,
   error boundaries, or integrating Mantine v9 UI components in this repository.
 ---
 
-# React Router v7 Route Creator
+# React Router Route Creator
 
-This guide provides boilerplate and established patterns for scaffolding React Router v7 routes with SingleFetch mode and Mantine v9 in this repository.
+This guide provides boilerplate and established patterns for scaffolding React Router v8 routes with SingleFetch mode and Mantine v9 in this repository.
 
 ---
 
 ## 1. File Placement & Routing
 - Place route modules in [app/routes/](file:///x:/Documents/GitHub/demofinder/app/routes).
-- React Router v7 uses file-system routing. For example:
+- React Router v8 uses file-system routing. For example:
   - `app/routes/crags._index.tsx` -> `/crags`
   - `app/routes/crags.$id.tsx` -> `/crags/:id`
   - `app/routes/api.v1.example.ts` -> `/api/v1/example` (Resource route)
