@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "tabvar-d1-sqlite": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-server-sqlite",
+        "--db",
+        "./.wrangler/state/v3/d1/miniflare-D1DatabaseObject/<your-d1-database-hash>.sqlite"
+      ]
+    },
+    "cloudflare-docs": {
+      "serverUrl": "https://docs.mcp.cloudflare.com/mcp"
+    },
+    "cloudflare": {
+      "serverUrl": "https://mcp.cloudflare.com/mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_CLOUDFLARE_API_TOKEN>",
+        "cf-account-id": "<YOUR_CLOUDFLARE_ACCOUNT_ID>"
+      }
+    },
+    "cloudflare-bindings": {
+      "serverUrl": "https://bindings.mcp.cloudflare.com/mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_CLOUDFLARE_API_TOKEN>",
+        "cf-account-id": "<YOUR_CLOUDFLARE_ACCOUNT_ID>"
+      }
+    },
+    "cloudflare-builds": {
+      "serverUrl": "https://builds.mcp.cloudflare.com/mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_CLOUDFLARE_API_TOKEN>",
+        "cf-account-id": "<YOUR_CLOUDFLARE_ACCOUNT_ID>"
+      }
+    },
+    "cloudflare-observability": {
+      "serverUrl": "https://observability.mcp.cloudflare.com/mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_CLOUDFLARE_API_TOKEN>",
+        "cf-account-id": "<YOUR_CLOUDFLARE_ACCOUNT_ID>"
+      }
+    }
+  }
+}

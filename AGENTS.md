@@ -183,7 +183,7 @@ demofinder/
 │   └── issue-sync-api.md # Comprehensive spec for the v1 mobile sync API
 ├── migrations/           # Sequentially numbered D1 SQL migrations (0001_...)
 ├── scripts/              # Build and production migration runners
-├── mcp_config.json       # MCP server definitions (D1 SQLite, Cloudflare docs/bindings/builds)
+├── mcp_config.example.json # Template for local MCP server definitions (mcp_config.json is gitignored)
 ├── wrangler.toml         # Cloudflare Workers, Assets, D1, and R2 bindings configuration
 ├── load-context.ts       # Augmentation for React Router RouterContextProvider
 └── react-router.config.ts# React Router v8 configuration (SSR enabled)
