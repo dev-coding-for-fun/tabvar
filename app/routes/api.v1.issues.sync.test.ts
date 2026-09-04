@@ -105,7 +105,7 @@ describe("api.v1.issues.sync action (push)", () => {
     mocks.requireApiTokenUser.mockResolvedValue(tokenUser({ role: null }));
 
     const response = (await action(createRouteArgs({
-      request: jsonRequest({ op: "status", issueId: 1, baseUpdatedAt: "2026-06-09 10:00:00", fields: { status: "Completed" } }),
+      request: jsonRequest({ op: "update", issueId: 1, baseUpdatedAt: "2026-06-09 10:00:00", fields: { status: "Completed" } }),
       context: createContext(),
       params: {},
     }))) as Response;
@@ -142,7 +142,7 @@ describe("api.v1.issues.sync action (push)", () => {
     mocks.getDB.mockReturnValue(db);
 
     const response = (await action(createRouteArgs({
-      request: jsonRequest({ op: "status", issueId: 1, baseUpdatedAt: "2026-06-09 09:00:00", fields: { status: "Completed" } }),
+      request: jsonRequest({ op: "update", issueId: 1, baseUpdatedAt: "2026-06-09 09:00:00", fields: { status: "Completed" } }),
       context: createContext(),
       params: {},
     }))) as Response;
@@ -166,7 +166,7 @@ describe("api.v1.issues.sync action (push)", () => {
     mocks.getDB.mockReturnValue(db);
 
     const response = (await action(createRouteArgs({
-      request: jsonRequest({ op: "status", issueId: 1, baseUpdatedAt: "2026-06-09 10:00:00", fields: { status: "Deleted" } }),
+      request: jsonRequest({ op: "update", issueId: 1, baseUpdatedAt: "2026-06-09 10:00:00", fields: { status: "Deleted" } }),
       context: createContext(),
       params: {},
     }))) as Response;

@@ -101,7 +101,7 @@ Content-Type: application/json
 
 ```json
 {
-  "op": "create | update | status",
+  "op": "create | update",
   "externalId": "client-generated-uuid",
   "issueId": 123,
   "baseUpdatedAt": "2026-06-09 10:00:00",
@@ -121,13 +121,13 @@ Content-Type: application/json
 
 | field           | applies to        | notes                                                        |
 | --------------- | ----------------- | ----------------------------------------------------------- |
-| `op`            | all               | `create`, `update`, or `status` (alias for `update`)        |
+| `op`            | all               | `create` or `update`                                        |
 | `externalId`    | create            | your offline UUID; enables idempotent retries               |
-| `issueId`       | update, status    | required                                                     |
-| `baseUpdatedAt` | update, status    | required; the `updatedAt` you last saw (conflict basis)     |
+| `issueId`       | update            | required                                                     |
+| `baseUpdatedAt` | update            | required; the `updatedAt` you last saw (conflict basis)     |
 | `fields.routeId`    | create        | required                                                     |
 | `fields.issueType`  | create        | required                                                     |
-| `fields.status`     | create, update, status | create: optional (defaults `In Moderation`); update: optional; status: required |
+| `fields.status`     | create, update    | create: optional (defaults `In Moderation`); update: optional |
 
 Operations:
 
@@ -135,11 +135,10 @@ Operations:
   `externalId` are idempotent and return the original `serverId`.
 - **`update`** — edit content fields (`issueType`, `subIssueType`,
   `description`, `boltsAffected`, `isFlagged`, `flaggedMessage`), status
-  transitions, or both simultaneously in a single atomic mutation.
-- **`status`** — backwards-compatible alias for `update` targeting status only.
-  A **delete** is `op: "status"` (or `op: "update"`) with `fields.status = "Deleted"`.
+  transitions, or both simultaneously in a single atomic mutation. A **delete**
+  is `op: "update"` with `fields.status = "Deleted"`.
 
-**Conflict handling (server wins):** for `update`/`status`, if the server's
+**Conflict handling (server wins):** for `update`, if the server's
 `updated_at` is newer than your `baseUpdatedAt`, the change is rejected.
 
 **Response `409`**
@@ -150,7 +149,7 @@ Operations:
 
 Re-pull, reconcile, and retry with the new `baseUpdatedAt`.
 
-**Success `200` (update/status) or `201` (create)**
+**Success `200` (update) or `201` (create)**
 
 ```json
 { "status": "applied", "serverId": 123, "issue": { "...": "updated server issue" } }

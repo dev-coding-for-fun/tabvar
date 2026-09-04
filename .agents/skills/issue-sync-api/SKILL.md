@@ -37,17 +37,16 @@ Validated via `requireApiTokenUser(request, context)` in [app/lib/apiAuth.server
 - Soft-deleted issues return with `status: "Deleted"`.
 - Response includes `serverTime` for the client to store as its next cursor.
 
-### 2. Push Issue Mutations (Atomic Batch)
-`POST /api/v1/issues`
+### 2. Push Issue Mutation
+`POST /api/v1/issues/sync`
 - Implemented in [app/routes/api.v1.issues.sync.ts](file:///x:/Documents/GitHub/demofinder/app/routes/api.v1.issues.sync.ts).
-- Client submits an array of mutation operations:
+- Client submits a mutation operation:
   - `op: "create"`
   - `op: "update"`
-  - `op: "status"`
 - **Conflict Resolution (Server-Wins)**:
-  - For `update` and `status` operations, the client sends `baseUpdatedAt`.
+  - For `update` operations, the client sends `baseUpdatedAt`.
   - If `server.updated_at > client.baseUpdatedAt`, the server rejects that specific mutation with status `409 Conflict` (`status: "conflict"`).
-- Soft deletes are applied by submitting `op: "status"` with `fields: { status: "Deleted" }`.
+- Soft deletes are applied by submitting `op: "update"` with `fields: { status: "Deleted" }`.
 
 ### 3. Attachment Uploads
 `POST /api/v1/issues/:id/attachments`

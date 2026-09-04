@@ -16,7 +16,7 @@ import {
 } from "~/lib/issues.server";
 import type { Issue } from "~/lib/models";
 
-type SyncOp = "create" | "update" | "status";
+type SyncOp = "create" | "update";
 
 type SyncMutation = {
   op?: SyncOp;
@@ -103,15 +103,14 @@ async function readBody(request: Request): Promise<SyncMutation | null> {
  * Body: { op, externalId?, issueId?, baseUpdatedAt?, fields }
  *   - op "create": creates an issue. externalId (the client's offline UUID) maps
  *     it via external_issue_ref for idempotent retries.
- *   - op "update": edits content fields, status, or both simultaneously. Requires baseUpdatedAt.
- *   - op "status": alias for "update" targeting status (a soft delete is op "status" or
- *     op "update" with status "Deleted"). Requires baseUpdatedAt and fields.status.
+ *   - op "update": edits content fields, status, or both simultaneously (a soft delete
+ *     is op "update" with fields: { status: "Deleted" }). Requires baseUpdatedAt.
  *
  * Conflicts are server-wins: if the server row is newer than baseUpdatedAt the
  * change is rejected with 409 and the current server issue.
  *
  * Permissions: anonymous tokens may only create issues in "In Moderation";
- * member/admin/super get full create/update/status.
+ * member/admin/super get full create and update access.
  */
 export const action = async ({ request, context }: ActionFunctionArgs) => {
   const headers = corsHeaders(request, context);
@@ -128,8 +127,8 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   const moderator = isModerator(tokenUser.role);
 
   const body = await readBody(request);
-  if (!body?.op) {
-    return apiError("bad_request", 400, "op is required (create, update, or status).", headers);
+  if (!body?.op || (body.op !== "create" && body.op !== "update")) {
+    return apiError("bad_request", 400, "op is required (create or update).", headers);
   }
 
   const fields = body.fields ?? {};
@@ -180,16 +179,16 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     );
   }
 
-  // update / status both target an existing issue.
+  // update targets an existing issue.
   if (!moderator) {
     return apiError("forbidden", 403, "Member access is required to modify issues.", headers);
   }
 
   if (typeof body.issueId !== "number") {
-    return apiError("bad_request", 400, "issueId is required for update and status.", headers);
+    return apiError("bad_request", 400, "issueId is required for update.", headers);
   }
   if (!body.baseUpdatedAt) {
-    return apiError("bad_request", 400, "baseUpdatedAt is required for update and status.", headers);
+    return apiError("bad_request", 400, "baseUpdatedAt is required for update.", headers);
   }
 
   const serverIssue = await loadServerIssue(context, body.issueId);
@@ -214,10 +213,6 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     fields.flaggedMessage !== undefined;
 
   const hasStatusField = fields.status !== undefined;
-
-  if (body.op === "status" && !hasStatusField) {
-    return apiError("bad_request", 400, "fields.status is required for a status change.", headers);
-  }
 
   if (!hasContentFields && !hasStatusField) {
     return apiError("bad_request", 400, "At least one field or status must be provided for update.", headers);
