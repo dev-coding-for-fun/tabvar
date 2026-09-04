@@ -76,7 +76,7 @@ GET /api/v1/issues?since=<cursor>
       "approvedAt": null,
       "archivedAt": null,
       "attachments": [
-        { "id": 11, "url": "https://.../photo.jpg", "name": "photo.jpg", "type": "image/jpeg" }
+        { "id": 11, "url": "https://.../photo.jpg", "name": "photo.jpg", "type": "image/jpeg", "hash": "bb1f3308adcc035cb700962e4004e5e85c3cd006" }
       ]
     }
   ],
@@ -301,13 +301,20 @@ Content-Type: multipart/form-data
 - Use after the parent issue has a server `id` (upload queued offline photos
   once `create` returns its `serverId`).
 - `anonymous` may upload only to issues they reported; `member`+ to any issue.
+- **Idempotency & Deduplication**: The server calculates a **SHA-1** hash of each
+  uploaded photo. If a photo with the same content is already attached to the issue
+  (e.g., following an offline sync retry), the server reuses the existing attachment
+  without creating a duplicate or failing. Duplicate files within the same request batch
+  are also automatically deduplicated.
+- If all uploaded photos already exist on the issue, returns `200 OK`; otherwise returns
+  `201 Created`.
 
-**Response `201`**
+**Response `200` or `201`**
 
 ```json
 {
   "attachments": [
-    { "id": 5, "url": "https://.../photo.jpg", "name": "photo.jpg", "type": "image/jpeg" }
+    { "id": 5, "url": "https://.../photo.jpg", "name": "photo.jpg", "type": "image/jpeg", "hash": "bb1f3308adcc035cb700962e4004e5e85c3cd006" }
   ]
 }
 ```

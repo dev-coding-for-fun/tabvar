@@ -13,6 +13,7 @@ type SyncAttachment = {
   url: string;
   name: string | null;
   type: string;
+  hash: string | null;
 };
 
 type SyncIssue = ApiIssue & {
@@ -69,6 +70,7 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
       "issue_attachment.url as attachment_url",
       "issue_attachment.name as attachment_name",
       "issue_attachment.type as attachment_type",
+      "issue_attachment.file_hash as attachment_hash",
     ])
     .orderBy("issue.updated_at", "asc");
 
@@ -97,6 +99,7 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
         url: row.attachment_url,
         name: row.attachment_name ?? null,
         type: row.attachment_type ?? "",
+        hash: row.attachment_hash ?? null,
       });
     }
   }

@@ -25,7 +25,8 @@ vi.mock("~/lib/auth.server", () => ({
   requireUser: mocks.requireUser,
 }));
 
-vi.mock("~/lib/s3.server", () => ({
+vi.mock("~/lib/s3.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/lib/s3.server")>()),
   uploadFileToR2: mocks.uploadFileToR2,
 }));
 
@@ -259,14 +260,17 @@ describe("issues.create action", () => {
       expect.anything(),
       expect.objectContaining({ name: "bolt.jpg" }),
       "issues",
-      "https://issues.example.com"
+      "https://issues.example.com",
+      expect.objectContaining({ useContentHash: true, keyPrefix: "issues" })
     );
     expect(db.insertInto).toHaveBeenCalledWith("issue_attachment");
-    expect(db.__queries[1].values).toHaveBeenCalledWith({
-      issue_id: 55,
-      name: "bolt.jpg",
-      type: "image/jpeg",
-      url: "https://issues.example.com/bolt.jpg",
-    });
+    expect(db.__queries[1].values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_id: 55,
+        name: "bolt.jpg",
+        type: "image/jpeg",
+        url: "https://issues.example.com/bolt.jpg",
+      })
+    );
   });
 });

@@ -262,9 +262,20 @@ export async function deleteIssue(context: AppLoadContext, issueId: number, user
     .where('issue_id', '=', issueId).execute();
   if (attachments.length > 0) {
     for (const attachment of attachments) {
-      const fileName = attachment.name ?? attachment.url.split('/').pop();
-      if (!fileName) { throw new Error('Invalid attachment filename'); }
-      await deleteFromR2(context, env.ISSUES_BUCKET_NAME, fileName);
+      // Only delete from R2 if no other issue references the same URL
+      const otherRef = await db
+        .selectFrom('issue_attachment')
+        .where('url', '=', attachment.url)
+        .where('issue_id', '!=', issueId)
+        .select('id')
+        .limit(1)
+        .executeTakeFirst();
+
+      if (!otherRef) {
+        const fileName = attachment.name ?? attachment.url.split('/').pop();
+        if (!fileName) { throw new Error('Invalid attachment filename'); }
+        await deleteFromR2(context, env.ISSUES_BUCKET_NAME, fileName);
+      }
     }
   }
   await db.deleteFrom('issue_attachment')

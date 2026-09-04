@@ -1,11 +1,12 @@
 import { type ActionFunctionArgs, data, LoaderFunction, type MetaFunction } from "react-router";
 import { Form, useActionData, useSubmit, useLoaderData, useFetcher } from "react-router";
-import { Container, Stack, Title, Textarea, Button, Group, Alert, Table, Text, Code, FileButton, Space, LoadingOverlay } from "@mantine/core";
-import { IconAlertCircle, IconDownload, IconUpload } from "@tabler/icons-react";
+import { Container, Stack, Title, Textarea, Button, Group, Alert, Table, Text, Code, FileButton, Space, LoadingOverlay, Badge } from "@mantine/core";
+import { IconAlertCircle, IconDownload, IconUpload, IconRefresh } from "@tabler/icons-react";
 import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { RequirePermission } from "~/components/RequirePermission";
 import { getDB } from "~/lib/db";
+import { recalculateAttachmentHashes, type HashRecalculateStats } from "~/lib/attachment.server";
 import type { User } from "~/lib/models";
 import { useUser } from "~/lib/hooks/useUser";
 import { useEffect } from "react";
@@ -68,6 +69,7 @@ interface ActionData {
     message?: string;
     importStats?: Record<string, number>;
     totalRows?: number;
+    hashStats?: HashRecalculateStats;
 }
 
 export const loader: LoaderFunction = async ({ context }) => {
@@ -86,6 +88,25 @@ export const action = async (args: ActionFunctionArgs) => {
 
     const formData = await request.formData();
     const action = formData.get("_action");
+
+    if (action === "recalculate_hashes") {
+        try {
+            const hashStats = await recalculateAttachmentHashes(context);
+            const dupCount = hashStats.issues.duplicates;
+            const errCount = hashStats.issues.errors + hashStats.topos.errors;
+            const statusSummary = `Issue attachments: ${hashStats.issues.updated}/${hashStats.issues.total} updated. Topo attachments: ${hashStats.topos.updated}/${hashStats.topos.total} updated.${dupCount > 0 ? ` ⚠️ ${dupCount} duplicate(s) found on issues.` : ''}${errCount > 0 ? ` ⚠️ ${errCount} error(s) encountered.` : ''}`;
+            return data({
+                success: true,
+                message: `Attachment hashes recalculated successfully. ${statusSummary}`,
+                hashStats,
+            });
+        } catch (error) {
+            console.error('Recalculate hashes error:', error);
+            return data({
+                error: `Recalculate hashes failed: ${error instanceof Error ? error.stack || error.message : String(error)}`,
+            });
+        }
+    }
 
     if (action === "export") {
         try {
@@ -247,6 +268,13 @@ export default function AdminQuery() {
         });
     };
 
+    const handleRecalculateHashes = async (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        const formData = new FormData();
+        formData.set('_action', 'recalculate_hashes');
+        fetcher.submit(formData, { method: 'post' });
+    };
+
     // Handle download when export data is received
     useEffect(() => {
         if (actionData?.exportData) {
@@ -263,7 +291,7 @@ export default function AdminQuery() {
         }
     }, [actionData?.exportData]);
 
-    // Show notifications for import results
+    // Show notifications for import and hash recalculate results
     useEffect(() => {
         if (fetcher.data?.error) {
             notifications.show({
@@ -271,7 +299,14 @@ export default function AdminQuery() {
                 message: fetcher.data.error,
                 color: 'red'
             });
-        } else if (fetcher.data?.success) {
+        } else if (fetcher.data?.hashStats) {
+            const { issues, topos } = fetcher.data.hashStats;
+            notifications.show({
+                title: 'Hashes Recalculated',
+                message: `Issues: ${issues.updated}/${issues.total} updated. Topos: ${topos.updated}/${topos.total} updated.`,
+                color: issues.duplicates > 0 ? 'yellow' : 'green'
+            });
+        } else if (fetcher.data?.success && fetcher.data?.totalRows !== undefined) {
             notifications.show({
                 title: 'Success',
                 message: `Database imported successfully. ${fetcher.data.totalRows} rows imported.`,
@@ -323,6 +358,14 @@ export default function AdminQuery() {
                                     )}
                                 </FileButton>
                             )}
+                            <Button
+                                onClick={handleRecalculateHashes}
+                                leftSection={<IconRefresh size={14} />}
+                                loading={fetcher.state !== 'idle'}
+                                color="blue"
+                            >
+                                (Re)calculate Attachment Hashes
+                            </Button>
                         </Group>
                         <Form method="post" style={{ flex: 1 }}>
                             <Stack>
@@ -370,6 +413,97 @@ export default function AdminQuery() {
                                         ))}
                                 </Table.Tbody>
                             </Table>
+                        </Alert>
+                    ) : fetcher.data?.message && fetcher.data.hashStats ? (
+                        <Alert 
+                            title="Attachment Hash Recalculation Results" 
+                            color={fetcher.data.hashStats.issues.duplicates > 0 ? "yellow" : fetcher.data.hashStats.errors.length > 0 ? "orange" : "green"}
+                        >
+                            <Text>{fetcher.data.message}</Text>
+                            <Space h="sm" />
+                            <Table withTableBorder withColumnBorders>
+                                <Table.Thead>
+                                    <Table.Tr>
+                                        <Table.Th>Table</Table.Th>
+                                        <Table.Th>Total</Table.Th>
+                                        <Table.Th>Updated</Table.Th>
+                                        <Table.Th>Duplicates Found</Table.Th>
+                                        <Table.Th>Errors</Table.Th>
+                                    </Table.Tr>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                    <Table.Tr>
+                                        <Table.Td>Issue Attachments</Table.Td>
+                                        <Table.Td>{fetcher.data.hashStats.issues.total}</Table.Td>
+                                        <Table.Td>{fetcher.data.hashStats.issues.updated}</Table.Td>
+                                        <Table.Td>
+                                            {fetcher.data.hashStats.issues.duplicates > 0 ? (
+                                                <Badge color="yellow">{fetcher.data.hashStats.issues.duplicates}</Badge>
+                                            ) : (
+                                                "0"
+                                            )}
+                                        </Table.Td>
+                                        <Table.Td>{fetcher.data.hashStats.issues.errors}</Table.Td>
+                                    </Table.Tr>
+                                    <Table.Tr>
+                                        <Table.Td>Topo Attachments</Table.Td>
+                                        <Table.Td>{fetcher.data.hashStats.topos.total}</Table.Td>
+                                        <Table.Td>{fetcher.data.hashStats.topos.updated}</Table.Td>
+                                        <Table.Td>N/A</Table.Td>
+                                        <Table.Td>{fetcher.data.hashStats.topos.errors}</Table.Td>
+                                    </Table.Tr>
+                                </Table.Tbody>
+                            </Table>
+
+                            {fetcher.data.hashStats.duplicates.length > 0 && (
+                                <Stack mt="md">
+                                    <Text fw={600} c="orange">Duplicate Attachments on Issues:</Text>
+                                    <Table withTableBorder withColumnBorders>
+                                        <Table.Thead>
+                                            <Table.Tr>
+                                                <Table.Th>Issue ID</Table.Th>
+                                                <Table.Th>Attachment IDs</Table.Th>
+                                                <Table.Th>SHA-1 Hash</Table.Th>
+                                            </Table.Tr>
+                                        </Table.Thead>
+                                        <Table.Tbody>
+                                            {fetcher.data.hashStats.duplicates.map((dup, i) => (
+                                                <Table.Tr key={i}>
+                                                    <Table.Td>{dup.issueId}</Table.Td>
+                                                    <Table.Td>{dup.attachmentIds.join(", ")}</Table.Td>
+                                                    <Table.Td><Code>{dup.hash}</Code></Table.Td>
+                                                </Table.Tr>
+                                            ))}
+                                        </Table.Tbody>
+                                    </Table>
+                                </Stack>
+                            )}
+
+                            {fetcher.data.hashStats.errors.length > 0 && (
+                                <Stack mt="md">
+                                    <Text fw={600} c="red">Encountered Errors:</Text>
+                                    <Table withTableBorder withColumnBorders>
+                                        <Table.Thead>
+                                            <Table.Tr>
+                                                <Table.Th>Table</Table.Th>
+                                                <Table.Th>ID</Table.Th>
+                                                <Table.Th>Name</Table.Th>
+                                                <Table.Th>Error</Table.Th>
+                                            </Table.Tr>
+                                        </Table.Thead>
+                                        <Table.Tbody>
+                                            {fetcher.data.hashStats.errors.map((err, i) => (
+                                                <Table.Tr key={i}>
+                                                    <Table.Td>{err.table}</Table.Td>
+                                                    <Table.Td>{err.id}</Table.Td>
+                                                    <Table.Td>{err.name ?? 'N/A'}</Table.Td>
+                                                    <Table.Td>{err.error}</Table.Td>
+                                                </Table.Tr>
+                                            ))}
+                                        </Table.Tbody>
+                                    </Table>
+                                </Stack>
+                            )}
                         </Alert>
                     ) : actionData?.message ? (
                         <Alert title="Success" color="green">

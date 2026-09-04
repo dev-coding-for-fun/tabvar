@@ -4,10 +4,24 @@ export interface UploadFileResult {
   url: string;
   name: string;
   type: string;
+  hash?: string;
+  size?: number;
 }
 
 export interface UploadFileOptions {
   keyPrefix?: string;
+  useContentHash?: boolean;
+}
+
+/**
+ * Computes a SHA-1 hash of an ArrayBuffer using the native Web Crypto API.
+ * Returns a 40-character lowercase hexadecimal string.
+ */
+export async function calculateFileHash(buffer: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-1", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /**
@@ -52,11 +66,13 @@ export function getR2Bucket(context: AppLoadContext, bucketName: string): R2Buck
 
 /**
  * Uploads a file directly to Cloudflare R2 using the native Worker binding.
+ * When options.useContentHash is true, the object key will be named using its SHA-1 hash
+ * (`${prefix}/${hash}.${ext}`), and R2 writes will be skipped if the object already exists.
  * @param context The application load context.
  * @param file The file to upload.
  * @param bucketName The name or binding key of the R2 bucket.
  * @param bucketDomain The public domain URL of the R2 bucket.
- * @returns The uploaded file's information including public URL.
+ * @returns The uploaded file's information including public URL, hash, and size.
  */
 export async function uploadFileToR2(
   context: AppLoadContext,
@@ -81,14 +97,35 @@ export async function uploadFileToR2(
     ?.split('/')
     .filter(Boolean)
     .join('/');
-  const objectKey = normalizedPrefix ? `${normalizedPrefix}/${decodedFileName}` : decodedFileName;
 
   const arrayBuffer = await file.arrayBuffer();
-  await bucket.put(objectKey, arrayBuffer, {
-    httpMetadata: {
-      contentType,
-    },
-  });
+  const fileHash = await calculateFileHash(arrayBuffer);
+  const fileSize = arrayBuffer.byteLength;
+
+  let objectKey: string;
+  if (options.useContentHash) {
+    const extMatch = decodedFileName.match(/\.([a-zA-Z0-9]+)$/);
+    const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '';
+    const hashFileName = `${fileHash}${ext}`;
+    objectKey = normalizedPrefix ? `${normalizedPrefix}/${hashFileName}` : hashFileName;
+
+    // Avoid redundant writes if object already exists in R2
+    const existing = await bucket.head(objectKey);
+    if (!existing) {
+      await bucket.put(objectKey, arrayBuffer, {
+        httpMetadata: {
+          contentType,
+        },
+      });
+    }
+  } else {
+    objectKey = normalizedPrefix ? `${normalizedPrefix}/${decodedFileName}` : decodedFileName;
+    await bucket.put(objectKey, arrayBuffer, {
+      httpMetadata: {
+        contentType,
+      },
+    });
+  }
 
   // Encode each path segment while preserving any object-key prefixes.
   const encodedObjectKey = objectKey.split('/').map(encodeURIComponent).join('/');
@@ -98,6 +135,8 @@ export async function uploadFileToR2(
     url: fileUrl, // Use the encoded URL
     name: objectKey,
     type: contentType,
+    hash: fileHash,
+    size: fileSize,
   };
 }
 

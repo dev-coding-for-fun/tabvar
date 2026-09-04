@@ -47,6 +47,7 @@ function issueRow(overrides: Record<string, unknown> = {}) {
     attachment_url: null,
     attachment_name: null,
     attachment_type: null,
+    attachment_hash: null,
     ...overrides,
   };
 }
@@ -62,7 +63,7 @@ describe("api.v1.issues loader (pull)", () => {
       select: [
         {
           execute: [
-            issueRow({ attachment_id: 11, attachment_url: "https://x/1.jpg", attachment_name: "1.jpg", attachment_type: "image/jpeg" }),
+            issueRow({ attachment_id: 11, attachment_url: "https://x/1.jpg", attachment_name: "1.jpg", attachment_type: "image/jpeg", attachment_hash: "hash123" }),
             issueRow({ attachment_id: 12, attachment_url: "https://x/2.jpg", attachment_name: "2.jpg", attachment_type: "image/jpeg" }),
             issueRow({ id: 2, status: "Deleted", updated_at: "2026-06-09 11:00:00" }),
           ],
@@ -81,6 +82,7 @@ describe("api.v1.issues loader (pull)", () => {
     const body = (await response.json()) as any;
     expect(body.issues).toHaveLength(2);
     expect(body.issues[0].attachments).toHaveLength(2);
+    expect(body.issues[0].attachments[0]).toMatchObject({ id: 11, url: "https://x/1.jpg", hash: "hash123" });
     expect(body.issues[1].status).toBe("Deleted");
     expect(body.serverTime).toBe("2026-06-09 11:00:00");
   });

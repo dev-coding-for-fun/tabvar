@@ -12,7 +12,7 @@ import { getDB } from "~/lib/db";
 import { createIssue } from "~/lib/issues.server";
 import { evaluateIssueModeration } from "~/lib/moderation.server";
 import { RouteSearchResults } from "~/lib/models";
-import { uploadFileToR2 } from "~/lib/s3.server";
+import { calculateFileHash, uploadFileToR2 } from "~/lib/s3.server";
 import { privatePageMeta } from "~/lib/seo";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; //5 MB
@@ -107,9 +107,25 @@ export const action = async (args: ActionFunctionArgs) => {
   }
 
   const env = context.cloudflare.env as unknown as Env;
-  const uploadedFiles = await Promise.all(files.map((file) =>
-    uploadFileToR2(context, file, env.ISSUES_BUCKET_NAME, env.ISSUES_BUCKET_DOMAIN)
-  ));
+
+  // Deduplicate files with identical contents uploaded in the same form submission
+  const uniqueFilesMap = new Map<string, { file: File; buffer: ArrayBuffer; hash: string }>();
+  for (const file of files) {
+    const buffer = await file.arrayBuffer();
+    const hash = await calculateFileHash(buffer);
+    if (!uniqueFilesMap.has(hash)) {
+      uniqueFilesMap.set(hash, { file, buffer, hash });
+    }
+  }
+
+  const uploadedFiles = await Promise.all(
+    Array.from(uniqueFilesMap.values()).map((item) =>
+      uploadFileToR2(context, item.file, env.ISSUES_BUCKET_NAME, env.ISSUES_BUCKET_DOMAIN, {
+        keyPrefix: "issues",
+        useContentHash: true,
+      }),
+    ),
+  );
 
   const status = await evaluateIssueModeration(context, {
     routeId: Number(routeId),
@@ -144,6 +160,8 @@ export const action = async (args: ActionFunctionArgs) => {
         name: uploadedFile.name,
         type: uploadedFile.type,
         url: uploadedFile.url,
+        file_hash: uploadedFile.hash ?? null,
+        file_size: uploadedFile.size ?? null,
       })
       .execute()
   ));

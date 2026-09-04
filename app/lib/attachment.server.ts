@@ -1,6 +1,6 @@
 import { getDB } from "./db";
 import type { AppLoadContext } from "react-router";
-import { uploadFileToR2, deleteFromR2 } from "./s3.server";
+import { uploadFileToR2, deleteFromR2, getR2Bucket, calculateFileHash } from "./s3.server";
 import { TopoAttachment } from "./models";
 
 export interface AttachmentUploadResult {
@@ -306,6 +306,196 @@ export async function updateAttachmentRecord(
     })
     .where("id", "=", id)
     .execute();
+}
+
+export interface HashRecalculateStats {
+  issues: {
+    total: number;
+    updated: number;
+    skipped: number;
+    duplicates: number;
+    errors: number;
+  };
+  topos: {
+    total: number;
+    updated: number;
+    skipped: number;
+    errors: number;
+  };
+  duplicates: {
+    issueId: number;
+    hash: string;
+    attachmentIds: number[];
+  }[];
+  errors: {
+    table: string;
+    id: number;
+    name: string | null;
+    error: string;
+  }[];
+}
+
+async function getR2ObjectWithFallbacks(bucket: R2Bucket, name: string | null, url: string) {
+  const candidates: string[] = [];
+  if (name) {
+    candidates.push(name);
+    try {
+      const decoded = decodeURIComponent(name);
+      if (decoded !== name) candidates.push(decoded);
+    } catch {}
+  }
+  try {
+    const urlPath = new URL(url).pathname.replace(/^\//, '');
+    if (urlPath && !candidates.includes(urlPath)) {
+      candidates.push(urlPath);
+      const decodedPath = decodeURIComponent(urlPath);
+      if (decodedPath !== urlPath && !candidates.includes(decodedPath)) {
+        candidates.push(decodedPath);
+      }
+    }
+  } catch {
+    const lastSegment = url.split('/').pop();
+    if (lastSegment && !candidates.includes(lastSegment)) {
+      candidates.push(lastSegment);
+    }
+  }
+
+  for (const key of candidates) {
+    try {
+      const obj = await bucket.get(key);
+      if (obj) return obj;
+    } catch {}
+  }
+  return null;
+}
+
+/**
+ * Iterates over all issue_attachment and topo_attachment records in D1,
+ * fetches the corresponding object from R2, computes the SHA-1 hash and file size,
+ * and updates the database records. Also detects any pre-existing duplicate attachments
+ * on the same issue.
+ */
+export async function recalculateAttachmentHashes(context: AppLoadContext): Promise<HashRecalculateStats> {
+  const db = getDB(context);
+  const env = context.cloudflare.env as unknown as Env;
+
+  const stats: HashRecalculateStats = {
+    issues: { total: 0, updated: 0, skipped: 0, duplicates: 0, errors: 0 },
+    topos: { total: 0, updated: 0, skipped: 0, errors: 0 },
+    duplicates: [],
+    errors: [],
+  };
+
+  // 1. Process issue_attachment records
+  const issuesBucket = getR2Bucket(context, env.ISSUES_BUCKET_NAME);
+  const issueAttachments = await db
+    .selectFrom("issue_attachment")
+    .select(["id", "issue_id", "name", "url", "file_hash", "file_size"])
+    .execute();
+
+  stats.issues.total = issueAttachments.length;
+  const issueHashMap = new Map<string, number[]>(); // `${issue_id}:${hash}` -> attachmentIds
+
+  for (const attachment of issueAttachments) {
+    try {
+      const r2Obj = await getR2ObjectWithFallbacks(issuesBucket, attachment.name, attachment.url);
+      if (!r2Obj) {
+        stats.issues.errors++;
+        stats.errors.push({
+          table: "issue_attachment",
+          id: attachment.id,
+          name: attachment.name,
+          error: `Object not found in R2 bucket '${env.ISSUES_BUCKET_NAME}'`,
+        });
+        continue;
+      }
+
+      const buffer = await r2Obj.arrayBuffer();
+      const hash = await calculateFileHash(buffer);
+      const size = r2Obj.size ?? buffer.byteLength;
+
+      await db
+        .updateTable("issue_attachment")
+        .set({ file_hash: hash, file_size: size })
+        .where("id", "=", attachment.id)
+        .execute();
+
+      stats.issues.updated++;
+
+      const key = `${attachment.issue_id}:${hash}`;
+      const existing = issueHashMap.get(key) ?? [];
+      existing.push(attachment.id);
+      issueHashMap.set(key, existing);
+    } catch (error) {
+      stats.issues.errors++;
+      stats.errors.push({
+        table: "issue_attachment",
+        id: attachment.id,
+        name: attachment.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // Find duplicates within same issue
+  for (const [key, ids] of issueHashMap.entries()) {
+    if (ids.length > 1) {
+      const [issueIdStr, hash] = key.split(':');
+      stats.issues.duplicates += ids.length - 1;
+      stats.duplicates.push({
+        issueId: Number(issueIdStr),
+        hash,
+        attachmentIds: ids,
+      });
+    }
+  }
+
+  // 2. Process topo_attachment records
+  const toposBucket = getR2Bucket(context, env.TOPOS_BUCKET_NAME);
+  const topoAttachments = await db
+    .selectFrom("topo_attachment")
+    .select(["id", "name", "url", "file_hash", "file_size"])
+    .execute();
+
+  stats.topos.total = topoAttachments.length;
+
+  for (const attachment of topoAttachments) {
+    try {
+      const r2Obj = await getR2ObjectWithFallbacks(toposBucket, attachment.name, attachment.url);
+      if (!r2Obj) {
+        stats.topos.errors++;
+        stats.errors.push({
+          table: "topo_attachment",
+          id: attachment.id,
+          name: attachment.name,
+          error: `Object not found in R2 bucket '${env.TOPOS_BUCKET_NAME}'`,
+        });
+        continue;
+      }
+
+      const buffer = await r2Obj.arrayBuffer();
+      const hash = await calculateFileHash(buffer);
+      const size = r2Obj.size ?? buffer.byteLength;
+
+      await db
+        .updateTable("topo_attachment")
+        .set({ file_hash: hash, file_size: size })
+        .where("id", "=", attachment.id)
+        .execute();
+
+      stats.topos.updated++;
+    } catch (error) {
+      stats.topos.errors++;
+      stats.errors.push({
+        table: "topo_attachment",
+        id: attachment.id,
+        name: attachment.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return stats;
 }
 
 

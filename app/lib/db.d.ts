@@ -71,7 +71,7 @@ export interface Crag {
   stats_active_issue_count: number | null;
   stats_issue_flagged: number | null;
   stats_public_issue_count: number | null;
-  updated_at: Generated<string | null>;
+  updated_at: string | null;
 }
 
 export interface CragAttachment {
@@ -155,11 +155,13 @@ export interface Issue {
   route_id: number;
   status: string;
   sub_issue_type: string | null;
-  updated_at: Generated<string | null>;
+  updated_at: string | null;
 }
 
 export interface IssueAttachment {
   created_at: Generated<string | null>;
+  file_hash: string | null;
+  file_size: number | null;
   id: Generated<number>;
   issue_id: number;
   name: string | null;
@@ -215,7 +217,7 @@ export interface Route {
   sector_name: string | null;
   sort_order: number | null;
   status: string | null;
-  updated_at: Generated<string | null>;
+  updated_at: string | null;
   year: number | null;
 }
 
@@ -267,7 +269,7 @@ export interface Sector {
   name: string;
   notes: string | null;
   sort_order: number | null;
-  updated_at: Generated<string | null>;
+  updated_at: string | null;
 }
 
 export interface SectorAttachment {
@@ -284,10 +286,22 @@ export interface SigninEvent {
 
 export interface TopoAttachment {
   created_at: Generated<string | null>;
+  file_hash: string | null;
+  file_size: number | null;
   id: Generated<number>;
   name: string | null;
   type: string;
   url: string;
+}
+
+export interface TopobuilderConnectTicket {
+  created_at: Generated<string>;
+  expires_at: string;
+  id: string;
+  return_to: string;
+  ticket_hash: string;
+  uid: string;
+  used_at: string | null;
 }
 
 export interface TopoSubmission {
@@ -301,16 +315,6 @@ export interface TopoSubmission {
   reviewed_by_uid: string | null;
   status: Generated<string>;
   uid: string;
-}
-
-export interface TopobuilderConnectTicket {
-  created_at: Generated<string>;
-  expires_at: string;
-  id: string;
-  return_to: string;
-  ticket_hash: string;
-  uid: string;
-  used_at: string | null;
 }
 
 export interface User {

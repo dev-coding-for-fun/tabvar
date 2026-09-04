@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { uploadFileToR2, deleteFromR2, renameInR2, getR2Bucket } from "./s3.server";
+import { uploadFileToR2, deleteFromR2, renameInR2, getR2Bucket, calculateFileHash } from "./s3.server";
 import { createContext } from "~/test/helpers";
 
 describe("s3.server (R2 native binding)", () => {
@@ -108,5 +108,53 @@ describe("s3.server (R2 native binding)", () => {
     await expect(renameInR2(context, "topos", "missing.png", "target.png")).rejects.toThrow(
       "Object 'missing.png' not found in R2 bucket 'topos'"
     );
+  });
+
+  it("calculates accurate SHA-1 hash for bytes", async () => {
+    // SHA-1 for "test content" is 1eebdf4fdc9fc7bf283031b93f9aef3338de9052
+    const encoder = new TextEncoder();
+    const hash = await calculateFileHash(encoder.encode("test content").buffer as ArrayBuffer);
+    expect(hash).toBe("1eebdf4fdc9fc7bf283031b93f9aef3338de9052");
+  });
+
+  it("uploads file using content hash as key when useContentHash is true", async () => {
+    const context = createContext();
+    const env = (context as any).cloudflare.env;
+    const file = new File(["test content"], "photo.jpg", { type: "image/jpeg" });
+
+    const result = await uploadFileToR2(context, file, "issues", "https://issues.example.com", {
+      keyPrefix: "issues",
+      useContentHash: true,
+    });
+
+    const expectedHash = "1eebdf4fdc9fc7bf283031b93f9aef3338de9052";
+    expect(result.hash).toBe(expectedHash);
+    expect(result.size).toBe(12);
+    expect(result.name).toBe(`issues/${expectedHash}.jpg`);
+    expect(result.url).toBe(`https://issues.example.com/issues/${expectedHash}.jpg`);
+    expect(env.TABVAR_ISSUES_UPLOADS.head).toHaveBeenCalledWith(`issues/${expectedHash}.jpg`);
+    expect(env.TABVAR_ISSUES_UPLOADS.put).toHaveBeenCalledWith(
+      `issues/${expectedHash}.jpg`,
+      expect.any(ArrayBuffer),
+      expect.anything(),
+    );
+  });
+
+  it("skips R2 put() when object already exists and useContentHash is true", async () => {
+    const context = createContext();
+    const env = (context as any).cloudflare.env;
+    const file = new File(["test content"], "photo.jpg", { type: "image/jpeg" });
+
+    const expectedHash = "1eebdf4fdc9fc7bf283031b93f9aef3338de9052";
+    env.TABVAR_ISSUES_UPLOADS.head.mockResolvedValueOnce({ size: 12 });
+
+    const result = await uploadFileToR2(context, file, "issues", "https://issues.example.com", {
+      keyPrefix: "issues",
+      useContentHash: true,
+    });
+
+    expect(result.hash).toBe(expectedHash);
+    expect(env.TABVAR_ISSUES_UPLOADS.head).toHaveBeenCalledWith(`issues/${expectedHash}.jpg`);
+    expect(env.TABVAR_ISSUES_UPLOADS.put).not.toHaveBeenCalled();
   });
 });
