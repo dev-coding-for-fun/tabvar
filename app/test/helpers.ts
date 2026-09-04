@@ -61,7 +61,11 @@ export function createMockR2Bucket() {
   };
 }
 
-export function createContext(env: Partial<Env> & Record<string, unknown> = {}): AppLoadContext {
+export function createContext(
+  env: Partial<Omit<Env, "TOPOBUILDER_RETURN_TO_ALLOWLIST">> & {
+    TOPOBUILDER_RETURN_TO_ALLOWLIST?: string;
+  } & Record<string, unknown> = {}
+): AppLoadContext {
   const context = new RouterContextProvider();
   Object.assign(context, {
     cloudflare: {

@@ -47,7 +47,7 @@ export function getR2Bucket(context: AppLoadContext, bucketName: string): R2Buck
     return directBucket as R2Bucket;
   }
 
-  throw new Error(`Could not resolve R2 bucket binding for '${bucketName}'. Ensure it is configured in wrangler.toml.`);
+  throw new Error(`Could not resolve R2 bucket binding for '${bucketName}'. Ensure it is configured in wrangler.json.`);
 }
 
 /**
