@@ -31,13 +31,11 @@
   "r2_buckets": [
     {
       "binding": "TABVAR_ISSUES_UPLOADS",
-      "bucket_name": "tabvar-issues-uploads-dev",
-      "remote": true
+      "bucket_name": "tabvar-issues-uploads"
     },
     {
       "binding": "TABVAR_TOPOS",
-      "bucket_name": "tabvar-topos-dev",
-      "remote": true
+      "bucket_name": "tabvar-topos"
     }
   ],
   "d1_databases": [
@@ -48,59 +46,31 @@
     }
   ],
   "env": {
-    "preview": {
+    "dev": {
+      "routes": [],
       "vars": {
-        "ENVIRONMENT": "preview",
-        "route": "dev.tabvar.org/*",
+        "ENVIRONMENT": "dev",
+        "COOKIE_DOMAIN": "localhost",
+        "GOOGLE_CLIENT_ID": "67128960974-0etdgg03l7nkk79qo2it0bkkic6l261n.apps.googleusercontent.com",
+        "BASE_URL": "http://localhost:5173",
+        "SLOPER_URL": "https://www.sloperclimbing.com",
+        "MAPBOX_STYLE_URL": "mapbox://styles/mapbox/outdoors-v12",
+        "ISSUES_BUCKET_DOMAIN": "https://pub-8f1e464f2fc54873a3634b82b350366a.r2.dev",
+        "TOPOS_BUCKET_DOMAIN": "https://pub-87631ec46e764b589b8a7f38d28db98e.r2.dev",
+        "ISSUES_BUCKET_NAME": "tabvar-issues-uploads-dev",
+        "TOPOS_BUCKET_NAME": "tabvar-topos-dev",
         "TOPOBUILDER_RETURN_TO_ALLOWLIST": "topobuilder:,http://localhost:8081,http://localhost:19006"
       },
       "r2_buckets": [
         {
           "binding": "TABVAR_ISSUES_UPLOADS",
-          "bucket_name": "tabvar-issues-uploads-dev"
+          "bucket_name": "tabvar-issues-uploads-dev",
+          "remote": true
         },
         {
           "binding": "TABVAR_TOPOS",
-          "bucket_name": "tabvar-topos-dev"
-        }
-      ],
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "tabvar_dev",
-          "database_id": "c4568107-db66-41ed-b673-7c9726126316"
-        }
-      ]
-    },
-    "production": {
-      "workers_dev": false,
-      "routes": [
-        {
-          "pattern": "app.tabvar.org",
-          "custom_domain": true
-        }
-      ],
-      "vars": {
-        "ENVIRONMENT": "production",
-        "COOKIE_DOMAIN": "tabvar.org",
-        "GOOGLE_CLIENT_ID": "67128960974-0etdgg03l7nkk79qo2it0bkkic6l261n.apps.googleusercontent.com",
-        "BASE_URL": "https://app.tabvar.org",
-        "SLOPER_URL": "https://www.sloperclimbing.com",
-        "MAPBOX_STYLE_URL": "mapbox://styles/mapbox/outdoors-v12",
-        "ISSUES_BUCKET_DOMAIN": "https://files.issues.tabvar.org",
-        "TOPOS_BUCKET_DOMAIN": "https://files.tabvar.org",
-        "ISSUES_BUCKET_NAME": "tabvar-issues-uploads",
-        "TOPOS_BUCKET_NAME": "tabvar-topos",
-        "TOPOBUILDER_RETURN_TO_ALLOWLIST": "topobuilder:"
-      },
-      "r2_buckets": [
-        {
-          "binding": "TABVAR_ISSUES_UPLOADS",
-          "bucket_name": "tabvar-issues-uploads"
-        },
-        {
-          "binding": "TABVAR_TOPOS",
-          "bucket_name": "tabvar-topos"
+          "bucket_name": "tabvar-topos-dev",
+          "remote": true
         }
       ],
       "d1_databases": [

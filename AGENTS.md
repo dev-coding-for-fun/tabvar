@@ -89,6 +89,12 @@ Agents working in this codebase **must** adhere to the following rules:
   - Distinct API payload schemas / external contract shapes (e.g. mobile sync payloads).
   - New domain models or state machines that do not exist yet.
 
+### F. Wrangler Configuration & Environment Invariants
+- **Top-Level is Production (Safe by Default)**: The top level of `wrangler.json` represents the canonical production Worker (`tabvar`). It MUST ALWAYS bind to `tabvar-issues-uploads` and `tabvar-topos`. **NEVER** put `remote: true` or `-dev` bucket names in the top-level configuration.
+- **Local Dev uses `env.dev`**: Local development (`npm run dev`) activates the `dev` environment via `CLOUDFLARE_ENV=dev` (configured automatically in `vite.config.mts`). The `env.dev` block in `wrangler.json` binds to `tabvar-issues-uploads-dev` and `tabvar-topos-dev` with `"remote": true` and sets `"routes": []` to prevent domain collisions.
+- **No Staging or Production Sub-blocks**: Do not add `env.production` or `env.staging`. Production is strictly the top-level configuration.
+- **Declarative Buckets**: Do not hardcode R2 bucket names or bindings in `vite.config.mts`. All bindings are declared purely in `wrangler.json`.
+
 ---
 
 ## 3. Cloudflare Wrangler & D1 Database Workflow

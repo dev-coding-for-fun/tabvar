@@ -32,7 +32,7 @@ if (missingEnvironmentVariables.length > 0) {
 
 const wrangler = spawn(
   "npx",
-  ["wrangler", "d1", "migrations", "apply", "DB", "--remote", "--env", "production"],
+  ["wrangler", "d1", "migrations", "apply", "DB", "--remote"],
   {
     shell: process.platform === "win32",
     stdio: "inherit",

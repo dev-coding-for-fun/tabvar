@@ -6,7 +6,7 @@
   "scripts": {
     "build": "react-router build",
     "build:cloudflare": "npm run build && node ./scripts/apply-production-d1-migrations.mjs",
-    "db:migrate:production": "wrangler d1 migrations apply DB --remote --env production",
+    "db:migrate:production": "wrangler d1 migrations apply DB --remote",
     "deploy": "npm run build && wrangler pages deploy",
     "deploy:worker": "npm run build && wrangler deploy",
     "dev": "react-router dev",

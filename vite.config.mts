@@ -6,6 +6,11 @@ import { sentryReactRouter } from "@sentry/react-router";
 const config = defineConfig(async (configEnv) => {
   const isTest = configEnv.mode === "test";
 
+  // When running Vite dev server, default to the "dev" Cloudflare environment in wrangler.json
+  if (configEnv.command === "serve" && !process.env.CLOUDFLARE_ENV) {
+    process.env.CLOUDFLARE_ENV = "dev";
+  }
+
   return {
     server: {
       // IPv4 loopback so adb reverse (tcp:PORT tcp:PORT) can reach the dev server.
