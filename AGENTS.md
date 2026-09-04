@@ -77,6 +77,18 @@ Agents working in this codebase **must** adhere to the following rules:
   3. Formulate an explicit, step-by-step implementation plan.
   4. Obtain user review and explicit alignment before touching dependencies or modifying code.
 
+### E. Type Hygiene: Reuse Canonical Types Over Ad-Hoc Interfaces
+- **DO NOT** invent ad-hoc interface wrappers for arguments already typed by the framework or runtime (e.g. do NOT define custom `interface AuthArgs` or `interface MyLoaderContext` when `LoaderFunctionArgs` / `ActionFunctionArgs` already exist).
+- **DO NOT** declare shadow types that duplicate database tables or domain models; import from `~/lib/models` or `~/lib/db.d.ts`.
+- **DO NOT** over-correct by using `any`, `unknown`, or omitting types.
+- **DO** reuse and extend framework types:
+  - For route loaders/actions: use `LoaderFunctionArgs` / `ActionFunctionArgs` (or `Pick<LoaderFunctionArgs, "request" | "context">` if only a subset is accepted).
+  - For UI components: reuse or extend Mantine types (e.g. `ButtonProps`, `TextInputProps`).
+- **DO** create new interfaces/types when introducing:
+  - Props for new React components (`interface SectorCardProps`).
+  - Distinct API payload schemas / external contract shapes (e.g. mobile sync payloads).
+  - New domain models or state machines that do not exist yet.
+
 ---
 
 ## 3. Cloudflare Wrangler & D1 Database Workflow
