@@ -31,11 +31,13 @@
   "r2_buckets": [
     {
       "binding": "TABVAR_ISSUES_UPLOADS",
-      "bucket_name": "tabvar-issues-uploads"
+      "bucket_name": "tabvar-issues-uploads-dev",
+      "remote": true
     },
     {
       "binding": "TABVAR_TOPOS",
-      "bucket_name": "tabvar-topos"
+      "bucket_name": "tabvar-topos-dev",
+      "remote": true
     }
   ],
   "d1_databases": [
