@@ -51,6 +51,16 @@ export function createUser(overrides: Partial<User> = {}): User {
   };
 }
 
+export function createMockR2Bucket() {
+  return {
+    put: vi.fn().mockResolvedValue({}),
+    get: vi.fn().mockResolvedValue(null),
+    delete: vi.fn().mockResolvedValue(undefined),
+    head: vi.fn().mockResolvedValue(null),
+    list: vi.fn().mockResolvedValue({ objects: [], truncated: false }),
+  };
+}
+
 export function createContext(env: Partial<Env> & Record<string, unknown> = {}): AppLoadContext {
   const context = new RouterContextProvider();
   Object.assign(context, {
@@ -66,6 +76,8 @@ export function createContext(env: Partial<Env> & Record<string, unknown> = {}):
         ISSUES_BUCKET_DOMAIN: "https://issues.example.com",
         TOPOS_BUCKET_NAME: "topos",
         TOPOS_BUCKET_DOMAIN: "https://topos.example.com",
+        TABVAR_ISSUES_UPLOADS: createMockR2Bucket() as unknown as R2Bucket,
+        TABVAR_TOPOS: createMockR2Bucket() as unknown as R2Bucket,
         ...env,
       },
     },
