@@ -18,18 +18,17 @@ type ConnectTopobuilderLoaderData = {
 
 export const meta: MetaFunction = () => privatePageMeta("Connect TopoBuilder");
 
-export const loader = async ({ request, context }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const returnTo = url.searchParams.get("return_to");
+export const loader = async (args: LoaderFunctionArgs) => {
+  const returnTo = args.url.searchParams.get("return_to");
 
-  if (!returnTo || !isAllowedTopobuilderReturnTo(returnTo, context)) {
+  if (!returnTo || !isAllowedTopobuilderReturnTo(returnTo, args.context)) {
     return data("Invalid TopoBuilder callback URL.", { status: 400 });
   }
 
-  const user = await requireUser(request, context);
+  const user = await requireUser(args);
   const ticket = generateSecret("tb_ticket");
   const ticketHash = await hashSecret(ticket);
-  const db = getDB(context);
+  const db = getDB(args.context);
 
   await db.insertInto("topobuilder_connect_ticket")
     .values({

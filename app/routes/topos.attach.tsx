@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Container, Paper, Title, Stack, Text, Group, Badge, ActionIcon, Button } from "@mantine/core";
 import { Dropzone } from "@mantine/dropzone";
 import { IconUpload, IconX, IconFile, IconTrash } from "@tabler/icons-react";
-import { ActionFunction, data, type MetaFunction } from "react-router";
+import { type ActionFunctionArgs, data, type MetaFunction } from "react-router";
 import { Form, useFetcher } from "react-router";
 import { privatePageMeta } from "~/lib/seo";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
@@ -35,12 +35,12 @@ interface SaveResponse {
 
 export const meta: MetaFunction = () => privatePageMeta("Attach topos");
 
-export const action: ActionFunction = async ({ request, context }) => {
+export const action = async (args: ActionFunctionArgs) => {
+  const user = await requireUser(args);
+  const { request, context } = args;
   const formData = await request.formData();
   const routeId = formData.get("routeId")?.toString();
   const fileIndex = formData.get("fileIndex")?.toString();
-
-  const user = await requireUser(request, context);
   if (user.role !== 'admin' && user.role !== 'super') {
     return data({ success: false, error: "Unauthorized" }, { status: 403 });
   }

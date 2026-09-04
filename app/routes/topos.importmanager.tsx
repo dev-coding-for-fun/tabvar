@@ -1,5 +1,5 @@
 import { Container, Paper, Title, Stack, Text, Table, ActionIcon, Tooltip, Group, Badge, Button } from "@mantine/core";
-import { type LoaderFunction, data, type ActionFunction, type MetaFunction } from "react-router";
+import { type LoaderFunctionArgs, type ActionFunctionArgs, data, type MetaFunction } from "react-router";
 import { useLoaderData, useFetcher } from "react-router";
 import { getDB } from "~/lib/db";
 import { requireUser } from "~/lib/auth.server";
@@ -23,8 +23,9 @@ interface ActionData {
     error?: string;
 }
 
-export const action: ActionFunction = async ({ request, context }) => {
-    const user = await requireUser(request, context);
+export const action = async (args: ActionFunctionArgs) => {
+    const user = await requireUser(args);
+    const { request, context } = args;
     if (!user || user.role !== "admin") {
         return data<ActionData>({ error: "Unauthorized" }, { status: 401 });
     }
@@ -136,14 +137,14 @@ export const action: ActionFunction = async ({ request, context }) => {
     }
 };
 
-export const loader: LoaderFunction = async ({ request, context }) => {
-    const user = await requireUser(request, context);
+export const loader = async (args: LoaderFunctionArgs) => {
+    const user = await requireUser(args);
 
     if (user.role !== "admin") {
         throw new Response("Unauthorized", { status: 401 });
     }
 
-    const db = getDB(context);
+    const db = getDB(args.context);
 
     // Fetch all import notes with their associated objects
     const importNotes = await db

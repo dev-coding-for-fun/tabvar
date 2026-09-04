@@ -1,7 +1,7 @@
 import { Button, Container, FileInput, Group, LoadingOverlay, MultiSelect, Radio, Space, Stack, Textarea, Title, rem } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
-import { ActionFunction, LoaderFunction, data, redirect, type MetaFunction } from "react-router";
+import { type ActionFunctionArgs, type LoaderFunctionArgs, data, redirect, type MetaFunction } from "react-router";
 import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
@@ -18,16 +18,15 @@ import { privatePageMeta } from "~/lib/seo";
 const MAX_FILE_SIZE = 5 * 1024 * 1024; //5 MB
 type IssueType = keyof typeof subIssuesByType;
 
-export const loader: LoaderFunction = async ({ request, context }) => {
-  await requireUser(request, context);
-  const url = new URL(request.url);
-  const routeId = url.searchParams.get('routeId');
+export const loader = async (args: LoaderFunctionArgs) => {
+  await requireUser(args);
+  const routeId = args.url.searchParams.get('routeId');
 
   if (!routeId) {
     return data({ initialRoute: null });
   }
 
-  const db = getDB(context);
+  const db = getDB(args.context);
   const route = await db
     .selectFrom('route')
     .leftJoin('sector', 'route.sector_id', 'sector.id')
@@ -87,8 +86,9 @@ const validateIssueType = (issueType: string) => {
   }
 }
 
-export const action: ActionFunction = async ({ request, context }) => {
-  const user = await requireUser(request, context);
+export const action = async (args: ActionFunctionArgs) => {
+  const user = await requireUser(args);
+  const { request, context } = args;
   const formData = await request.formData();
   const routeParts = (formData.get("route")?.toString() ?? '').split(':');
   const routeId = (routeParts.length > 1 && routeParts[0] === 'route') ? routeParts[1] : '';

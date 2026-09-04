@@ -1,5 +1,5 @@
 // app/services/auth.server.ts
-import { AppLoadContext, createCookieSessionStorage, redirect } from 'react-router';
+import { AppLoadContext, createCookieSessionStorage, redirect, type LoaderFunctionArgs } from 'react-router';
 import { Authenticator } from 'remix-auth';
 import { GoogleStrategy } from '@coji/remix-auth-google'
 import { getDB } from './db';
@@ -136,15 +136,9 @@ export async function createUserSession(
     return redirect(redirectTo, { headers });
 }
 
-export async function requireUser(
-    request: Request,
-    context: AppLoadContext
-): Promise<User> {
+export async function requireUser({ request, context, url }: LoaderFunctionArgs): Promise<User> {
     const authenticator = getAuthenticator(context);
-    const currentPath = new URL(request.url).pathname;
-    // Append current query parameters as well, so if user was at /somepage?param1=value1, they return there.
-    const currentSearch = new URL(request.url).search;
-    const redirectTo = encodeURIComponent(currentPath + currentSearch);
+    const redirectTo = encodeURIComponent(url.pathname + url.search);
     const loginPathWithRedirect = `/login?redirectTo=${redirectTo}`;
 
     const user = await authenticator.isAuthenticated(request, {

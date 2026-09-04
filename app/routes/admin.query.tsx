@@ -1,4 +1,4 @@
-import { ActionFunction, data, LoaderFunction, type MetaFunction } from "react-router";
+import { type ActionFunctionArgs, data, LoaderFunction, type MetaFunction } from "react-router";
 import { Form, useActionData, useSubmit, useLoaderData, useFetcher } from "react-router";
 import { Container, Stack, Title, Textarea, Button, Group, Alert, Table, Text, Code, FileButton, Space, LoadingOverlay } from "@mantine/core";
 import { IconAlertCircle, IconDownload, IconUpload } from "@tabler/icons-react";
@@ -77,8 +77,9 @@ export const loader: LoaderFunction = async ({ context }) => {
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Database admin");
 
-export const action: ActionFunction = async ({ request, context }) => {
-    const user = await requireUser(request, context);
+export const action = async (args: ActionFunctionArgs) => {
+    const user = await requireUser(args);
+    const { request, context } = args;
     if (user.role !== 'admin') {
         return data({ error: PERMISSION_ERROR }, { status: 403 });
     }

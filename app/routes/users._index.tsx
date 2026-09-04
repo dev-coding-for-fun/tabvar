@@ -1,7 +1,7 @@
 import { ActionIcon, Badge, Button, Center, Container, Group, List, Popover, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { showNotification } from "@mantine/notifications";
-import { ActionFunction, LoaderFunction, data, redirect, type MetaFunction } from "react-router";
+import { type ActionFunctionArgs, type LoaderFunctionArgs, data, redirect, type MetaFunction } from "react-router";
 import { Form, useActionData, useLoaderData, useSubmit } from "react-router";
 import { IconClick, IconSquareKey, IconTrash, IconUserMinus, IconX } from "@tabler/icons-react";
 import { User, UserInvite } from "~/lib/models";
@@ -13,12 +13,12 @@ import { PERMISSION_ERROR, userRoles } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 import { privatePageMeta } from "~/lib/seo";
 
-export const loader: LoaderFunction = async ({ request, context }) => {
-    const user: User = await requireUser(request, context);
+export const loader = async (args: LoaderFunctionArgs) => {
+    const user: User = await requireUser(args);
     if (user.role !== 'admin') {
         return data({ users: [], error: PERMISSION_ERROR }, { status: 403 });
     }
-    const db = getDB(context);
+    const db = getDB(args.context);
     const users = await db.selectFrom('user')
         .selectAll()
         .execute();
@@ -30,8 +30,9 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Users");
 
-export const action: ActionFunction = async ({ request, context }) => {
-    const user: User = await requireUser(request, context);
+export const action = async (args: ActionFunctionArgs) => {
+    const user: User = await requireUser(args);
+    const { request, context } = args;
     if (user.role !== 'admin') {
         return data({ error: PERMISSION_ERROR }, { status: 403 });
     }

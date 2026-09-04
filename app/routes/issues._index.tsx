@@ -1,5 +1,5 @@
 import { Badge, Container, Group, Select, SelectProps, Stack, Text, Title, Tooltip, Anchor } from "@mantine/core";
-import { LoaderFunction, type MetaFunction } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
 import { privatePageMeta } from "~/lib/seo";
 import { Crag, IssueWithDetails, User } from "~/lib/models";
@@ -11,10 +11,10 @@ import { showNotification } from "@mantine/notifications";
 import { requireUser } from "~/lib/auth.server";
 import { sql } from "kysely";
 
-export const loader: LoaderFunction = async ({ context, request }) => {
-    const user = await requireUser(request, context);
+export const loader = async (args: LoaderFunctionArgs) => {
+    const user = await requireUser(args);
 
-    const db = getDB(context);
+    const db = getDB(args.context);
     const crags = await db.selectFrom('crag')
         .select([
             'crag.id',

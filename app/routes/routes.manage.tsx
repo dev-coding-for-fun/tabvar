@@ -1,5 +1,5 @@
 import { Button, Code, Container, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
-import { ActionFunction, LoaderFunction, data, type MetaFunction } from "react-router";
+import { type ActionFunctionArgs, type LoaderFunctionArgs, data, type MetaFunction } from "react-router";
 import { useFetcher } from "react-router";
 import { Issue, User } from "~/lib/models";
 import { useEffect, useState } from "react";
@@ -14,8 +14,8 @@ export interface IssueWithRoute extends Issue {
     crag_name: string;
 }
 
-export const loader: LoaderFunction = async ({ request, context }) => {
-    const user: User = await requireUser(request, context);
+export const loader = async (args: LoaderFunctionArgs) => {
+    const user: User = await requireUser(args);
     if (user.role !== 'admin') {
         return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
@@ -24,8 +24,9 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Manage routes");
 
-export const action: ActionFunction = async ({ request, context }) => {
-    const user = await requireUser(request, context);
+export const action = async (args: ActionFunctionArgs) => {
+    const user = await requireUser(args);
+    const { request, context } = args;
     if (user.role !== 'admin') {
         return data({ error: PERMISSION_ERROR }, { status: 403 });
     }

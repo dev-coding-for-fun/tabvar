@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createContext, createGetRequest, createMockDb, createUser } from "~/test/helpers";
+import { createContext, createGetRequest, createMockDb, createRouteArgs, createUser } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
@@ -72,11 +72,41 @@ describe("auth.server session helpers", () => {
   });
 
   it("redirects unauthenticated users to login with the current path", async () => {
-    await expect(
-      requireUser(createGetRequest("https://example.com/private?x=1"), createContext())
-    ).rejects.toMatchObject({
-      status: 302,
-    });
+    try {
+      await requireUser(
+        createRouteArgs({
+          request: createGetRequest("https://example.com/private?x=1"),
+          context: createContext(),
+          params: {},
+        })
+      );
+      expect.unreachable("requireUser should have redirected");
+    } catch (response) {
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(302);
+      expect((response as Response).headers.get("Location")).toBe(
+        "/login?redirectTo=%2Fprivate%3Fx%3D1"
+      );
+    }
+  });
+
+  it("uses the route url to construct redirectTo", async () => {
+    try {
+      const args = createRouteArgs({
+        request: createGetRequest("https://example.com/issues.data"),
+        context: createContext(),
+        params: {},
+      });
+      args.url = new URL("https://example.com/issues?status=open");
+      await requireUser(args);
+      expect.unreachable("requireUser should have redirected");
+    } catch (response) {
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(302);
+      expect((response as Response).headers.get("Location")).toBe(
+        "/login?redirectTo=%2Fissues%3Fstatus%3Dopen"
+      );
+    }
   });
 
   it("returns the session user when a valid cookie is present", async () => {
@@ -93,7 +123,15 @@ describe("auth.server session helpers", () => {
       headers: { Cookie: sessionCookieFrom(loginResponse) },
     });
 
-    await expect(requireUser(request, context)).resolves.toMatchObject({
+    await expect(
+      requireUser(
+        createRouteArgs({
+          request,
+          context,
+          params: {},
+        })
+      )
+    ).resolves.toMatchObject({
       uid: "user-1",
       role: "admin",
     });

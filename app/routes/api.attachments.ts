@@ -1,4 +1,4 @@
-import { ActionFunction, data } from "react-router";
+import { type ActionFunctionArgs, data } from "react-router";
 import type { AppLoadContext } from "react-router";
 import type { TopoAttachment, User } from "~/lib/models";
 import { removeAttachment, uploadAttachment, addAttachmentToRoute, addAttachmentToSector, addAttachmentToCrag } from "~/lib/attachment.server";
@@ -10,8 +10,9 @@ interface AttachmentUploadResult {
   attachment?: TopoAttachment;
 }
 
-export const action: ActionFunction = async ({ request, context }) => {
-  const user = await requireUser(request, context);
+export const action = async (args: ActionFunctionArgs) => {
+  const user = await requireUser(args);
+  const { request, context } = args;
   if (user.role !== 'admin' && user.role !== 'super' && user.role !== 'member') {
     return data({ error: 'Unauthorized' }, { status: 403 });
   }

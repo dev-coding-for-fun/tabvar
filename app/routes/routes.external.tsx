@@ -1,5 +1,5 @@
 import { Button, Code, Container, Group, Loader, Stack, Table, Text, TextInput, Textarea, Title } from "@mantine/core";
-import { ActionFunction, LoaderFunction, data, type MetaFunction } from "react-router";
+import { type ActionFunctionArgs, type LoaderFunctionArgs, data, type MetaFunction } from "react-router";
 import { useFetcher } from "react-router";
 import { User } from "~/lib/models";
 import { useEffect, useState } from "react";
@@ -35,8 +35,8 @@ type OpenBetaResponse = {
     error?: string;
 };
 
-export const action: ActionFunction = async ({ request, context }) => {
-  const user = await requireUser(request, context);
+export const action = async (args: ActionFunctionArgs) => {
+  const user = await requireUser(args);
   if (!user || (user.role !== 'admin' && user.role !== 'super')) {
     return data({ error: 'Unauthorized' }, { status: 403 });
   }
@@ -147,8 +147,8 @@ query getMyAreas {
     }
 };
 
-export const loader: LoaderFunction = async ({ request, context }) => {
-    const user: User = await requireUser(request, context);
+export const loader = async (args: LoaderFunctionArgs) => {
+    const user: User = await requireUser(args);
     if (user.role !== 'admin') {
         return data({ error: PERMISSION_ERROR }, { status: 403 });
     }

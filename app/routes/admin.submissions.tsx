@@ -33,13 +33,13 @@ function prettyPayload(payload: string) {
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Topo submissions");
 
-export async function loader({ request, context }: LoaderFunctionArgs) {
-  const user = await requireUser(request, context);
+export async function loader(args: LoaderFunctionArgs) {
+  const user = await requireUser(args);
   if (user.role !== "admin" && user.role !== "super") {
     return data<LoaderData>({ error: PERMISSION_ERROR, submissions: [] }, { status: 403 });
   }
 
-  const db = getDB(context);
+  const db = getDB(args.context);
   const submissions = await db.selectFrom("topo_submission")
     .leftJoin("user", "topo_submission.uid", "user.uid")
     .select([

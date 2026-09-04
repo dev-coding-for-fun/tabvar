@@ -2,7 +2,7 @@ import { Badge, type BadgeProps, Box, Button, Center, Collapse, Container, Group
 import { TruncatedTooltip } from "~/components/TruncatedTooltip";
 import { useIsTruncated } from "~/components/useIsTruncated";
 import { notifications } from "@mantine/notifications";
-import { ActionFunction, LoaderFunction, data, type MetaFunction } from "react-router";
+import { type ActionFunctionArgs, type LoaderFunctionArgs, data, type MetaFunction } from "react-router";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import { DataTable, type DataTableColumn, type DataTableSortStatus } from "mantine-datatable";
 import { getDB } from "~/lib/db";
@@ -185,8 +185,9 @@ const StatusActions: React.FC<{
     }
 };
 
-export const action: ActionFunction = async ({ request, context }) => {
-    const user = await requireUser(request, context);
+export const action = async (args: ActionFunctionArgs) => {
+    const user = await requireUser(args);
+    const { request, context } = args;
     if (user.role !== 'admin' && user.role !== 'super' && user.role !== 'member') {
         return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
@@ -333,12 +334,12 @@ export const action: ActionFunction = async ({ request, context }) => {
     return { success: true };
 }
 
-export const loader: LoaderFunction = async ({ request, context }) => {
-    const user = await requireUser(request, context);
+export const loader = async (args: LoaderFunctionArgs) => {
+    const user = await requireUser(args);
     if (user.role !== 'admin' && user.role !== 'super' && user.role !== 'member') {
         return data({ issues: [], error: PERMISSION_ERROR }, { status: 403 });
     }
-    const db = getDB(context);
+    const db = getDB(args.context);
     const result = await db.selectFrom('issue')
         .innerJoin('route', 'route.id', 'issue.route_id')
         .leftJoin('issue_attachment', 'issue_attachment.issue_id', 'issue.id')

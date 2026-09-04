@@ -146,8 +146,9 @@ export async function loader({ context }: LoaderFunctionArgs) {
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Import JSON topos");
 
-export async function action({ request, context }: ActionFunctionArgs) {
-    const user = await requireUser(request, context);
+export async function action(args: ActionFunctionArgs) {
+    const user = await requireUser(args);
+    const { request, context } = args;
     if (user.role !== 'admin') {
         return data({ error: PERMISSION_ERROR });
     }
