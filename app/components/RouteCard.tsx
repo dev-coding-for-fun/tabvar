@@ -1,4 +1,5 @@
 import { Paper, Stack, Group, Text, rem, Box, Button, MantineTheme, Flex, Badge, Grid } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
 import { IconFlag, IconLink } from "@tabler/icons-react";
 import { getGradeColor, getClimbStyleColorName } from "~/lib/constants";
 import type { Route } from "~/lib/models";
@@ -6,6 +7,7 @@ import { TopoGallery } from "./TopoGallery";
 import { useFetcher } from "react-router";
 import { RichTextViewer } from "./RichTextViewer";
 import { Link } from "react-router";
+import { RouteIssuesModal } from "./RouteIssuesModal";
 
 interface RouteCardProps {
     route: Route;
@@ -15,9 +17,12 @@ interface RouteCardProps {
 
 export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
     const fetcher = useFetcher();
+    const [isIssuesModalOpen, { open: openIssuesModal, close: closeIssuesModal }] = useDisclosure(false);
 
     // The loader hides closed and unmoderated issues, and sorts flagged ones first.
-    const primaryIssue = route.issues[0];
+    const issues = route.issues ?? [];
+    const primaryIssue = issues[0];
+    const hasFlagged = issues.some((i) => i.isFlagged);
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
@@ -68,14 +73,14 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                     position: 'absolute',
                     bottom: rem(10),
                     right: rem(12),
-                    fontSize: theme.fontSizes.xs,
-                    color: theme.colors.gray[6],
+                    fontSize: theme?.fontSizes?.xs ?? 'var(--mantine-font-size-xs)',
+                    color: theme?.colors?.gray?.[6] ?? 'var(--mantine-color-gray-6)',
                 }}
             >
                 Report Issue
             </Link>
             <Grid gap="xs">
-                {/* Row 1: Name, Grade, Topos */}
+                {/* Row 1: Name, Grade, Topos, Issues Indicator */}
                 <Grid.Col span="auto">
                     <Group gap="xs" wrap="nowrap">
                         <Text size="md" fw={500} truncate="end">
@@ -102,10 +107,36 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                             canEdit={canEdit}
                             size="xs"
                         />
+                        {issues.length > 0 && (
+                            <Badge
+                                component="button"
+                                type="button"
+                                color="red"
+                                variant={hasFlagged ? "filled" : "light"}
+                                size="sm"
+                                leftSection={<IconFlag size={13} />}
+                                style={{ cursor: "pointer", flexShrink: 0 }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    openIssuesModal();
+                                }}
+                                title={hasFlagged && primaryIssue?.flaggedMessage
+                                    ? `Safety Notice: ${primaryIssue.flaggedMessage} (Click to view issue details)`
+                                    : "Click to view issue details and attachments"}
+                            >
+                                {hasFlagged
+                                    ? (issues.length > 1 ? `${issues.length} Issues (Safety Notice)` : "Safety Notice")
+                                    : (issues.length > 1
+                                        ? `${issues.length} Issues`
+                                        : (primaryIssue.subIssueType
+                                            ? `${primaryIssue.issueType} - ${primaryIssue.subIssueType}`
+                                            : primaryIssue.issueType))}
+                            </Badge>
+                        )}
                     </Group>
                 </Grid.Col>
                 
-                {/* Row 2: Details - Simplified, removed nested grid */}
+                {/* Row 2: Details */}
                 <Grid.Col span={12}>
                     <Group gap="xs" wrap="nowrap">
                         {route.climbStyle && (
@@ -128,39 +159,24 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                         )}
                     </Group>
                 </Grid.Col>
-
-                {/* Row 3: Issues Display */}
-                {primaryIssue && (
-                    <Grid.Col span={12} mt="xs">
-                        <Stack gap="xs">
-                            <Group gap="xs" wrap="nowrap">
-                                <IconFlag size={18} style={{ color: theme.colors.red[6], flexShrink: 0 }} />
-                                <Badge 
-                                    color="red" 
-                                    variant="light"
-                                    title={primaryIssue.description ?? undefined}
-                                >
-                                    {primaryIssue.issueType}{primaryIssue.subIssueType ? ` - ${primaryIssue.subIssueType}` : ''}
-                                </Badge>
-                            </Group>
-                            {primaryIssue.flaggedMessage && (
-                                <Text size="sm" c="red.7" fw={500}>
-                                    ⚠️ Safety Notice: {primaryIssue.flaggedMessage}
-                                </Text>
-                            )}
-                        </Stack>
-                    </Grid.Col>
-                )}
                 
-                {/* Row 4: Notes (Moved Here) */}
+                {/* Row 3: Notes */}
                 {route.notes && (
                     <Grid.Col span={12} mt="xs">
-                        <Box style={{ fontSize: theme.fontSizes.sm }}>
+                        <Box style={{ fontSize: theme?.fontSizes?.sm ?? 'var(--mantine-font-size-sm)' }}>
                             <RichTextViewer content={route.notes} />
                         </Box>
                     </Grid.Col>
                 )}
             </Grid>
+
+            {issues.length > 0 && (
+                <RouteIssuesModal
+                    opened={isIssuesModalOpen}
+                    onClose={closeIssuesModal}
+                    route={route}
+                />
+            )}
         </Paper>
     );
 } 

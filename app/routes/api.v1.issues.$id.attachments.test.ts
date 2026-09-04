@@ -233,6 +233,9 @@ describe("api.v1.issues.$id.attachments action", () => {
             { id: 1, file_hash: "hash-1" },
             { id: 2, file_hash: "hash-2" },
             { id: 3, file_hash: "hash-3" },
+            { id: 4, file_hash: "hash-4" },
+            { id: 5, file_hash: "hash-5" },
+            { id: 6, file_hash: "hash-6" },
           ],
         },
       ],
@@ -247,6 +250,6 @@ describe("api.v1.issues.$id.attachments action", () => {
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as any;
-    expect(body.message).toContain("maximum of 3 photos");
+    expect(body.message).toContain("maximum of 6 photos");
   });
 });
