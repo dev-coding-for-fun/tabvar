@@ -10,7 +10,7 @@ import { IMAGE_TYPES } from "~/lib/constants";
 import { calculateFileHash, uploadFileToR2 } from "~/lib/s3.server";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
-const MAX_FILES = 3;
+const MAX_FILES = 6;
 const MODERATOR_ROLES = new Set(["member", "admin", "super"]);
 
 /**
