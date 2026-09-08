@@ -1,6 +1,6 @@
 
 import { Kysely, KyselyPlugin, PluginTransformQueryArgs, PluginTransformResultArgs, QueryResult, RootOperationNode, UnknownRow } from 'kysely';
-import { D1Dialect } from 'kysely-d1'
+import { D1Dialect } from '@notsplol/kysely-d1';
 import { DB } from './db.d'
 import { AppLoadContext } from 'react-router';
 
