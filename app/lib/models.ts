@@ -142,6 +142,40 @@ export interface User {
     role?: string | null;
     createdAt?: string | null;
     disclaimerAckDate?: string | null;
+    tags?: UserAssignedTag[] | null;
+}
+
+export interface UserTag {
+    id: number;
+    name: string;
+    description?: string | null;
+    color?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+}
+
+export interface UserTagAssignment {
+    id: number;
+    uid: string;
+    tagId: number;
+    expiresAt?: string | null;
+    assignedByUid?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+}
+
+export interface UserAssignedTag {
+    assignmentId: number;
+    tagId: number;
+    name: string;
+    description?: string | null;
+    color?: string | null;
+    expiresAt?: string | null;
+    isExpired: boolean;
+}
+
+export interface UserWithTags extends User {
+    tags: UserAssignedTag[];
 }
 
 export interface UserInvite {

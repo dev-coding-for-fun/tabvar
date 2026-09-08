@@ -61,9 +61,59 @@ describe("users._index loader", () => {
       params: {},
     }));
 
-    expect(await readJson(response)).toEqual({ users, invites });
+    expect(await readJson(response)).toEqual({
+      users: [{ ...users[0], tags: [] }],
+      invites,
+      tags: [],
+    });
     expect(db.selectFrom).toHaveBeenCalledWith("user");
     expect(db.selectFrom).toHaveBeenCalledWith("user_invite");
+    expect(db.selectFrom).toHaveBeenCalledWith("user_tag");
+  });
+
+  it("populates assigned tags for users", async () => {
+    const users = [createUser({ uid: "u-1", role: "member" })];
+    const tags = [{ id: 10, name: "Supporter", description: "Donor", color: "teal" }];
+    const assignments = [
+      {
+        assignmentId: 1,
+        uid: "u-1",
+        tagId: 10,
+        name: "Supporter",
+        description: "Donor",
+        color: "teal",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+      },
+    ];
+    const db = createMockDb({
+      select: [
+        { execute: users },
+        { execute: [] },
+        { execute: tags },
+        { execute: assignments },
+      ],
+    });
+    mocks.getDB.mockReturnValue(db);
+    mocks.requireUser.mockResolvedValue(createUser({ role: "admin" }));
+
+    const response = await loader(createRouteArgs({
+      request: createGetRequest("https://example.com/users"),
+      context: createContext(),
+      params: {},
+    }));
+
+    const data = await readJson<{ users: Array<{ tags: unknown[] }> }>(response);
+    expect(data.users[0].tags).toEqual([
+      {
+        assignmentId: 1,
+        tagId: 10,
+        name: "Supporter",
+        description: "Donor",
+        color: "teal",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        isExpired: false,
+      },
+    ]);
   });
 });
 
@@ -221,5 +271,100 @@ describe("users._index action", () => {
     expect(redirectResponse).toBeInstanceOf(Response);
     expect((redirectResponse as Response).status).toBe(302);
     expect((redirectResponse as Response).headers.get("Location")).toBe("/users");
+  });
+
+  it("assigns a new tag to a user", async () => {
+    const db = createMockDb({
+      select: [{ executeTakeFirst: undefined }],
+      insert: [{ execute: undefined }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await action(createRouteArgs({
+      request: createFormRequest("https://example.com/users", {
+        action: "assign_tag",
+        uid: "user-1",
+        tag_id: "5",
+        expires_at: "2099-01-01T00:00:00.000Z",
+      }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(await readJson(response)).toEqual({
+      success: true,
+      message: "Tag assigned successfully.",
+    });
+    expect(db.insertInto).toHaveBeenCalledWith("user_tag_assignment");
+  });
+
+  it("updates an existing tag assignment when re-assigned", async () => {
+    const db = createMockDb({
+      select: [{ executeTakeFirst: { id: 42 } }],
+      update: [{ execute: undefined }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await action(createRouteArgs({
+      request: createFormRequest("https://example.com/users", {
+        action: "assign_tag",
+        uid: "user-1",
+        tag_id: "5",
+        expires_at: "2099-01-01T00:00:00.000Z",
+      }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(await readJson(response)).toEqual({
+      success: true,
+      message: "Tag assignment updated.",
+    });
+    expect(db.updateTable).toHaveBeenCalledWith("user_tag_assignment");
+  });
+
+  it("removes a tag assignment from a user", async () => {
+    const db = createMockDb({
+      delete: [{ execute: undefined }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await action(createRouteArgs({
+      request: createFormRequest("https://example.com/users", {
+        action: "remove_tag",
+        assignment_id: "42",
+      }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(await readJson(response)).toEqual({
+      success: true,
+      message: "Tag removed from user.",
+    });
+    expect(db.deleteFrom).toHaveBeenCalledWith("user_tag_assignment");
+  });
+
+  it("updates a tag assignment expiration date", async () => {
+    const db = createMockDb({
+      update: [{ execute: undefined }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await action(createRouteArgs({
+      request: createFormRequest("https://example.com/users", {
+        action: "update_tag_expiration",
+        assignment_id: "42",
+        expires_at: "2099-12-31T23:59:59.000Z",
+      }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(await readJson(response)).toEqual({
+      success: true,
+      message: "Tag expiration updated.",
+    });
+    expect(db.updateTable).toHaveBeenCalledWith("user_tag_assignment");
   });
 });

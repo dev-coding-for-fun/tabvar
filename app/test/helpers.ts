@@ -11,6 +11,7 @@ type QueryResult = {
 
 type QueryMethod =
   | "distinct"
+  | "groupBy"
   | "innerJoin"
   | "leftJoin"
   | "limit"
@@ -162,6 +163,7 @@ export function createFluentQuery(result: QueryResult = {}): FluentQuery {
   const query = {} as FluentQuery;
   const methods: QueryMethod[] = [
     "distinct",
+    "groupBy",
     "innerJoin",
     "leftJoin",
     "limit",

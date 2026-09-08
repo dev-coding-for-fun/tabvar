@@ -340,6 +340,25 @@ export interface UserInvite {
   token_expires: string | null;
 }
 
+export interface UserTag {
+  color: Generated<string | null>;
+  created_at: Generated<string | null>;
+  description: string | null;
+  id: Generated<number | null>;
+  name: string;
+  updated_at: Generated<string | null>;
+}
+
+export interface UserTagAssignment {
+  assigned_by_uid: string | null;
+  created_at: Generated<string | null>;
+  expires_at: string | null;
+  id: Generated<number | null>;
+  tag_id: number;
+  uid: string;
+  updated_at: Generated<string | null>;
+}
+
 export interface Vote {
   campaign_candidate_id: number;
   campaign_id: number;
@@ -380,5 +399,7 @@ export interface DB {
   topobuilder_connect_ticket: TopobuilderConnectTicket;
   user: User;
   user_invite: UserInvite;
+  user_tag: UserTag;
+  user_tag_assignment: UserTagAssignment;
   vote: Vote;
 }

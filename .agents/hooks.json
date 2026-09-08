@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .agents/scripts/safety-gate.mjs",
+            "command": "node scripts/safety-gate.mjs",
             "timeout": 10
           }
         ]

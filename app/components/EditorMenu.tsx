@@ -1,5 +1,5 @@
 import { ActionIcon, Group, Stack, Tooltip } from "@mantine/core";
-import { IconChecklist, IconDatabase, IconUsers } from "@tabler/icons-react";
+import { IconChecklist, IconDatabase, IconTag, IconUsers } from "@tabler/icons-react";
 import { Link } from "react-router";
 import { useUser } from "~/lib/hooks/useUser";
 
@@ -50,6 +50,18 @@ export function EditorMenu() {
               size="lg"
             >
               <IconUsers size={20} />
+            </ActionIcon>
+          </Tooltip>
+
+          <Tooltip label="Tag Definitions" position="right">
+            <ActionIcon
+              component={Link}
+              to="/admin/tags"
+              variant="light"
+              color="teal"
+              size="lg"
+            >
+              <IconTag size={20} />
             </ActionIcon>
           </Tooltip>
 
