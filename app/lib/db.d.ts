@@ -260,6 +260,14 @@ export interface RouteSearchIdx {
   term: string;
 }
 
+export interface RouteTopo {
+  created_at: Generated<string | null>;
+  label: string | null;
+  route_id: number;
+  sort_order: Generated<number>;
+  topo_id: string;
+}
+
 export interface Sector {
   crag_id: number | null;
   created_at: Generated<string | null>;
@@ -282,6 +290,25 @@ export interface SigninEvent {
   signin_at: Generated<string>;
   signin_id: Generated<number>;
   uid: string;
+}
+
+export interface Topo {
+  annotations_json: Generated<string>;
+  background_image_hash: string | null;
+  background_image_url: string;
+  crag_id: number | null;
+  created_at: Generated<string | null>;
+  description: string | null;
+  id: string;
+  image_file_size: number | null;
+  image_height: number | null;
+  image_width: number | null;
+  name: string;
+  raster_image_hash: string | null;
+  raster_image_url: string;
+  sector_id: number | null;
+  status: Generated<string>;
+  updated_at: Generated<string | null>;
 }
 
 export interface TopoAttachment {
@@ -391,9 +418,11 @@ export interface DB {
   route_search_data: RouteSearchData;
   route_search_docsize: RouteSearchDocsize;
   route_search_idx: RouteSearchIdx;
+  route_topo: RouteTopo;
   sector: Sector;
   sector_attachment: SectorAttachment;
   signin_event: SigninEvent;
+  topo: Topo;
   topo_attachment: TopoAttachment;
   topo_submission: TopoSubmission;
   topobuilder_connect_ticket: TopobuilderConnectTicket;

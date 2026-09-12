@@ -6,6 +6,7 @@ export interface Crag {
     longitude?: number | null;
     sectors: Sector[];
     attachments?: TopoAttachment[];
+    topos?: Topo[];
     createdAt?: string | null;
     statsActiveIssueCount?: number | null;
     statsIssueFlagged?: number | null;
@@ -20,6 +21,7 @@ export interface Sector {
     crag?: Crag;
     routes: Route[];
     attachments?: TopoAttachment[];
+    topos?: Topo[];
     latitude?: number | null;
     longitude?: number | null;
     sortOrder?: number | null;
@@ -38,6 +40,7 @@ export interface Route {
     crag?: Crag | null;
     issues: Issue[];
     attachments?: TopoAttachment[];
+    topos?: RouteTopo[];
     altNames?: string | null;
     boltCount?: number | null;
     climbStyle?: string | null;
@@ -213,3 +216,38 @@ export interface TopoSubmission {
     reviewedAt?: string | null;
     reviewNotes?: string | null;
 }
+
+export interface TopoAnnotationDocument {
+    version: number;
+    items: unknown[];
+}
+
+export interface RouteTopo {
+    topoId: string;
+    routeId: number;
+    label?: string | null;
+    sortOrder: number;
+    routeName?: string | null;
+    createdAt?: string | null;
+}
+
+export interface Topo {
+    id: string;
+    cragId?: number | null;
+    sectorId?: number | null;
+    name: string;
+    description?: string | null;
+    backgroundImageUrl: string;
+    backgroundImageHash?: string | null;
+    rasterImageUrl: string;
+    rasterImageHash?: string | null;
+    imageWidth?: number | null;
+    imageHeight?: number | null;
+    imageFileSize?: number | null;
+    annotations: TopoAnnotationDocument;
+    routes: RouteTopo[];
+    status: string;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+}
+

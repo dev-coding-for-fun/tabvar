@@ -33,6 +33,7 @@ export type ApiSector = {
   attachments: SyncAttachment[];
 };
 
+
 export type ApiRoute = {
   id: number;
   cragId: number | null;
@@ -59,6 +60,7 @@ export type ApiRoute = {
   updatedAt: string | null;
   attachments: SyncAttachment[];
 };
+
 
 // SQLite CURRENT_TIMESTAMP format ("YYYY-MM-DD HH:MM:SS", UTC).
 export function formatSqliteTimestamp(date = new Date()) {
@@ -179,3 +181,4 @@ export function toApiRoute(row: {
     attachments: [],
   };
 }
+

@@ -173,41 +173,55 @@ export async function createTopoSubmission(
   const uploadedFiles = new Map<string, Awaited<ReturnType<typeof uploadFileToR2>> & { originalName: string }>();
 
   for (const topo of topos) {
-    if (typeof topo.fileKey !== "string" || topo.fileKey.length === 0) {
-      throw new SubmissionValidationError("each topo must include a fileKey.");
+    const keysToUpload: { key: string; field: "attachment" | "backgroundAttachment" | "rasterAttachment" }[] = [];
+
+    if (typeof topo.fileKey === "string" && topo.fileKey.length > 0) {
+      keysToUpload.push({ key: topo.fileKey, field: "attachment" });
+    }
+    if (typeof topo.backgroundFileKey === "string" && topo.backgroundFileKey.length > 0) {
+      keysToUpload.push({ key: topo.backgroundFileKey, field: "backgroundAttachment" });
+    }
+    if (typeof topo.rasterFileKey === "string" && topo.rasterFileKey.length > 0) {
+      keysToUpload.push({ key: topo.rasterFileKey, field: "rasterAttachment" });
     }
 
-    const file = filesByKey.get(topo.fileKey);
-    if (!file) {
-      throw new SubmissionValidationError(`missing uploaded file for topo fileKey "${topo.fileKey}".`);
+    if (keysToUpload.length === 0) {
+      throw new SubmissionValidationError("each topo must include a fileKey or background/raster file keys.");
     }
 
-    if (!IMAGE_TYPES.includes(file.type)) {
-      throw new SubmissionValidationError(`unsupported topo file type "${file.type || "unknown"}".`);
-    }
+    for (const { key, field } of keysToUpload) {
+      const file = filesByKey.get(key);
+      if (!file) {
+        throw new SubmissionValidationError(`missing uploaded file for topo fileKey "${key}".`);
+      }
 
-    let uploaded = uploadedFiles.get(topo.fileKey);
-    if (!uploaded) {
-      const uploadResult = await uploadFileToR2(
-        context,
-        file,
-        env.TOPOS_BUCKET_NAME,
-        env.TOPOS_BUCKET_DOMAIN,
-        { keyPrefix: `submissions/${submissionId}` },
-      );
-      uploaded = {
-        ...uploadResult,
-        originalName: originalFileName(file),
+      if (!IMAGE_TYPES.includes(file.type)) {
+        throw new SubmissionValidationError(`unsupported topo file type "${file.type || "unknown"}".`);
+      }
+
+      let uploaded = uploadedFiles.get(key);
+      if (!uploaded) {
+        const uploadResult = await uploadFileToR2(
+          context,
+          file,
+          env.TOPOS_BUCKET_NAME,
+          env.TOPOS_BUCKET_DOMAIN,
+          { keyPrefix: `submissions/${submissionId}` },
+        );
+        uploaded = {
+          ...uploadResult,
+          originalName: originalFileName(file),
+        };
+        uploadedFiles.set(key, uploaded);
+      }
+
+      topo[field] = {
+        url: uploaded.url,
+        name: uploaded.name,
+        originalName: uploaded.originalName,
+        type: uploaded.type,
       };
-      uploadedFiles.set(topo.fileKey, uploaded);
     }
-
-    topo.attachment = {
-      url: uploaded.url,
-      name: uploaded.name,
-      originalName: uploaded.originalName,
-      type: uploaded.type,
-    };
   }
 
   annotateTopoTargets(payload);
