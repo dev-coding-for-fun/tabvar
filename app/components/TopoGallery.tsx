@@ -117,6 +117,7 @@ export function TopoGallery({
   };
 
   const handleDeleteClick = (attachment: TopoAttachment) => {
+    if (attachment.isTopo) return;
     setDeleteAttachmentId(attachment.id);
   };
 
@@ -195,7 +196,7 @@ export function TopoGallery({
       if (data.type === 'attachment' && data.id) {
         const attachmentId = data.id;
 
-        const isSelfDrop = attachments.some(att => att.id === attachmentId);
+        const isSelfDrop = attachments.some(att => String(att.id) === String(attachmentId));
         if (isSelfDrop) {
            console.log("Attempted to drop attachment onto its own gallery group.");
            return;
@@ -357,15 +358,21 @@ export function TopoGallery({
 
           return (
             <Paper
-              key={attachment.id}
+              key={attachment.isTopo ? `topo-${attachment.id}` : `att-${attachment.id}`}
               component="a"
               href={attachmentUrl}
               target="_blank" 
               rel="noopener noreferrer"
               pos="relative"
               radius="sm"
-              draggable
-              onDragStart={(e: React.DragEvent) => handleDragStart(e, attachment)}
+              draggable={!attachment.isTopo}
+              onDragStart={(e: React.DragEvent) => {
+                if (attachment.isTopo) {
+                  e.preventDefault();
+                  return;
+                }
+                handleDragStart(e, attachment);
+              }}
               style={{
                 width: getPreviewSize(),
                 height: getPreviewSize(),
@@ -392,7 +399,7 @@ export function TopoGallery({
                 <IconPaperclip size={getIconSize()} color={theme.colors.gray[6]} /> // Default icon
               )}
               
-              {canEdit && (
+              {canEdit && !attachment.isTopo && (
                 <ActionIcon
                   variant="subtle"
                   color="white"

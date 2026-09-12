@@ -3,7 +3,8 @@
 
 -- 1. Create topo table
 CREATE TABLE IF NOT EXISTS "topo" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "uuid" TEXT NOT NULL UNIQUE,
     "crag_id" INTEGER,
     "sector_id" INTEGER,
     "name" TEXT NOT NULL,
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS "topo" (
     FOREIGN KEY ("sector_id") REFERENCES "sector"("id") ON DELETE SET NULL
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_topo_uuid" ON "topo"("uuid");
 CREATE INDEX IF NOT EXISTS "idx_topo_crag" ON "topo"("crag_id");
 CREATE INDEX IF NOT EXISTS "idx_topo_sector" ON "topo"("sector_id");
 CREATE INDEX IF NOT EXISTS "idx_topo_updated_at" ON "topo"("updated_at");
@@ -38,7 +40,7 @@ CREATE TRIGGER set_topo_updated_at_update AFTER UPDATE ON topo FOR EACH ROW WHEN
 
 -- 2. Create route_topo junction table
 CREATE TABLE IF NOT EXISTS "route_topo" (
-    "topo_id" TEXT NOT NULL,
+    "topo_id" INTEGER NOT NULL,
     "route_id" INTEGER NOT NULL,
     "label" TEXT,
     "sort_order" INTEGER NOT NULL DEFAULT 0,

@@ -37,6 +37,7 @@ function createCragDb() {
         { id: 11, issueId: 9, url: "https://example.com/9.jpg", type: "image/jpeg" },
         { id: 12, issueId: 4, url: "https://example.com/4.jpg", type: "image/jpeg" },
       ] },
+      { execute: [] }, // route_topo
     ],
   });
 }
@@ -103,5 +104,54 @@ describe("loadCragBySlug", () => {
 
     expect(issues.find(issue => issue.id === 9)?.attachments?.map(a => a.id)).toEqual([11]);
     expect(issues.find(issue => issue.id === 4)?.attachments?.map(a => a.id)).toEqual([12]);
+  });
+
+  it("loads topos and attaches them to routes", async () => {
+    const db = createMockDb({
+      select: [
+        { executeTakeFirst: { id: 1, name: "Test Crag", slug: "test-crag" } },
+        { execute: [] }, // crag_attachment
+        { execute: [
+          { id: 5, name: "Upper", cragId: 1, sortOrder: 1 },
+        ] },
+        { execute: [] }, // sector_attachment
+        { execute: [
+          { id: 200, name: "Upper Route", sectorId: 5 },
+        ] },
+        { execute: [] }, // route_attachment
+        { execute: [] }, // issues
+        { execute: [ // route_topo
+          { topoId: 10, routeId: 200, label: "1", sortOrder: 1 },
+        ] },
+        { execute: [ // topo
+          {
+            id: 10,
+            uuid: "topo-uuid-1",
+            cragId: 1,
+            sectorId: 5,
+            name: "Upper Wall Topo",
+            description: "Overview",
+            backgroundImageUrl: "https://example.com/raw.jpg",
+            backgroundImageHash: "rawhash",
+            rasterImageUrl: "https://example.com/raster.jpg",
+            rasterImageHash: "rasterhash",
+            imageWidth: 1920,
+            imageHeight: 1080,
+            imageFileSize: 100000,
+            annotationsJson: JSON.stringify({ version: 1, items: [] }),
+            status: "Active",
+            createdAt: "2026-09-12 10:00:00",
+            updatedAt: "2026-09-12 10:00:00",
+          },
+        ] },
+      ],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const crag = await loadCragBySlug(createContext(), "test-crag");
+    expect(crag.sectors[0].routes[0].topos).toHaveLength(1);
+    expect(crag.sectors[0].routes[0].topos![0].id).toBe(10);
+    expect(crag.sectors[0].routes[0].topos![0].uuid).toBe("topo-uuid-1");
+    expect(crag.sectors[0].routes[0].topos![0].rasterImageUrl).toBe("https://example.com/raster.jpg");
   });
 });

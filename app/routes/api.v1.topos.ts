@@ -19,13 +19,13 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   await requireApiTokenUser(request, context, headers);
 
   const url = new URL(request.url);
-  const id = url.searchParams.get("id");
+  const idOrUuid = url.searchParams.get("id") ?? url.searchParams.get("uuid");
   const since = url.searchParams.get("since");
   const sectorId = url.searchParams.get("sectorId");
   const cragId = url.searchParams.get("cragId");
 
-  if (id) {
-    const topo = await loadTopoById(context, id);
+  if (idOrUuid) {
+    const topo = await loadTopoById(context, idOrUuid);
     if (!topo) {
       return apiError("not_found", 404, "Topo not found.", headers);
     }
@@ -56,11 +56,11 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
 
   if (request.method === "DELETE") {
     const url = new URL(request.url);
-    const id = url.searchParams.get("id");
-    if (!id) {
-      return apiError("bad_request", 400, "Topo id is required for deletion.", headers);
+    const idOrUuid = url.searchParams.get("id") ?? url.searchParams.get("uuid");
+    if (!idOrUuid) {
+      return apiError("bad_request", 400, "Topo id or uuid is required for deletion.", headers);
     }
-    const success = await deleteTopo(context, id);
+    const success = await deleteTopo(context, idOrUuid);
     return jsonResponse({ success }, { headers });
   }
 

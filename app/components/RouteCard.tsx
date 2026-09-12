@@ -2,7 +2,7 @@ import { Paper, Stack, Group, Text, rem, Box, Button, MantineTheme, Flex, Badge,
 import { useDisclosure } from "@mantine/hooks";
 import { IconFlag, IconLink } from "@tabler/icons-react";
 import { getGradeColor, getClimbStyleColorName } from "~/lib/constants";
-import type { Route } from "~/lib/models";
+import { type Route, topoToAttachment } from "~/lib/models";
 import { TopoGallery } from "./TopoGallery";
 import { useFetcher } from "react-router";
 import { RichTextViewer } from "./RichTextViewer";
@@ -102,7 +102,7 @@ export function RouteCard({ route, theme, canEdit }: RouteCardProps) {
                         </Badge>
                         )}
                         <TopoGallery
-                            attachments={route.attachments ?? []}
+                            attachments={[...(route.topos ?? []).map(topoToAttachment), ...(route.attachments ?? [])]}
                             routeId={route.id}
                             canEdit={canEdit}
                             size="xs"

@@ -1,9 +1,10 @@
 import type { AppLoadContext } from "react-router";
 import { getDB } from "./db";
-import type { Crag, Sector, Route, Issue, IssueAttachment, TopoAttachment } from "./models";
+import type { Crag, Sector, Route, Issue, IssueAttachment, TopoAttachment, Topo } from "./models";
 import { redirect } from "react-router";
 import { sql } from "kysely";
 import { HIDDEN_TOPO_ISSUE_STATUSES } from "./constants";
+import { parseAnnotationsJson } from "./topo.server";
 
 function groupBy<T, K>(items: T[], getKey: (item: T) => K): Map<K, T[]> {
     const groups = new Map<K, T[]>();
@@ -324,7 +325,95 @@ async function loadCrag(context: AppLoadContext, identifier: number | string, lo
     // Load the full hierarchy
     await loadSectorsForCrag(db, crag);
     await loadIssuesForCrag(db, crag);
+    await loadToposForCrag(db, crag);
     return crag;
+}
+
+async function loadToposForCrag(db: ReturnType<typeof getDB>, crag: Crag): Promise<void> {
+    const routes = crag.sectors.flatMap(sector => sector.routes);
+    const routeIds = routes.map(route => route.id);
+    routes.forEach(route => { route.topos = []; });
+
+    if (routeIds.length === 0) return;
+
+    const routeTopoRows = await db
+        .selectFrom('route_topo')
+        .where('route_id', 'in', routeIds)
+        .select([
+            'topo_id as topoId',
+            'route_id as routeId',
+            'label',
+            'sort_order as sortOrder',
+        ])
+        .orderBy('sort_order', 'asc')
+        .orderBy('topo_id', 'asc')
+        .execute();
+
+    if (routeTopoRows.length === 0) return;
+
+    const topoIds = Array.from(new Set(routeTopoRows.map(r => r.topoId)));
+
+    const topoRows = await db
+        .selectFrom('topo')
+        .where('id', 'in', topoIds)
+        .where('status', '=', 'Active')
+        .select([
+            'id',
+            'uuid',
+            'crag_id as cragId',
+            'sector_id as sectorId',
+            'name',
+            'description',
+            'background_image_url as backgroundImageUrl',
+            'background_image_hash as backgroundImageHash',
+            'raster_image_url as rasterImageUrl',
+            'raster_image_hash as rasterImageHash',
+            'image_width as imageWidth',
+            'image_height as imageHeight',
+            'image_file_size as imageFileSize',
+            'annotations_json as annotationsJson',
+            'status',
+            'created_at as createdAt',
+            'updated_at as updatedAt',
+        ])
+        .execute();
+
+    if (!topoRows.length) return;
+
+    const topoMap = new Map<number, Topo>();
+    topoRows.forEach(row => {
+        topoMap.set(row.id, {
+            id: row.id,
+            uuid: row.uuid,
+            cragId: row.cragId,
+            sectorId: row.sectorId,
+            name: row.name,
+            description: row.description,
+            backgroundImageUrl: row.backgroundImageUrl,
+            backgroundImageHash: row.backgroundImageHash,
+            rasterImageUrl: row.rasterImageUrl,
+            rasterImageHash: row.rasterImageHash,
+            imageWidth: row.imageWidth,
+            imageHeight: row.imageHeight,
+            imageFileSize: row.imageFileSize,
+            annotations: parseAnnotationsJson(row.annotationsJson),
+            routes: [],
+            status: row.status,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+        });
+    });
+
+    const routeMap = new Map(routes.map(r => [r.id, r]));
+    routeTopoRows.forEach(mapping => {
+        const topo = topoMap.get(mapping.topoId);
+        const route = routeMap.get(mapping.routeId);
+        if (topo && route) {
+            if (!route.topos!.some(t => t.id === topo.id)) {
+                route.topos!.push(topo);
+            }
+        }
+    });
 }
 
 // Convenience wrappers for common use cases

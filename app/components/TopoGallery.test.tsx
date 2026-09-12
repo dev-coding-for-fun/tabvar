@@ -47,7 +47,7 @@ vi.mock("@tabler/icons-react", () => ({
   IconPaperclip: () => <span />,
   IconPhoto: () => <span />,
   IconRoute: () => <span />,
-  IconX: () => <span />,
+  IconX: () => <span data-testid="icon-x" />,
 }));
 
 vi.mock("@mantine/core", () => ({
@@ -229,5 +229,45 @@ describe("TopoGallery disclaimer downloads", () => {
 
     expect(screen.queryByLabelText("Important Safety Notice")).not.toBeInTheDocument();
     expect(clickSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("TopoGallery deletion permissions", () => {
+  it("renders delete button for regular attachments when canEdit is true", () => {
+    render(
+      <DisclaimerAcknowledgementProvider>
+        <TopoGallery
+          attachments={[attachment({ id: 1, name: "regular.jpg" })]}
+          canEdit={true}
+        />
+      </DisclaimerAcknowledgementProvider>
+    );
+
+    expect(screen.queryAllByTestId("icon-x")).toHaveLength(1);
+  });
+
+  it("does not render delete button for topo attachments even when canEdit is true", () => {
+    const topoAtt: TopoAttachment = {
+      id: 1,
+      url: "https://example.com/raster.jpg",
+      type: "image/jpeg",
+      name: "Topo Raster",
+      routes: [],
+      sectors: [],
+      crags: [],
+      isTopo: true,
+    };
+
+    render(
+      <DisclaimerAcknowledgementProvider>
+        <TopoGallery
+          attachments={[topoAtt, attachment({ id: 2, name: "regular.jpg" })]}
+          canEdit={true}
+        />
+      </DisclaimerAcknowledgementProvider>
+    );
+
+    // Only the regular attachment has a delete button (IconX)
+    expect(screen.queryAllByTestId("icon-x")).toHaveLength(1);
   });
 });

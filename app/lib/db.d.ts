@@ -265,7 +265,7 @@ export interface RouteTopo {
   label: string | null;
   route_id: number;
   sort_order: Generated<number>;
-  topo_id: string;
+  topo_id: number;
 }
 
 export interface Sector {
@@ -299,7 +299,7 @@ export interface Topo {
   crag_id: number | null;
   created_at: Generated<string | null>;
   description: string | null;
-  id: string;
+  id: Generated<number>;
   image_file_size: number | null;
   image_height: number | null;
   image_width: number | null;
@@ -309,6 +309,7 @@ export interface Topo {
   sector_id: number | null;
   status: Generated<string>;
   updated_at: Generated<string | null>;
+  uuid: string;
 }
 
 export interface TopoAttachment {

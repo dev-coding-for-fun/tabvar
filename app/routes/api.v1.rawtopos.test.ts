@@ -73,7 +73,8 @@ describe("api.v1.topos endpoint", () => {
 
     it("returns topos with depicted routes, labels, and vector annotations", async () => {
       const topoRow = {
-        id: "topo-uuid-1",
+        id: 1,
+        uuid: "topo-uuid-1",
         crag_id: 10,
         sector_id: 20,
         name: "Sunny Wall Overview",
@@ -97,7 +98,7 @@ describe("api.v1.topos endpoint", () => {
       };
 
       const routeRow = {
-        topoId: "topo-uuid-1",
+        topoId: 1,
         routeId: 101,
         label: "1",
         sortOrder: 1,
@@ -122,7 +123,8 @@ describe("api.v1.topos endpoint", () => {
       const body = await readJson(response);
       expect(body.topos).toHaveLength(1);
       expect(body.topos[0]).toMatchObject({
-        id: "topo-uuid-1",
+        id: 1,
+        uuid: "topo-uuid-1",
         name: "Sunny Wall Overview",
         backgroundImageUrl: "https://files.tabvar.org/topos/raw/rawhash.jpg",
         rasterImageUrl: "https://files.tabvar.org/topos/raster/rasterhash.jpg",
@@ -132,7 +134,7 @@ describe("api.v1.topos endpoint", () => {
         },
         routes: [
           {
-            topoId: "topo-uuid-1",
+            topoId: 1,
             routeId: 101,
             label: "1",
             sortOrder: 1,
@@ -195,7 +197,7 @@ describe("api.v1.topos endpoint", () => {
       const bgFile = new File(["clean-pixels"], "bg.jpg", { type: "image/jpeg" });
       const rasterFile = new File(["raster-pixels"], "raster.jpg", { type: "image/jpeg" });
       const payload = {
-        id: "topo-uuid-new",
+        uuid: "topo-uuid-new",
         name: "Upper Crag Topo",
         description: "New area",
         cragId: 5,
@@ -216,7 +218,8 @@ describe("api.v1.topos endpoint", () => {
         select: [
           { executeTakeFirst: undefined }, // check existing
           { executeTakeFirst: { // loadTopoById after save
-            id: "topo-uuid-new",
+            id: 10,
+            uuid: "topo-uuid-new",
             crag_id: 5,
             sector_id: 12,
             name: "Upper Crag Topo",
@@ -234,12 +237,12 @@ describe("api.v1.topos endpoint", () => {
             updated_at: "2026-09-12 12:00:00",
           } },
           { execute: [ // loadTopoById routes
-            { topoId: "topo-uuid-new", routeId: 201, label: "A", sortOrder: 1, routeName: "Route A", createdAt: "2026-09-12 12:00:00" },
-            { topoId: "topo-uuid-new", routeId: 202, label: "B", sortOrder: 2, routeName: "Route B", createdAt: "2026-09-12 12:00:00" },
+            { topoId: 10, routeId: 201, label: "A", sortOrder: 1, routeName: "Route A", createdAt: "2026-09-12 12:00:00" },
+            { topoId: 10, routeId: 202, label: "B", sortOrder: 2, routeName: "Route B", createdAt: "2026-09-12 12:00:00" },
           ] },
         ],
         insert: [
-          { execute: [] }, // insert topo
+          { executeTakeFirst: { insertId: 10n } }, // insert topo
           { execute: [] }, // insert route_topo
         ],
         delete: [
@@ -263,7 +266,8 @@ describe("api.v1.topos endpoint", () => {
       expect(response.status).toBe(201);
       const body = await readJson(response);
       expect(body.topo).toMatchObject({
-        id: "topo-uuid-new",
+        id: 10,
+        uuid: "topo-uuid-new",
         name: "Upper Crag Topo",
         backgroundImageUrl: "https://files.tabvar.org/topos/raw/rawhash123.jpg",
         rasterImageUrl: "https://files.tabvar.org/topos/raster/rasterhash456.jpg",

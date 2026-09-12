@@ -30,7 +30,7 @@ export async function uploadAttachment(
         name: uploadResult.name
       })
       .returning(['id', 'url', 'type', 'name'])
-      .executeTakeFirstOrThrow() as TopoAttachment;
+      .executeTakeFirstOrThrow();
 
     if (routeIds.length > 0) {
       await db
@@ -61,9 +61,15 @@ export async function uploadAttachment(
         })
         .execute();
     }
+    const resultAttachment: TopoAttachment = {
+      ...attachment,
+      routes: [],
+      sectors: [],
+      crags: [],
+    };
     return {
       success: true,
-      attachment
+      attachment: resultAttachment,
     };
   } catch (error) {
     console.error('Error uploading attachment:', error);

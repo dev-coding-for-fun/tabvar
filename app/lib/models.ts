@@ -6,7 +6,6 @@ export interface Crag {
     longitude?: number | null;
     sectors: Sector[];
     attachments?: TopoAttachment[];
-    topos?: Topo[];
     createdAt?: string | null;
     statsActiveIssueCount?: number | null;
     statsIssueFlagged?: number | null;
@@ -21,7 +20,6 @@ export interface Sector {
     crag?: Crag;
     routes: Route[];
     attachments?: TopoAttachment[];
-    topos?: Topo[];
     latitude?: number | null;
     longitude?: number | null;
     sortOrder?: number | null;
@@ -40,7 +38,7 @@ export interface Route {
     crag?: Crag | null;
     issues: Issue[];
     attachments?: TopoAttachment[];
-    topos?: RouteTopo[];
+    topos?: Topo[];
     altNames?: string | null;
     boltCount?: number | null;
     climbStyle?: string | null;
@@ -202,6 +200,20 @@ export interface TopoAttachment {
     sectors: Sector[];
     crags: Crag[];
     createdAt?: string | null;
+    isTopo?: boolean;
+}
+
+export function topoToAttachment(topo: Topo): TopoAttachment {
+    return {
+        id: topo.id,
+        url: topo.rasterImageUrl,
+        type: 'image/jpeg',
+        name: topo.name,
+        routes: [],
+        sectors: [],
+        crags: [],
+        isTopo: true,
+    };
 }
 
 export interface TopoSubmission {
@@ -223,7 +235,7 @@ export interface TopoAnnotationDocument {
 }
 
 export interface RouteTopo {
-    topoId: string;
+    topoId: number;
     routeId: number;
     label?: string | null;
     sortOrder: number;
@@ -232,7 +244,8 @@ export interface RouteTopo {
 }
 
 export interface Topo {
-    id: string;
+    id: number;
+    uuid: string;
     cragId?: number | null;
     sectorId?: number | null;
     name: string;

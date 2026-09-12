@@ -7,7 +7,21 @@ import type { Route, Issue } from "~/lib/models";
 import { RouteCard } from "./RouteCard";
 
 vi.mock("~/components/TopoGallery", () => ({
-  TopoGallery: () => <div data-testid="topo-gallery" />,
+  TopoGallery: ({ attachments, canEdit }: { attachments: any[]; canEdit?: boolean }) => (
+    <div data-testid="topo-gallery" data-can-edit={canEdit ? "true" : "false"}>
+      {attachments.map((att: any, index: number) => (
+        <span
+          key={att.id}
+          data-testid={`attachment-${index}`}
+          data-id={att.id}
+          data-url={att.url}
+          data-is-topo={att.isTopo ? "true" : "false"}
+        >
+          {att.name}
+        </span>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock("~/components/RichTextViewer", () => ({
@@ -150,5 +164,49 @@ describe("RouteCard issue display and popup modal", () => {
     expect(screen.getByText("Issues for Classic Crack (2)")).toBeDefined();
     expect(screen.getByText("Chossy block near the chains.")).toBeDefined();
     expect(screen.getByText("Grooved cold shut.")).toBeDefined();
+  });
+
+  it("gathers topo rasters before regular attachments and marks them as non-deletable", () => {
+    const routeWithToposAndAttachments: Route = {
+      ...baseRoute,
+      topos: [
+        {
+          id: 1,
+          uuid: "topo-1",
+          name: "Main Wall Topo",
+          rasterImageUrl: "https://example.com/raster-main.jpg",
+          backgroundImageUrl: "https://example.com/raw-main.jpg",
+          annotations: { version: 1, items: [] },
+          routes: [],
+          status: "Active",
+        },
+      ],
+      attachments: [
+        {
+          id: 42,
+          name: "Old Guidebook Scan",
+          url: "https://example.com/scan.jpg",
+          type: "image/jpeg",
+          routes: [],
+          sectors: [],
+          crags: [],
+        },
+      ],
+    };
+
+    renderWithProviders(<RouteCard route={routeWithToposAndAttachments} theme={theme} canEdit={true} />);
+
+    const firstAtt = screen.getByTestId("attachment-0");
+    const secondAtt = screen.getByTestId("attachment-1");
+
+    // Topo raster must be first
+    expect(firstAtt.getAttribute("data-id")).toBe("1");
+    expect(firstAtt.getAttribute("data-url")).toBe("https://example.com/raster-main.jpg");
+    expect(firstAtt.getAttribute("data-is-topo")).toBe("true");
+
+    // Generic attachment must be second
+    expect(secondAtt.getAttribute("data-id")).toBe("42");
+    expect(secondAtt.getAttribute("data-url")).toBe("https://example.com/scan.jpg");
+    expect(secondAtt.getAttribute("data-is-topo")).toBe("false");
   });
 });

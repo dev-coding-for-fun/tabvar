@@ -64,7 +64,8 @@ export interface SaveTopoRouteInput {
 }
 
 export interface SaveRawTopoPayload {
-  id?: string;
+  id?: number;
+  uuid?: string;
   cragId?: number | null;
   sectorId?: number | null;
   name: string;
@@ -111,8 +112,23 @@ export function parseSaveRawTopoPayload(data: unknown): SaveRawTopoPayload {
     });
   }
 
+  let id: number | undefined = undefined;
+  if (typeof obj.id === "number") {
+    id = obj.id;
+  } else if (typeof obj.id === "string" && !isNaN(Number(obj.id)) && obj.id.trim().length > 0) {
+    id = Number(obj.id);
+  }
+
+  let uuid: string | undefined = undefined;
+  if (typeof obj.uuid === "string" && obj.uuid.trim().length > 0) {
+    uuid = obj.uuid.trim();
+  } else if (typeof obj.id === "string" && isNaN(Number(obj.id)) && obj.id.trim().length > 0) {
+    uuid = obj.id.trim();
+  }
+
   return {
-    id: typeof obj.id === "string" && obj.id.trim().length > 0 ? obj.id.trim() : undefined,
+    id,
+    uuid,
     cragId: typeof obj.cragId === "number" ? obj.cragId : null,
     sectorId: typeof obj.sectorId === "number" ? obj.sectorId : null,
     name,
@@ -140,14 +156,21 @@ export async function saveRawTopo(
     throw new TopoValidationError("Topo name is required.");
   }
 
-  const topoId = payload.id && payload.id.trim().length > 0 ? payload.id.trim() : crypto.randomUUID();
-
-  // Check for existing topo to allow partial updates
-  const existing = await db
-    .selectFrom("topo")
-    .selectAll()
-    .where("id", "=", topoId)
-    .executeTakeFirst();
+  let existing = undefined;
+  if (typeof payload.id === "number") {
+    existing = await db
+      .selectFrom("topo")
+      .selectAll()
+      .where("id", "=", payload.id)
+      .executeTakeFirst();
+  }
+  if (!existing && payload.uuid) {
+    existing = await db
+      .selectFrom("topo")
+      .selectAll()
+      .where("uuid", "=", payload.uuid)
+      .executeTakeFirst();
+  }
 
   let backgroundUrl = payload.backgroundUrl ?? existing?.background_image_url ?? null;
   let backgroundHash = existing?.background_image_hash ?? null;
@@ -199,8 +222,10 @@ export async function saveRawTopo(
   const status = payload.status ?? existing?.status ?? "Active";
 
   const now = formatSqliteTimestamp();
+  let topoId: number;
 
   if (existing) {
+    topoId = existing.id;
     await db
       .updateTable("topo")
       .set({
@@ -222,10 +247,11 @@ export async function saveRawTopo(
       .where("id", "=", topoId)
       .execute();
   } else {
-    await db
+    const topoUuid = payload.uuid && payload.uuid.trim().length > 0 ? payload.uuid.trim() : crypto.randomUUID();
+    const insertResult = await db
       .insertInto("topo")
       .values({
-        id: topoId,
+        uuid: topoUuid,
         name: payload.name.trim(),
         description: payload.description ?? null,
         crag_id: payload.cragId ?? null,
@@ -242,7 +268,14 @@ export async function saveRawTopo(
         created_at: now,
         updated_at: now,
       })
-      .execute();
+      .executeTakeFirst();
+
+    if (insertResult.insertId) {
+      topoId = Number(insertResult.insertId);
+    } else {
+      const inserted = await db.selectFrom("topo").select("id").where("uuid", "=", topoUuid).executeTakeFirst();
+      topoId = inserted!.id;
+    }
   }
 
   // 3. Update route_topo junction if routes list provided
@@ -271,23 +304,29 @@ export async function saveRawTopo(
   return (await loadTopoById(context, topoId))!;
 }
 
-export async function loadTopoById(context: AppLoadContext, id: string): Promise<Topo | null> {
+export async function loadTopoById(context: AppLoadContext, idOrUuid: number | string): Promise<Topo | null> {
   const db = getDB(context);
 
-  const row = await db
-    .selectFrom("topo")
-    .selectAll()
-    .where("id", "=", id)
-    .executeTakeFirst();
+  let query = db.selectFrom("topo").selectAll();
+  const isNumeric = typeof idOrUuid === "number" || (!isNaN(Number(idOrUuid)) && String(Number(idOrUuid)) === String(idOrUuid).trim());
+  if (isNumeric) {
+    query = query.where("id", "=", Number(idOrUuid));
+  } else {
+    query = query.where("uuid", "=", String(idOrUuid).trim());
+  }
+
+  const row = await query.executeTakeFirst();
 
   if (!row) {
     return null;
   }
 
+  const topoId = row.id;
+
   const routeRows = await db
     .selectFrom("route_topo")
     .leftJoin("route", "route_topo.route_id", "route.id")
-    .where("route_topo.topo_id", "=", id)
+    .where("route_topo.topo_id", "=", topoId)
     .select([
       "route_topo.topo_id as topoId",
       "route_topo.route_id as routeId",
@@ -311,6 +350,7 @@ export async function loadTopoById(context: AppLoadContext, id: string): Promise
 
   return {
     id: row.id,
+    uuid: row.uuid,
     cragId: row.crag_id,
     sectorId: row.sector_id,
     name: row.name,
@@ -392,7 +432,7 @@ export async function loadTopos(
     .orderBy("route_topo.route_id", "asc")
     .execute();
 
-  const routesByTopoId = new Map<string, RouteTopo[]>();
+  const routesByTopoId = new Map<number, RouteTopo[]>();
   for (const r of routeRows) {
     const list = routesByTopoId.get(r.topoId) ?? [];
     list.push({
@@ -408,6 +448,7 @@ export async function loadTopos(
 
   const topos: Topo[] = topoRows.map((row) => ({
     id: row.id,
+    uuid: row.uuid,
     cragId: row.crag_id,
     sectorId: row.sector_id,
     name: row.name,
@@ -434,19 +475,24 @@ export async function loadTopos(
 
 export async function deleteTopo(
   context: AppLoadContext,
-  id: string,
+  idOrUuid: number | string,
 ): Promise<boolean> {
   const db = getDB(context);
   const now = formatSqliteTimestamp();
 
-  const result = await db
-    .updateTable("topo")
-    .set({
-      status: "Deleted",
-      updated_at: now,
-    })
-    .where("id", "=", id)
-    .executeTakeFirst();
+  let query = db.updateTable("topo").set({
+    status: "Deleted",
+    updated_at: now,
+  });
+
+  const isNumeric = typeof idOrUuid === "number" || (!isNaN(Number(idOrUuid)) && String(Number(idOrUuid)) === String(idOrUuid).trim());
+  if (isNumeric) {
+    query = query.where("id", "=", Number(idOrUuid));
+  } else {
+    query = query.where("uuid", "=", String(idOrUuid).trim());
+  }
+
+  const result = await query.executeTakeFirst();
 
   return Number(result.numUpdatedRows) > 0;
 }
