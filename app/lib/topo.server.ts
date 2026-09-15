@@ -58,7 +58,25 @@ export function normalizeAnnotationDocument(
 }
 
 export interface SaveTopoRouteInput {
-  routeId: number;
+  // Existing route reference
+  routeId?: number;
+
+  // New route fields (used when routeId is omitted)
+  name?: string;
+  sectorId?: number | null;
+  gradeYds?: string | null;
+  climbStyle?: string | null;
+  boltCount?: number | null;
+  pitchCount?: number | null;
+  routeLength?: number | null;
+  firstAscentBy?: string | null;
+  firstAscentDate?: string | null;
+  routeBuiltDate?: string | null;
+  year?: number | null;
+  status?: string | null;
+  notes?: string | null;
+
+  // Junction fields
   label?: string | null;
   sortOrder?: number;
 }
@@ -70,6 +88,8 @@ export interface SaveRawTopoPayload {
   sectorId?: number | null;
   name: string;
   description?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   backgroundUrl?: string | null;
   rasterUrl?: string | null;
   imageWidth?: number | null;
@@ -100,12 +120,35 @@ export function parseSaveRawTopoPayload(data: unknown): SaveRawTopoPayload {
   let routes: SaveTopoRouteInput[] | undefined = undefined;
   if (Array.isArray(obj.routes)) {
     routes = obj.routes.map((r, index) => {
-      if (!r || typeof r !== "object" || typeof (r as Record<string, unknown>).routeId !== "number") {
-        throw new TopoValidationError(`Route at index ${index} must have a numeric routeId.`);
+      if (!r || typeof r !== "object") {
+        throw new TopoValidationError(`Route at index ${index} must be an object.`);
       }
       const item = r as Record<string, unknown>;
+
+      const routeId = typeof item.routeId === "number" && item.routeId > 0 ? item.routeId : undefined;
+      const routeName = typeof item.name === "string" && item.name.trim().length > 0 ? item.name.trim() : undefined;
+
+      if (!routeId && !routeName) {
+        throw new TopoValidationError(
+          `Route at index ${index} must specify either an existing numeric routeId or a new route name.`
+        );
+      }
+
       return {
-        routeId: item.routeId as number,
+        routeId,
+        name: routeName,
+        sectorId: typeof item.sectorId === "number" ? item.sectorId : undefined,
+        gradeYds: typeof item.gradeYds === "string" ? item.gradeYds.trim() : null,
+        climbStyle: typeof item.climbStyle === "string" ? item.climbStyle.trim() : null,
+        boltCount: typeof item.boltCount === "number" ? item.boltCount : null,
+        pitchCount: typeof item.pitchCount === "number" ? item.pitchCount : null,
+        routeLength: typeof item.routeLength === "number" ? item.routeLength : null,
+        firstAscentBy: typeof item.firstAscentBy === "string" ? item.firstAscentBy.trim() : null,
+        firstAscentDate: typeof item.firstAscentDate === "string" ? item.firstAscentDate.trim() : null,
+        routeBuiltDate: typeof item.routeBuiltDate === "string" ? item.routeBuiltDate.trim() : null,
+        year: typeof item.year === "number" ? item.year : null,
+        status: typeof item.status === "string" ? item.status.trim() : null,
+        notes: typeof item.notes === "string" ? item.notes : null,
         label: typeof item.label === "string" ? item.label : null,
         sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index + 1,
       };
@@ -126,6 +169,27 @@ export function parseSaveRawTopoPayload(data: unknown): SaveRawTopoPayload {
     uuid = obj.id.trim();
   }
 
+  const rawLat = obj.latitude !== undefined ? obj.latitude : obj.lat;
+  let latitude: number | null | undefined = undefined;
+  if (rawLat === null) {
+    latitude = null;
+  } else if (typeof rawLat === "number" && !isNaN(rawLat)) {
+    latitude = rawLat;
+  } else if (typeof rawLat === "string" && rawLat.trim().length > 0 && !isNaN(Number(rawLat))) {
+    latitude = Number(rawLat);
+  }
+
+  const rawLon =
+    obj.longitude !== undefined ? obj.longitude : obj.lon !== undefined ? obj.lon : obj.lng;
+  let longitude: number | null | undefined = undefined;
+  if (rawLon === null) {
+    longitude = null;
+  } else if (typeof rawLon === "number" && !isNaN(rawLon)) {
+    longitude = rawLon;
+  } else if (typeof rawLon === "string" && rawLon.trim().length > 0 && !isNaN(Number(rawLon))) {
+    longitude = Number(rawLon);
+  }
+
   return {
     id,
     uuid,
@@ -133,6 +197,8 @@ export function parseSaveRawTopoPayload(data: unknown): SaveRawTopoPayload {
     sectorId: typeof obj.sectorId === "number" ? obj.sectorId : null,
     name,
     description: typeof obj.description === "string" ? obj.description : null,
+    latitude,
+    longitude,
     backgroundUrl: typeof obj.backgroundUrl === "string" ? obj.backgroundUrl : null,
     rasterUrl: typeof obj.rasterUrl === "string" ? obj.rasterUrl : null,
     imageWidth: typeof obj.imageWidth === "number" ? obj.imageWidth : null,
@@ -233,6 +299,8 @@ export async function saveRawTopo(
         description: payload.description !== undefined ? payload.description : existing.description,
         crag_id: payload.cragId !== undefined ? payload.cragId : existing.crag_id,
         sector_id: payload.sectorId !== undefined ? payload.sectorId : existing.sector_id,
+        latitude: payload.latitude !== undefined ? payload.latitude : existing.latitude,
+        longitude: payload.longitude !== undefined ? payload.longitude : existing.longitude,
         background_image_url: backgroundUrl,
         background_image_hash: backgroundHash,
         raster_image_url: rasterUrl,
@@ -256,6 +324,8 @@ export async function saveRawTopo(
         description: payload.description ?? null,
         crag_id: payload.cragId ?? null,
         sector_id: payload.sectorId ?? null,
+        latitude: payload.latitude ?? null,
+        longitude: payload.longitude ?? null,
         background_image_url: backgroundUrl,
         background_image_hash: backgroundHash,
         raster_image_url: rasterUrl,
@@ -286,13 +356,71 @@ export async function saveRawTopo(
       .execute();
 
     if (payload.routes.length > 0) {
-      const routeRows = payload.routes.map((r, index) => ({
-        topo_id: topoId,
-        route_id: r.routeId,
-        label: r.label ?? null,
-        sort_order: r.sortOrder ?? index + 1,
-        created_at: now,
-      }));
+      const routeRows: {
+        topo_id: number;
+        route_id: number;
+        label: string | null;
+        sort_order: number;
+        created_at: string;
+      }[] = [];
+
+      for (let index = 0; index < payload.routes.length; index++) {
+        const r = payload.routes[index];
+        let resolvedRouteId = r.routeId;
+
+        if (!resolvedRouteId) {
+          // New route: determine target sectorId
+          const targetSectorId = r.sectorId ?? payload.sectorId;
+          if (!targetSectorId) {
+            throw new TopoValidationError(
+              `Cannot create new route "${r.name}" without a sectorId (neither route nor topo specified sectorId).`,
+            );
+          }
+
+          const insertRouteResult = await db
+            .insertInto("route")
+            .values({
+              name: r.name!,
+              sector_id: targetSectorId,
+              grade_yds: r.gradeYds ?? null,
+              climb_style: r.climbStyle ?? null,
+              bolt_count: r.boltCount ?? null,
+              pitch_count: r.pitchCount ?? null,
+              route_length: r.routeLength ?? null,
+              first_ascent_by: r.firstAscentBy ?? null,
+              first_ascent_date: r.firstAscentDate ?? null,
+              route_built_date: r.routeBuiltDate ?? null,
+              year: r.year ?? null,
+              status: r.status ?? null,
+              notes: r.notes ?? null,
+              sort_order: r.sortOrder ?? index + 1,
+              created_at: now,
+              updated_at: now,
+            })
+            .executeTakeFirst();
+
+          if (insertRouteResult.insertId) {
+            resolvedRouteId = Number(insertRouteResult.insertId);
+          } else {
+            const newlyInserted = await db
+              .selectFrom("route")
+              .select("id")
+              .where("name", "=", r.name!)
+              .where("sector_id", "=", targetSectorId)
+              .orderBy("id", "desc")
+              .executeTakeFirst();
+            resolvedRouteId = newlyInserted!.id;
+          }
+        }
+
+        routeRows.push({
+          topo_id: topoId,
+          route_id: resolvedRouteId,
+          label: r.label ?? null,
+          sort_order: r.sortOrder ?? index + 1,
+          created_at: now,
+        });
+      }
 
       await db
         .insertInto("route_topo")
@@ -355,6 +483,8 @@ export async function loadTopoById(context: AppLoadContext, idOrUuid: number | s
     sectorId: row.sector_id,
     name: row.name,
     description: row.description,
+    latitude: row.latitude,
+    longitude: row.longitude,
     backgroundImageUrl: row.background_image_url,
     backgroundImageHash: row.background_image_hash,
     rasterImageUrl: row.raster_image_url,
@@ -453,6 +583,8 @@ export async function loadTopos(
     sectorId: row.sector_id,
     name: row.name,
     description: row.description,
+    latitude: row.latitude,
+    longitude: row.longitude,
     backgroundImageUrl: row.background_image_url,
     backgroundImageHash: row.background_image_hash,
     rasterImageUrl: row.raster_image_url,

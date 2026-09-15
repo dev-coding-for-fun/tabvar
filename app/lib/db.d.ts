@@ -303,6 +303,8 @@ export interface Topo {
   image_file_size: number | null;
   image_height: number | null;
   image_width: number | null;
+  latitude: number | null;
+  longitude: number | null;
   name: string;
   raster_image_hash: string | null;
   raster_image_url: string;

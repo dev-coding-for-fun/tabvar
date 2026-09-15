@@ -93,6 +93,19 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
           return apiError("bad_request", 400, "Payload field must be valid JSON.", headers);
         }
       }
+      const formLat = formData.get("latitude") ?? formData.get("lat");
+      if (formLat !== null && payload.latitude === undefined && payload.lat === undefined) {
+        payload.latitude = formLat;
+      }
+      const formLon = formData.get("longitude") ?? formData.get("lon") ?? formData.get("lng");
+      if (
+        formLon !== null &&
+        payload.longitude === undefined &&
+        payload.lon === undefined &&
+        payload.lng === undefined
+      ) {
+        payload.longitude = formLon;
+      }
     } else {
       try {
         payload = (await request.json()) as Record<string, unknown>;

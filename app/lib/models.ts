@@ -250,6 +250,8 @@ export interface Topo {
     sectorId?: number | null;
     name: string;
     description?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
     backgroundImageUrl: string;
     backgroundImageHash?: string | null;
     rasterImageUrl: string;

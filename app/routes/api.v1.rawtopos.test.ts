@@ -281,6 +281,165 @@ describe("api.v1.topos endpoint", () => {
       expect(db.insertInto).toHaveBeenCalledWith("route_topo");
     });
 
+    it("creates new routes on the fly alongside existing routes and maps both to the topo", async () => {
+      const bgFile = new File(["clean"], "bg.jpg", { type: "image/jpeg" });
+      const rasterFile = new File(["raster"], "raster.jpg", { type: "image/jpeg" });
+      const payload = {
+        uuid: "topo-mixed-routes",
+        name: "Mixed Wall Topo",
+        sectorId: 12,
+        routes: [
+          { routeId: 101, label: "1", sortOrder: 1 },
+          { name: "Brand New Line", gradeYds: "5.11b", climbStyle: "Sport", boltCount: 7, label: "2", sortOrder: 2 },
+        ],
+      };
+
+      const db = createMockDb({
+        select: [
+          { executeTakeFirst: undefined }, // check existing topo
+          { executeTakeFirst: { // loadTopoById after save
+            id: 20,
+            uuid: "topo-mixed-routes",
+            sector_id: 12,
+            name: "Mixed Wall Topo",
+            background_image_url: "https://files.tabvar.org/topos/raw/rawhash123.jpg",
+            raster_image_url: "https://files.tabvar.org/topos/raster/rasterhash456.jpg",
+            status: "Active",
+            annotations_json: "{}",
+            created_at: "2026-09-12 12:00:00",
+            updated_at: "2026-09-12 12:00:00",
+          } },
+          { execute: [ // loadTopoById routes
+            { topoId: 20, routeId: 101, label: "1", sortOrder: 1, routeName: "Existing Route", createdAt: "2026-09-12 12:00:00" },
+            { topoId: 20, routeId: 999, label: "2", sortOrder: 2, routeName: "Brand New Line", createdAt: "2026-09-12 12:00:00" },
+          ] },
+        ],
+        insert: [
+          { executeTakeFirst: { insertId: 20n } }, // insert topo
+          { executeTakeFirst: { insertId: 999n } }, // insert new route
+          { execute: [] }, // insert route_topo
+        ],
+        delete: [
+          { execute: [] }, // delete old route_topo
+        ],
+      });
+      mocks.getDB.mockReturnValue(db);
+
+      const request = createFormRequest("https://example.com/api/v1/topos", {
+        background: bgFile,
+        raster: rasterFile,
+        payload: JSON.stringify(payload),
+      });
+
+      const response = await action(createRouteArgs({
+        request,
+        context: createContext(),
+        params: {},
+      }));
+
+      expect(response.status).toBe(201);
+      const body = await readJson(response);
+      expect(body.topo.routes).toEqual([
+        expect.objectContaining({ routeId: 101, label: "1", routeName: "Existing Route" }),
+        expect.objectContaining({ routeId: 999, label: "2", routeName: "Brand New Line" }),
+      ]);
+      expect(db.insertInto).toHaveBeenCalledWith("route");
+      expect(db.insertInto).toHaveBeenCalledWith("route_topo");
+    });
+
+    it("rejects new route creation when sectorId is missing from both route and topo", async () => {
+      const bgFile = new File(["clean"], "bg.jpg", { type: "image/jpeg" });
+      const rasterFile = new File(["raster"], "raster.jpg", { type: "image/jpeg" });
+      const payload = {
+        name: "No Sector Topo",
+        routes: [
+          { name: "Orphan Route", label: "1" },
+        ],
+      };
+
+      const db = createMockDb({
+        select: [
+          { executeTakeFirst: undefined },
+        ],
+        insert: [
+          { executeTakeFirst: { insertId: 1n } },
+        ],
+        delete: [
+          { execute: [] },
+        ],
+      });
+      mocks.getDB.mockReturnValue(db);
+
+      const request = createFormRequest("https://example.com/api/v1/topos", {
+        background: bgFile,
+        raster: rasterFile,
+        payload: JSON.stringify(payload),
+      });
+
+      const response = await action(createRouteArgs({
+        request,
+        context: createContext(),
+        params: {},
+      }));
+
+      expect(response.status).toBe(400);
+      const body = await readJson(response);
+      expect(body.message).toContain("without a sectorId");
+    });
+
+    it("stores and returns GPS coordinates (latitude and longitude) for a topo", async () => {
+      const bgFile = new File(["clean"], "bg.jpg", { type: "image/jpeg" });
+      const rasterFile = new File(["raster"], "raster.jpg", { type: "image/jpeg" });
+      const payload = {
+        uuid: "topo-gps-1",
+        name: "GPS Tagged Wall",
+        lat: 51.0543,
+        lon: -115.3421,
+      };
+
+      const db = createMockDb({
+        select: [
+          { executeTakeFirst: undefined },
+          { executeTakeFirst: {
+            id: 15,
+            uuid: "topo-gps-1",
+            name: "GPS Tagged Wall",
+            latitude: 51.0543,
+            longitude: -115.3421,
+            background_image_url: "https://files.tabvar.org/topos/raw/bg.jpg",
+            raster_image_url: "https://files.tabvar.org/topos/raster/raster.jpg",
+            status: "Active",
+            annotations_json: "{}",
+            created_at: "2026-09-12 12:00:00",
+            updated_at: "2026-09-12 12:00:00",
+          } },
+          { execute: [] },
+        ],
+        insert: [
+          { executeTakeFirst: { insertId: 15n } },
+        ],
+      });
+      mocks.getDB.mockReturnValue(db);
+
+      const request = createFormRequest("https://example.com/api/v1/topos", {
+        background: bgFile,
+        raster: rasterFile,
+        payload: JSON.stringify(payload),
+      });
+
+      const response = await action(createRouteArgs({
+        request,
+        context: createContext(),
+        params: {},
+      }));
+
+      expect(response.status).toBe(201);
+      const body = await readJson(response);
+      expect(body.topo.latitude).toBeCloseTo(51.0543);
+      expect(body.topo.longitude).toBeCloseTo(-115.3421);
+      expect(db.insertInto).toHaveBeenCalledWith("topo");
+    });
+
     it("supports soft deletion via DELETE method", async () => {
       const db = createMockDb({
         update: [{ executeTakeFirst: { numUpdatedRows: 1n } }],
