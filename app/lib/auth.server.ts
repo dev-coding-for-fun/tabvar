@@ -5,6 +5,7 @@ import { GoogleStrategy } from '@coji/remix-auth-google'
 import { getDB } from './db';
 import { sql } from 'kysely';
 import { User } from './models';
+import { applyInviteTagsToUser } from './tags.server';
 
 const SESSION_USER_KEY = "user";
 
@@ -89,6 +90,12 @@ async function findOrCreateGoogleUser(context: AppLoadContext, tokens: Parameter
                 'disclaimer_ack_date as disclaimerAckDate'
             ])
             .executeTakeFirstOrThrow();
+
+        if (invite) {
+            await applyInviteTagsToUser(db, email, user.uid, invite.invited_by_uid);
+            await db.deleteFrom('user_invite_tag').where('email', '=', email).execute();
+            await db.deleteFrom('user_invite').where('email', '=', email).execute();
+        }
     }
     await db.insertInto('signin_event')
         .values({
@@ -176,7 +183,8 @@ function generateOtpCode(): string {
 
 export async function sendLoginEmail(
     context: AppLoadContext,
-    email: string
+    email: string,
+    redirectTo?: string
 ): Promise<{ success: boolean; error?: string }> {
     const normalizedEmail = email.trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -223,7 +231,10 @@ export async function sendLoginEmail(
         .execute();
 
     const baseUrl = context.cloudflare.env.BASE_URL || "https://app.tabvar.org";
-    const magicLink = `${baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
+    let magicLink = `${baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
+    if (redirectTo) {
+        magicLink += `&redirectTo=${encodeURIComponent(redirectTo)}`;
+    }
     const fromAddress = context.cloudflare.env.AUTH_FROM_EMAIL || "auth@tabvar.org";
 
     if (!context.cloudflare.env.EMAIL) {
@@ -396,13 +407,31 @@ export async function findOrCreateEmailUser(
                 "disclaimer_ack_date as disclaimerAckDate",
             ])
             .executeTakeFirstOrThrow();
-    } else if (!user.emailVerified) {
-        await db
-            .updateTable("user")
-            .set({ email_verified: 1 })
-            .where("uid", "=", user.uid)
-            .execute();
-        user.emailVerified = true;
+
+        if (invite) {
+            await applyInviteTagsToUser(db, normalizedEmail, user.uid, invite.invited_by_uid);
+            await db.deleteFrom("user_invite_tag").where("email", "=", normalizedEmail).execute();
+            await db.deleteFrom("user_invite").where("email", "=", normalizedEmail).execute();
+        }
+    } else {
+        const invite = await db
+            .selectFrom("user_invite")
+            .selectAll()
+            .where("email", "=", normalizedEmail)
+            .executeTakeFirst();
+        if (invite) {
+            await applyInviteTagsToUser(db, normalizedEmail, user.uid, invite.invited_by_uid);
+            await db.deleteFrom("user_invite_tag").where("email", "=", normalizedEmail).execute();
+            await db.deleteFrom("user_invite").where("email", "=", normalizedEmail).execute();
+        }
+        if (!user.emailVerified) {
+            await db
+                .updateTable("user")
+                .set({ email_verified: 1 })
+                .where("uid", "=", user.uid)
+                .execute();
+            user.emailVerified = true;
+        }
     }
 
     await db

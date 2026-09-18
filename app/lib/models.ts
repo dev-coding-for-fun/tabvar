@@ -189,6 +189,7 @@ export interface UserInvite {
     token?: string | null;
     tokenExpires?: string | null;
     createdAt?: string | null;
+    tags?: UserTag[];
 }
 
 export interface TopoAttachment {

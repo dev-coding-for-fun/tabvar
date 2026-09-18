@@ -18,11 +18,13 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const cookies = cookieHeader
     ? Object.fromEntries(cookieHeader.split('; ').map((c) => c.split('=')))
     : {};
+  const queryRedirectTo = url.searchParams.get('redirectTo');
+  const targetRedirect = queryRedirectTo || cookies.redirectTo;
   let finalRedirectTo = '/topos';
 
-  if (cookies.redirectTo) {
+  if (targetRedirect) {
     try {
-      let decodedPath = decodeURIComponent(cookies.redirectTo);
+      let decodedPath = decodeURIComponent(targetRedirect);
       if (!decodedPath.startsWith('/')) {
         decodedPath = `/${decodedPath}`;
       }

@@ -63,7 +63,7 @@ describe("users._index loader", () => {
 
     expect(await readJson(response)).toEqual({
       users: [{ ...users[0], tags: [] }],
-      invites,
+      invites: [{ ...invites[0], tags: [] }],
       tags: [],
     });
     expect(db.selectFrom).toHaveBeenCalledWith("user");
@@ -221,6 +221,34 @@ describe("users._index action", () => {
         invited_by_name: "Admin",
       })
     );
+  });
+
+  it("creates invites and associates invite tags", async () => {
+    const db = createMockDb({
+      insert: [{ execute: undefined }, { execute: undefined }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const formData = new FormData();
+    formData.append("action", "create_invite");
+    formData.append("invite_email", "supporter@example.com");
+    formData.append("invite_role", "member");
+    formData.append("invite_tags", "42");
+
+    const request = new Request("https://example.com/users", {
+      method: "POST",
+      body: formData,
+    });
+
+    const response = await action(createRouteArgs({
+      request,
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(await readJson(response)).toEqual({ success: true, message: "Invite created." });
+    expect(db.insertInto).toHaveBeenCalledWith("user_invite");
+    expect(db.insertInto).toHaveBeenCalledWith("user_invite_tag");
   });
 
   it("returns a duplicate invite failure", async () => {

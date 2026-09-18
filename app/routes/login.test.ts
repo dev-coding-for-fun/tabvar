@@ -41,7 +41,8 @@ describe("login route", () => {
         })
       );
 
-      expect(response.error).toContain("invalid or has expired");
+      const data = await readJson(response);
+      expect(data.error).toContain("invalid or has expired");
     });
 
     it("returns null when no error query param is present", async () => {
@@ -53,7 +54,8 @@ describe("login route", () => {
         })
       );
 
-      expect(response.error).toBeNull();
+      const data = await readJson(response);
+      expect(data.error).toBeNull();
     });
   });
 
@@ -93,7 +95,35 @@ describe("login route", () => {
       expect(data.success).toBe(true);
       expect(data.step).toBe("verify");
       expect(data.email).toBe("climber@example.com");
-      expect(mocks.sendLoginEmail).toHaveBeenCalledWith(expect.anything(), "climber@example.com");
+      expect(mocks.sendLoginEmail).toHaveBeenCalledWith(
+        expect.anything(),
+        "climber@example.com",
+        undefined
+      );
+    });
+
+    it("passes redirectTo to sendLoginEmail when provided in form", async () => {
+      mocks.sendLoginEmail.mockResolvedValue({ success: true });
+
+      const response = await action(
+        createRouteArgs({
+          request: createFormRequest("https://example.com/login", {
+            intent: "send-code",
+            email: "climber@example.com",
+            redirectTo: "/discount",
+          }),
+          context: createContext(),
+          params: {},
+        })
+      );
+
+      const data = await readJson(response);
+      expect(data.success).toBe(true);
+      expect(mocks.sendLoginEmail).toHaveBeenCalledWith(
+        expect.anything(),
+        "climber@example.com",
+        "/discount"
+      );
     });
 
     it("returns error on send-code failure", async () => {

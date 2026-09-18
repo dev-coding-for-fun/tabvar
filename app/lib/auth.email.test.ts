@@ -215,5 +215,42 @@ describe("auth.server passwordless email authentication", () => {
       expect(db.insertInto).toHaveBeenCalledWith("user");
       expect(db.insertInto).toHaveBeenCalledWith("signin_event");
     });
+
+    it("provisions a new user and transfers invited tags to user_tag_assignment", async () => {
+      const createdUser = createUser({
+        uid: "new-email-user",
+        email: "supporter@example.com",
+        role: "member",
+        providerId: "email",
+      });
+
+      const db = createMockDb({
+        select: [
+          { executeTakeFirst: undefined },
+          { executeTakeFirst: { email: "supporter@example.com", role: "member", invited_by_uid: "admin-1" } },
+          { execute: [{ tag_id: 99 }] },
+          { executeTakeFirst: undefined },
+        ],
+        insert: [
+          { executeTakeFirstOrThrow: createdUser },
+          { execute: undefined },
+          { executeTakeFirst: { signin_id: 1, uid: "new-email-user" } },
+        ],
+        delete: [
+          { execute: undefined },
+          { execute: undefined },
+        ],
+      });
+      mocks.getDB.mockReturnValue(db);
+
+      const context = createContext();
+      const user = await findOrCreateEmailUser(context, "supporter@example.com");
+
+      expect(user.role).toBe("member");
+      expect(db.insertInto).toHaveBeenCalledWith("user");
+      expect(db.insertInto).toHaveBeenCalledWith("user_tag_assignment");
+      expect(db.deleteFrom).toHaveBeenCalledWith("user_invite_tag");
+      expect(db.deleteFrom).toHaveBeenCalledWith("user_invite");
+    });
   });
 });

@@ -223,3 +223,82 @@ export async function userHasActiveTag(
   if (!record.expiresAt) return true;
   return new Date(record.expiresAt) > new Date();
 }
+
+/**
+ * Returns a map of email -> tags for all pending invitations.
+ */
+export async function getInviteTagsMap(
+  db: Kysely<DB>
+): Promise<Map<string, UserTag[]>> {
+  const rows = await db
+    .selectFrom("user_invite_tag as it")
+    .innerJoin("user_tag as t", "it.tag_id", "t.id")
+    .select([
+      "it.email as email",
+      "t.id as id",
+      "t.name as name",
+      "t.description as description",
+      "t.color as color",
+    ])
+    .orderBy("t.name", "asc")
+    .execute();
+
+  const map = new Map<string, UserTag[]>();
+  for (const r of rows) {
+    const emailKey = r.email.trim().toLowerCase();
+    const existing = map.get(emailKey) || [];
+    existing.push({
+      id: Number(r.id),
+      name: r.name,
+      description: r.description,
+      color: r.color || "blue",
+    });
+    map.set(emailKey, existing);
+  }
+  return map;
+}
+
+/**
+ * Associates tags with an invited email address.
+ */
+export async function addInviteTags(
+  db: Kysely<DB>,
+  email: string,
+  tagIds: number[]
+): Promise<void> {
+  const normalized = email.trim().toLowerCase();
+  for (const tagId of tagIds) {
+    await db
+      .insertInto("user_invite_tag")
+      .values({
+        email: normalized,
+        tag_id: tagId,
+      })
+      .execute();
+  }
+}
+
+/**
+ * Copies tags from user_invite_tag into user_tag_assignment for a newly provisioned user.
+ */
+export async function applyInviteTagsToUser(
+  db: Kysely<DB>,
+  email: string,
+  uid: string,
+  assignedByUid?: string | null
+): Promise<void> {
+  const normalized = email.trim().toLowerCase();
+  const inviteTags = await db
+    .selectFrom("user_invite_tag")
+    .select(["tag_id"])
+    .where("email", "=", normalized)
+    .execute();
+
+  for (const it of inviteTags) {
+    await assignUserTag(db, {
+      uid,
+      tagId: Number(it.tag_id),
+      assignedByUid: assignedByUid ?? null,
+    });
+  }
+}

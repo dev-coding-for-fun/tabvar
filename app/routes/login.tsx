@@ -39,6 +39,7 @@ export const meta: MetaFunction = () => privatePageMeta("Sign in");
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const errorParam = url.searchParams.get("error");
+  const redirectTo = url.searchParams.get("redirectTo");
   let errorMessage: string | null = null;
 
   if (errorParam === "invalid_token" || errorParam === "missing_token") {
@@ -47,7 +48,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     errorMessage = decodeURIComponent(errorParam);
   }
 
-  return { error: errorMessage };
+  const headers = new Headers();
+  if (redirectTo) {
+    headers.append("Set-Cookie", `redirectTo=${encodeURIComponent(redirectTo)}; Path=/; SameSite=Lax`);
+  }
+
+  return data({ error: errorMessage, redirectTo }, { headers });
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -60,7 +66,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return data({ error: "Please enter a valid email address.", step: "email", email: "" }, { status: 400 });
     }
 
-    const result = await sendLoginEmail(context, email);
+    const formRedirectTo = formData.get("redirectTo")?.toString() || undefined;
+    const result = await sendLoginEmail(context, email, formRedirectTo);
     if (!result.success) {
       return data(
         {
@@ -99,15 +106,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
       );
     }
 
+    const formRedirectTo = formData.get("redirectTo")?.toString();
     const cookieHeader = request.headers.get("Cookie");
     const cookies = cookieHeader
       ? Object.fromEntries(cookieHeader.split("; ").map((c) => c.split("=")))
       : {};
     let finalRedirectTo = "/topos";
 
-    if (cookies.redirectTo) {
+    const targetRedirect = formRedirectTo || cookies.redirectTo;
+    if (targetRedirect) {
       try {
-        let decodedPath = decodeURIComponent(cookies.redirectTo);
+        let decodedPath = decodeURIComponent(targetRedirect);
         if (!decodedPath.startsWith("/")) {
           decodedPath = `/${decodedPath}`;
         }
@@ -125,10 +134,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function Login() {
-  const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo");
-  const actionData = useActionData<typeof action>();
   const loaderData = useLoaderData<typeof loader>();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirectTo") || loaderData?.redirectTo;
+  const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
 
   const isSubmitting = navigation.state === "submitting";
@@ -187,6 +196,7 @@ export default function Login() {
             <Form method="post">
               <input type="hidden" name="intent" value="verify-code" />
               <input type="hidden" name="email" value={activeEmail} />
+              <input type="hidden" name="redirectTo" value={redirectTo || ""} />
 
               <Stack gap="md">
                 <div>
@@ -228,6 +238,7 @@ export default function Login() {
               <Form method="post">
                 <input type="hidden" name="intent" value="resend-code" />
                 <input type="hidden" name="email" value={activeEmail} />
+                <input type="hidden" name="redirectTo" value={redirectTo || ""} />
                 <Button variant="subtle" size="xs" type="submit" loading={isSubmitting}>
                   Resend code
                 </Button>
@@ -237,6 +248,7 @@ export default function Login() {
         ) : (
           <Stack>
             <Form action="/auth/google" method="post">
+              <input type="hidden" name="redirectTo" value={redirectTo || ""} />
               <Center>
                 <Button
                   leftSection={<Image src="/google.png" alt="Google logo" width={30} height={30} />}
@@ -255,6 +267,7 @@ export default function Login() {
 
             <Form method="post">
               <input type="hidden" name="intent" value="send-code" />
+              <input type="hidden" name="redirectTo" value={redirectTo || ""} />
               <Stack gap="md">
                 <TextInput
                   label="Email address"

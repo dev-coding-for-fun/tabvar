@@ -9,6 +9,7 @@ import {
     Group,
     List,
     Modal,
+    MultiSelect,
     Popover,
     Select,
     Stack,
@@ -51,6 +52,7 @@ import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR, userRoles } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 import { privatePageMeta } from "~/lib/seo";
+import { addInviteTags, getInviteTagsMap } from "~/lib/tags.server";
 
 export const loader = async (args: LoaderFunctionArgs) => {
     const user: User = await requireUser(args);
@@ -106,9 +108,15 @@ export const loader = async (args: LoaderFunctionArgs) => {
         tags: userTagsMap.get(u.uid) || [],
     }));
 
+    const inviteTagsMap = await getInviteTagsMap(db);
+    const invitesWithTags = invites.map((inv) => ({
+        ...inv,
+        tags: inviteTagsMap.get(inv.email.trim().toLowerCase()) || [],
+    }));
+
     return {
         users: usersWithTags,
-        invites,
+        invites: invitesWithTags,
         tags: tags.map((t) => ({
             id: Number(t.id),
             name: t.name,
@@ -162,14 +170,20 @@ export const action = async (args: ActionFunctionArgs) => {
             const inviteEmails = formData.get("invite_email")?.toString();
             const inviteName = formData.get("invite_name")?.toString();
             const inviteRole = formData.get("invite_role")?.toString();
+            const rawTags = formData.getAll("invite_tags");
+            const inviteTags = rawTags
+                .map((t) => Number(t.toString()))
+                .filter((id) => !isNaN(id) && id > 0);
+
             if (inviteEmails && inviteRole) {
                 const db = getDB(context);
                 const emails = inviteEmails.split(/[,;\s]+/).filter(email => email.trim());
                 for (const email of emails) {
+                    const normalizedEmail = email.trim().toLowerCase();
                     try {
                         await db.insertInto('user_invite')
                             .values({
-                                email: email.trim(),
+                                email: normalizedEmail,
                                 display_name: emails.length === 1 ? inviteName || null : null,
                                 role: inviteRole || null,
                                 invited_by_uid: user.uid,
@@ -177,6 +191,10 @@ export const action = async (args: ActionFunctionArgs) => {
                                 token_expires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 365 days from now
                             })
                             .execute();
+
+                        if (inviteTags.length > 0) {
+                            await addInviteTags(db, normalizedEmail, inviteTags);
+                        }
                     } catch (error) {
                         if (error instanceof Error) console.log(error.message);
                         return data({ success: false, message: `Could not create invite. If this email is already invited, delete it first to re-invite.` }, { status: 500 });
@@ -190,6 +208,9 @@ export const action = async (args: ActionFunctionArgs) => {
             const inviteEmail = formData.get("inviteId")?.toString();
             if (inviteEmail) {
                 const db = getDB(context);
+                await db.deleteFrom('user_invite_tag')
+                    .where('email', '=', inviteEmail.trim().toLowerCase())
+                    .execute();
                 await db.deleteFrom('user_invite')
                     .where('email', '=', inviteEmail)
                     .execute();
@@ -544,6 +565,14 @@ export default function UsersIndex() {
                             data={userRoles}
                             required
                         />
+                        <MultiSelect
+                            name="invite_tags"
+                            label="Pre-assigned Tags (optional)"
+                            description="Users will automatically receive these tags upon their first login"
+                            data={tags.map((t) => ({ value: String(t.id), label: t.name }))}
+                            searchable
+                            clearable
+                        />
                         <Button type="submit">Create Invite</Button>
                     </Stack>
                 </Form>
@@ -556,6 +585,11 @@ export default function UsersIndex() {
                                     <Text><strong>Email:</strong> {invite.email}</Text>
                                     <Text><strong>Name:</strong> {invite.displayName || 'N/A'}</Text>
                                     <Badge>{invite.role}</Badge>
+                                    {invite.tags && invite.tags.map((t) => (
+                                        <Badge key={t.id} color={t.color || 'blue'}>
+                                            {t.name}
+                                        </Badge>
+                                    ))}
                                     <Text><strong>Invited by:</strong> {invite.invitedByName}</Text>
                                     <Text><strong>Invitation Expires:</strong> {new Date(invite.tokenExpires as string).toLocaleString()}</Text>
                                 </Group>
