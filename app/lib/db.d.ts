@@ -392,6 +392,7 @@ export interface UserInvite {
 export interface UserInviteTag {
   created_at: Generated<string | null>;
   email: string;
+  expires_at: string | null;
   id: Generated<number | null>;
   tag_id: number;
 }

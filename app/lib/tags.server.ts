@@ -264,7 +264,8 @@ export async function getInviteTagsMap(
 export async function addInviteTags(
   db: Kysely<DB>,
   email: string,
-  tagIds: number[]
+  tagIds: number[],
+  expiresAt?: string | null
 ): Promise<void> {
   const normalized = email.trim().toLowerCase();
   for (const tagId of tagIds) {
@@ -273,6 +274,7 @@ export async function addInviteTags(
       .values({
         email: normalized,
         tag_id: tagId,
+        expires_at: expiresAt ?? null,
       })
       .execute();
   }
@@ -290,7 +292,7 @@ export async function applyInviteTagsToUser(
   const normalized = email.trim().toLowerCase();
   const inviteTags = await db
     .selectFrom("user_invite_tag")
-    .select(["tag_id"])
+    .select(["tag_id", "expires_at as expiresAt"])
     .where("email", "=", normalized)
     .execute();
 
@@ -298,6 +300,7 @@ export async function applyInviteTagsToUser(
     await assignUserTag(db, {
       uid,
       tagId: Number(it.tag_id),
+      expiresAt: it.expiresAt,
       assignedByUid: assignedByUid ?? null,
     });
   }
