@@ -328,7 +328,7 @@ export default function DiscountPage() {
                     Ready to redeem at the counter
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Present this QR code to the cashier to apply your discount. This code is unique to you and valid for one-time use.
+                    Present this QR code to the cashier to apply your discount. 20% off code is valid for retail items only. Can only be used once. Expires May 31, 2027. Does not stack with other sales or member discounts.
                   </Text>
                 </Alert>
 
