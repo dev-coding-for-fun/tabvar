@@ -18,6 +18,10 @@ type AppAuthenticator = Authenticator<User> & {
 };
 
 function getSessionStorage(context: AppLoadContext) {
+    const rawDomain = context.cloudflare.env.COOKIE_DOMAIN;
+    // RFC 6265: Browsers reject cookies with Domain=localhost or Domain=127.0.0.1.
+    const isLocalhost = !rawDomain || rawDomain === "localhost";
+
     return createCookieSessionStorage({
         cookie: {
             name: "_session",
@@ -26,12 +30,12 @@ function getSessionStorage(context: AppLoadContext) {
             httpOnly: true,
             secrets: [context.cloudflare.env.COOKIE_SECRET],
             secure: context.cloudflare.env.ENVIRONMENT === "production",
-            domain: context.cloudflare.env.COOKIE_DOMAIN
+            ...(isLocalhost ? {} : { domain: rawDomain }),
         },
     });
 }
 
-async function getSessionUser(request: Request, context: AppLoadContext): Promise<User | null> {
+export async function getSessionUser(request: Request, context: AppLoadContext): Promise<User | null> {
     const sessionStorage = getSessionStorage(context);
     const session = await sessionStorage.getSession(request.headers.get("Cookie"));
     return session.get(SESSION_USER_KEY) as User | null ?? null;

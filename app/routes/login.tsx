@@ -21,6 +21,7 @@ import {
   useLoaderData,
   useNavigation,
   data,
+  redirect,
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
   type MetaFunction,
@@ -30,16 +31,23 @@ import { privatePageMeta } from "~/lib/seo";
 import {
   createUserSession,
   findOrCreateEmailUser,
+  getSessionUser,
   sendLoginEmail,
   verifyAuthCode,
 } from "~/lib/auth.server";
 
 export const meta: MetaFunction = () => privatePageMeta("Sign in");
 
-export async function loader({ request }: LoaderFunctionArgs) {
+export async function loader({ request, context }: LoaderFunctionArgs) {
+  const user = await getSessionUser(request, context);
   const url = new URL(request.url);
-  const errorParam = url.searchParams.get("error");
   const redirectTo = url.searchParams.get("redirectTo");
+
+  if (user) {
+    return redirect(redirectTo || "/topos");
+  }
+
+  const errorParam = url.searchParams.get("error");
   let errorMessage: string | null = null;
 
   if (errorParam === "invalid_token" || errorParam === "missing_token") {

@@ -15,6 +15,12 @@ const config = defineConfig(async (configEnv) => {
     server: {
       // IPv4 loopback so adb reverse (tcp:PORT tcp:PORT) can reach the dev server.
       host: "127.0.0.1",
+      watch: {
+        ignored: ["**/.wrangler/**"],
+      },
+    },
+    optimizeDeps: {
+      include: ["mapbox-gl"],
     },
     plugins: [
       ...(!isTest ? [cloudflare({ viteEnvironment: { name: "ssr" } }), reactRouter()] : []),

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   verifyAuthCode: vi.fn(),
   findOrCreateEmailUser: vi.fn(),
   createUserSession: vi.fn(),
+  getSessionUser: vi.fn(),
 }));
 
 vi.mock("~/lib/auth.server", () => ({
@@ -22,6 +23,7 @@ vi.mock("~/lib/auth.server", () => ({
   verifyAuthCode: mocks.verifyAuthCode,
   findOrCreateEmailUser: mocks.findOrCreateEmailUser,
   createUserSession: mocks.createUserSession,
+  getSessionUser: mocks.getSessionUser,
 }));
 
 import { action, loader } from "./login";
@@ -29,9 +31,26 @@ import { action, loader } from "./login";
 describe("login route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getSessionUser.mockResolvedValue(null);
   });
 
   describe("loader", () => {
+    it("redirects authenticated users to redirectTo or /topos", async () => {
+      mocks.getSessionUser.mockResolvedValue(createUser({ uid: "user-123" }));
+
+      const response = await loader(
+        createRouteArgs({
+          request: createGetRequest("https://example.com/login?redirectTo=%2Fdiscount"),
+          context: createContext(),
+          params: {},
+        })
+      );
+
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(302);
+      expect((response as Response).headers.get("Location")).toBe("/discount");
+    });
+
     it("returns decoded error messages from query params", async () => {
       const response = await loader(
         createRouteArgs({
