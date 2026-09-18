@@ -62,6 +62,12 @@ export function createMockR2Bucket() {
   };
 }
 
+export function createMockEmail() {
+  return {
+    send: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 export function createContext(
   env: Partial<Omit<Env, "TOPOBUILDER_RETURN_TO_ALLOWLIST">> & {
     TOPOBUILDER_RETURN_TO_ALLOWLIST?: string;
@@ -83,6 +89,8 @@ export function createContext(
         TOPOS_BUCKET_DOMAIN: "https://topos.example.com",
         TABVAR_ISSUES_UPLOADS: createMockR2Bucket() as unknown as R2Bucket,
         TABVAR_TOPOS: createMockR2Bucket() as unknown as R2Bucket,
+        EMAIL: createMockEmail() as unknown as SendEmail,
+        AUTH_FROM_EMAIL: "auth@tabvar.org",
         ...env,
       },
     },

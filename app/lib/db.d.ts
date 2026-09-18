@@ -46,6 +46,16 @@ export interface AttachmentAuditLog {
   user_role: string | null;
 }
 
+export interface AuthToken {
+  attempts: Generated<number>;
+  code_hash: string;
+  created_at: Generated<string | null>;
+  email: string;
+  expires_at: string;
+  id: Generated<number>;
+  token: string;
+}
+
 export interface Campaign {
   created_at: Generated<string | null>;
   end_date: string;
@@ -401,6 +411,7 @@ export interface DB {
   _cf_METADATA: _CfMETADATA;
   api_token: ApiToken;
   attachment_audit_log: AttachmentAuditLog;
+  auth_token: AuthToken;
   campaign: Campaign;
   campaign_candidate: CampaignCandidate;
   crag: Crag;

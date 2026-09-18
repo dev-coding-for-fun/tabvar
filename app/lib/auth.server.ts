@@ -157,3 +157,261 @@ export async function logout(request: Request, context: AppLoadContext) {
         },
     });
 }
+
+async function hashToken(value: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(value);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+}
+
+function generateOtpCode(): string {
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    const code = (array[0] % 900000) + 100000;
+    return code.toString();
+}
+
+export async function sendLoginEmail(
+    context: AppLoadContext,
+    email: string
+): Promise<{ success: boolean; error?: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+        return { success: false, error: "Please enter a valid email address." };
+    }
+
+    const db = getDB(context);
+
+    // Rate limit: Check if a token was already created for this email in the last 60 seconds
+    const recentToken = await db
+        .selectFrom("auth_token")
+        .select(["id", "created_at as createdAt"])
+        .where("email", "=", normalizedEmail)
+        .where("created_at", ">", sql<string>`DATETIME('now', '-60 seconds')`)
+        .executeTakeFirst();
+
+    if (recentToken) {
+        return {
+            success: false,
+            error: "Please wait 60 seconds before requesting another code.",
+        };
+    }
+
+    // Prune expired tokens for hygiene
+    await db
+        .deleteFrom("auth_token")
+        .where("expires_at", "<", sql<string>`DATETIME('now')`)
+        .execute();
+
+    const code = generateOtpCode();
+    const token = crypto.randomUUID();
+    const codeHash = await hashToken(code);
+
+    await db
+        .insertInto("auth_token")
+        .values({
+            email: normalizedEmail,
+            code_hash: codeHash,
+            token: token,
+            expires_at: sql<string>`DATETIME('now', '+15 minutes')`,
+            attempts: 0,
+        })
+        .execute();
+
+    const baseUrl = context.cloudflare.env.BASE_URL || "https://app.tabvar.org";
+    const magicLink = `${baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
+    const fromAddress = context.cloudflare.env.AUTH_FROM_EMAIL || "auth@tabvar.org";
+
+    if (!context.cloudflare.env.EMAIL) {
+        throw new Error("Cloudflare EMAIL binding is not configured");
+    }
+
+    await context.cloudflare.env.EMAIL.send({
+        from: fromAddress,
+        to: normalizedEmail,
+        subject: `Your TABVAR Login Code: ${code}`,
+        text: `Your TABVAR login code is: ${code}\n\nOr click this link to log in directly:\n${magicLink}\n\nThis code and link will expire in 15 minutes. If you did not request this, you can safely ignore this email.`,
+        html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #eaeaea; border-radius: 8px; color: #18181b;">
+        <h2 style="margin-top: 0; font-size: 20px;">Sign in to TABVAR</h2>
+        <p style="color: #52525b; font-size: 15px; line-height: 1.5;">Enter the verification code below to sign in to your TABVAR account:</p>
+        <div style="background-color: #f4f4f5; border-radius: 6px; padding: 18px; text-align: center; margin: 24px 0;">
+          <span style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #09090b; font-family: monospace;">${code}</span>
+        </div>
+        <p style="color: #52525b; font-size: 15px; line-height: 1.5;">Or click the button below to sign in directly without typing the code:</p>
+        <div style="text-align: center; margin: 20px 0;">
+          <a href="${magicLink}" style="display: inline-block; background-color: #228be6; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; font-size: 15px;">Sign In to TABVAR</a>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eaeaea; margin: 24px 0;" />
+        <p style="color: #71717a; font-size: 12px; margin-bottom: 0;">This code and link expire in 15 minutes. If you did not request this email, no further action is needed.</p>
+      </div>
+    `,
+    });
+
+    return { success: true };
+}
+
+export async function verifyAuthCode(
+    context: AppLoadContext,
+    email: string,
+    code: string
+): Promise<{ success: boolean; error?: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const trimmedCode = code.trim();
+    const db = getDB(context);
+
+    const record = await db
+        .selectFrom("auth_token")
+        .selectAll()
+        .where("email", "=", normalizedEmail)
+        .where("expires_at", ">", sql<string>`DATETIME('now')`)
+        .orderBy("created_at", "desc")
+        .executeTakeFirst();
+
+    if (!record) {
+        return {
+            success: false,
+            error: "Verification code expired or not found. Please request a new code.",
+        };
+    }
+
+    if (record.attempts >= 5) {
+        await db.deleteFrom("auth_token").where("id", "=", record.id).execute();
+        return {
+            success: false,
+            error: "Too many incorrect attempts. Please request a new code.",
+        };
+    }
+
+    const submittedHash = await hashToken(trimmedCode);
+    if (submittedHash !== record.code_hash) {
+        await db
+            .updateTable("auth_token")
+            .set({ attempts: record.attempts + 1 })
+            .where("id", "=", record.id)
+            .execute();
+
+        return {
+            success: false,
+            error: "Invalid verification code. Please try again.",
+        };
+    }
+
+    // Delete all tokens for this email once successfully verified
+    await db
+        .deleteFrom("auth_token")
+        .where("email", "=", normalizedEmail)
+        .execute();
+
+    return { success: true };
+}
+
+export async function verifyMagicToken(
+    context: AppLoadContext,
+    token: string
+): Promise<{ success: boolean; email?: string; error?: string }> {
+    const trimmedToken = token.trim();
+    const db = getDB(context);
+
+    const record = await db
+        .selectFrom("auth_token")
+        .selectAll()
+        .where("token", "=", trimmedToken)
+        .where("expires_at", ">", sql<string>`DATETIME('now')`)
+        .executeTakeFirst();
+
+    if (!record) {
+        return {
+            success: false,
+            error: "Login link is invalid or has expired.",
+        };
+    }
+
+    // Delete all tokens for this email
+    await db
+        .deleteFrom("auth_token")
+        .where("email", "=", record.email)
+        .execute();
+
+    return { success: true, email: record.email };
+}
+
+export async function findOrCreateEmailUser(
+    context: AppLoadContext,
+    email: string
+): Promise<User> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const db = getDB(context);
+
+    let user = await db
+        .selectFrom("user")
+        .select([
+            "uid",
+            "email",
+            "display_name as displayName",
+            sql<boolean>`email_verified = 1`.as("emailVerified"),
+            "provider_id as providerId",
+            "avatar_url as avatarUrl",
+            "role",
+            "created_at as createdAt",
+            "disclaimer_ack_date as disclaimerAckDate",
+        ])
+        .where("email", "=", normalizedEmail)
+        .executeTakeFirst();
+
+    if (!user) {
+        const invite = await db
+            .selectFrom("user_invite")
+            .selectAll()
+            .where("email", "=", normalizedEmail)
+            .executeTakeFirst();
+
+        const role = invite !== undefined ? invite.role : "anonymous";
+        const uid = crypto.randomUUID();
+        const displayName = normalizedEmail.split("@")[0] || "User";
+
+        user = await db
+            .insertInto("user")
+            .values({
+                uid,
+                email: normalizedEmail,
+                display_name: displayName,
+                email_verified: 1,
+                provider_id: "email",
+                role,
+            })
+            .returning([
+                "uid",
+                "email",
+                "display_name as displayName",
+                sql<boolean>`email_verified = 1`.as("emailVerified"),
+                "provider_id as providerId",
+                "avatar_url as avatarUrl",
+                "role",
+                "created_at as createdAt",
+                "disclaimer_ack_date as disclaimerAckDate",
+            ])
+            .executeTakeFirstOrThrow();
+    } else if (!user.emailVerified) {
+        await db
+            .updateTable("user")
+            .set({ email_verified: 1 })
+            .where("uid", "=", user.uid)
+            .execute();
+        user.emailVerified = true;
+    }
+
+    await db
+        .insertInto("signin_event")
+        .values({
+            uid: user.uid,
+        })
+        .returningAll()
+        .executeTakeFirst();
+
+    return user;
+}

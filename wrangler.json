@@ -2,7 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tabvar",
   "compatibility_date": "2024-09-23",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "main": "./workers/app.ts",
   "workers_dev": false,
   "routes": [
@@ -26,8 +28,14 @@
     "TOPOS_BUCKET_DOMAIN": "https://files.tabvar.org",
     "ISSUES_BUCKET_NAME": "tabvar-issues-uploads",
     "TOPOS_BUCKET_NAME": "tabvar-topos",
-    "TOPOBUILDER_RETURN_TO_ALLOWLIST": "topobuilder:"
+    "TOPOBUILDER_RETURN_TO_ALLOWLIST": "topobuilder:",
+    "AUTH_FROM_EMAIL": "auth@app.tabvar.org"
   },
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
   "r2_buckets": [
     {
       "binding": "TABVAR_ISSUES_UPLOADS",
@@ -59,8 +67,14 @@
         "TOPOS_BUCKET_DOMAIN": "https://pub-87631ec46e764b589b8a7f38d28db98e.r2.dev",
         "ISSUES_BUCKET_NAME": "tabvar-issues-uploads-dev",
         "TOPOS_BUCKET_NAME": "tabvar-topos-dev",
-        "TOPOBUILDER_RETURN_TO_ALLOWLIST": "topobuilder:,http://localhost:8081,http://localhost:19006"
+        "TOPOBUILDER_RETURN_TO_ALLOWLIST": "topobuilder:,http://localhost:8081,http://localhost:19006",
+        "AUTH_FROM_EMAIL": "auth@app.tabvar.org"
       },
+      "send_email": [
+        {
+          "name": "EMAIL"
+        }
+      ],
       "r2_buckets": [
         {
           "binding": "TABVAR_ISSUES_UPLOADS",
