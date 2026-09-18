@@ -369,6 +369,15 @@ export interface User {
   uid: string;
 }
 
+export interface UserDiscountCode {
+  claimed_at: string | null;
+  claimed_email: string | null;
+  claimed_uid: string | null;
+  code_key: string;
+  created_at: Generated<string | null>;
+  id: Generated<number | null>;
+}
+
 export interface UserInvite {
   created_at: Generated<string | null>;
   display_name: string | null;
@@ -378,6 +387,13 @@ export interface UserInvite {
   role: string | null;
   token: string | null;
   token_expires: string | null;
+}
+
+export interface UserInviteTag {
+  created_at: Generated<string | null>;
+  email: string;
+  id: Generated<number | null>;
+  tag_id: number;
 }
 
 export interface UserTag {
@@ -441,7 +457,9 @@ export interface DB {
   topo_submission: TopoSubmission;
   topobuilder_connect_ticket: TopobuilderConnectTicket;
   user: User;
+  user_discount_code: UserDiscountCode;
   user_invite: UserInvite;
+  user_invite_tag: UserInviteTag;
   user_tag: UserTag;
   user_tag_assignment: UserTagAssignment;
   vote: Vote;

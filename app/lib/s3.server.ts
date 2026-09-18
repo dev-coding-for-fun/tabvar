@@ -55,6 +55,18 @@ export function getR2Bucket(context: AppLoadContext, bucketName: string): R2Buck
     }
   }
 
+  if (
+    bucketName === (env as any).MISC_BUCKET_NAME ||
+    bucketName === 'tabvar-misc' ||
+    bucketName === 'tabvar-misc-dev' ||
+    bucketName === 'TABVAR_MISC' ||
+    bucketName === 'misc'
+  ) {
+    if ((env as any).TABVAR_MISC) {
+      return (env as any).TABVAR_MISC;
+    }
+  }
+
   // Fallback to direct matching key on env
   const directBucket = (env as any)[bucketName];
   if (directBucket && typeof directBucket.put === 'function') {

@@ -26,8 +26,10 @@
     "MAPBOX_STYLE_URL": "mapbox://styles/mapbox/outdoors-v12",
     "ISSUES_BUCKET_DOMAIN": "https://files.issues.tabvar.org",
     "TOPOS_BUCKET_DOMAIN": "https://files.tabvar.org",
+    "MISC_BUCKET_DOMAIN": "https://misc.files.tabvar.org",
     "ISSUES_BUCKET_NAME": "tabvar-issues-uploads",
     "TOPOS_BUCKET_NAME": "tabvar-topos",
+    "MISC_BUCKET_NAME": "tabvar-misc",
     "TOPOBUILDER_RETURN_TO_ALLOWLIST": "topobuilder:",
     "AUTH_FROM_EMAIL": "auth@app.tabvar.org"
   },
@@ -44,6 +46,10 @@
     {
       "binding": "TABVAR_TOPOS",
       "bucket_name": "tabvar-topos"
+    },
+    {
+      "binding": "TABVAR_MISC",
+      "bucket_name": "tabvar-misc"
     }
   ],
   "d1_databases": [
@@ -65,8 +71,10 @@
         "MAPBOX_STYLE_URL": "mapbox://styles/mapbox/outdoors-v12",
         "ISSUES_BUCKET_DOMAIN": "https://pub-8f1e464f2fc54873a3634b82b350366a.r2.dev",
         "TOPOS_BUCKET_DOMAIN": "https://pub-87631ec46e764b589b8a7f38d28db98e.r2.dev",
+        "MISC_BUCKET_DOMAIN": "https://pub-e674df3161c043e5b47e4dd18695eaa6.r2.dev",
         "ISSUES_BUCKET_NAME": "tabvar-issues-uploads-dev",
         "TOPOS_BUCKET_NAME": "tabvar-topos-dev",
+        "MISC_BUCKET_NAME": "tabvar-misc-dev",
         "TOPOBUILDER_RETURN_TO_ALLOWLIST": "topobuilder:,http://localhost:8081,http://localhost:19006",
         "AUTH_FROM_EMAIL": "auth@app.tabvar.org"
       },
@@ -84,6 +92,11 @@
         {
           "binding": "TABVAR_TOPOS",
           "bucket_name": "tabvar-topos-dev",
+          "remote": true
+        },
+        {
+          "binding": "TABVAR_MISC",
+          "bucket_name": "tabvar-misc-dev",
           "remote": true
         }
       ],
