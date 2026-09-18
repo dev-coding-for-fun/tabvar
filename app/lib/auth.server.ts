@@ -41,12 +41,13 @@ async function findOrCreateGoogleUser(context: AppLoadContext, tokens: Parameter
     const profile = await GoogleStrategy.userProfile(tokens);
     const db = getDB(context);
     const { id, displayName, emails, photos } = profile;
-    const email = emails?.[0]?.value;
+    const rawEmail = emails?.[0]?.value;
     const avatarUrl = photos?.[0]?.value ?? null;
 
-    if (!email) {
+    if (!rawEmail) {
         throw new Error("Google profile did not include an email address");
     }
+    const email = rawEmail.trim().toLowerCase();
 
     let user = await db.selectFrom('user')
         .select([
@@ -60,8 +61,12 @@ async function findOrCreateGoogleUser(context: AppLoadContext, tokens: Parameter
             'created_at as createdAt',
             'disclaimer_ack_date as disclaimerAckDate'
         ])
-        .where('uid', '=', id)
+        .where((eb) => eb.or([
+            eb('uid', '=', id),
+            eb('email', '=', email)
+        ]))
         .executeTakeFirst();
+
     if (!user) {
         const invite = await db.selectFrom('user_invite')
             .selectAll()
@@ -96,10 +101,47 @@ async function findOrCreateGoogleUser(context: AppLoadContext, tokens: Parameter
             await db.deleteFrom('user_invite_tag').where('email', '=', email).execute();
             await db.deleteFrom('user_invite').where('email', '=', email).execute();
         }
+    } else {
+        const invite = await db.selectFrom('user_invite')
+            .selectAll()
+            .where("email", "=", email)
+            .executeTakeFirst();
+        if (invite) {
+            await applyInviteTagsToUser(db, email, user.uid, invite.invited_by_uid);
+            await db.deleteFrom('user_invite_tag').where('email', '=', email).execute();
+            await db.deleteFrom('user_invite').where('email', '=', email).execute();
+        }
+
+        const updates: {
+            email_verified?: number;
+            avatar_url?: string | null;
+            display_name?: string;
+        } = {};
+
+        if (!user.emailVerified) {
+            updates.email_verified = 1;
+            user.emailVerified = true;
+        }
+        if (!user.avatarUrl && avatarUrl) {
+            updates.avatar_url = avatarUrl;
+            user.avatarUrl = avatarUrl;
+        }
+        if ((!user.displayName || user.displayName === email.split('@')[0]) && displayName) {
+            updates.display_name = displayName;
+            user.displayName = displayName;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await db.updateTable('user')
+                .set(updates)
+                .where('uid', '=', user.uid)
+                .execute();
+        }
     }
+
     await db.insertInto('signin_event')
         .values({
-            uid: id,
+            uid: user.uid,
         })
         .returningAll().executeTakeFirst();
 

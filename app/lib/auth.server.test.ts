@@ -246,4 +246,102 @@ describe("auth.server Google account creation", () => {
       })
     );
   });
+
+  it("links to an existing email-registered user when signing in with Google", async () => {
+    const existingUser = createUser({
+      uid: "email-user-uuid-1234",
+      email: "climber@example.com",
+      displayName: "climber",
+      avatarUrl: null,
+      emailVerified: false,
+      role: "member",
+      providerId: "email",
+    });
+
+    const db = createMockDb({
+      select: [
+        { executeTakeFirst: existingUser }, // lookup by uid or email returns existing user
+        { executeTakeFirst: undefined },   // no pending invite
+      ],
+      update: [{ execute: undefined }],    // profile update (avatar, verified, displayName)
+      insert: [
+        { executeTakeFirst: { signin_id: 10, uid: "email-user-uuid-1234" } }, // signin_event
+      ],
+    });
+    mocks.getDB.mockReturnValue(db);
+    mocks.googleUserProfile.mockResolvedValue({
+      id: "google-subject-99999",
+      displayName: "Climber Pro",
+      emails: [{ value: "climber@example.com" }],
+      photos: [{ value: "https://example.com/avatar.png" }],
+    });
+
+    const authenticatedUser = await getAuthenticator(createContext()).authenticate(
+      "google",
+      createGetRequest("https://example.com/auth/google/callback")
+    );
+
+    // Retains canonical existing UID
+    expect(authenticatedUser.uid).toBe("email-user-uuid-1234");
+    expect(authenticatedUser.email).toBe("climber@example.com");
+
+    // Did NOT create a duplicate user
+    expect(db.insertInto).not.toHaveBeenCalledWith("user");
+
+    // Enriched profile fields on existing user
+    expect(db.updateTable).toHaveBeenCalledWith("user");
+
+    // signin_event uses the canonical existing UID, not the Google subject ID
+    expect(db.insertInto).toHaveBeenCalledWith("signin_event");
+    expect(db.__queries[3].values).toHaveBeenCalledWith({
+      uid: "email-user-uuid-1234",
+    });
+  });
+
+  it("consumes pending invite and applies tags when existing user logs in with Google", async () => {
+    const existingUser = createUser({
+      uid: "email-user-uuid-5678",
+      email: "supporter@example.com",
+      displayName: "Supporter",
+      avatarUrl: "https://example.com/existing.png",
+      emailVerified: true,
+      role: "member",
+      providerId: "email",
+    });
+
+    const db = createMockDb({
+      select: [
+        { executeTakeFirst: existingUser },
+        { executeTakeFirst: { email: "supporter@example.com", role: "member", invited_by_uid: "admin-1" } },
+        { execute: [{ tag_id: 42 }] }, // user_invite_tag
+        { executeTakeFirst: undefined }, // assignUserTag existing check
+      ],
+      insert: [
+        { execute: undefined }, // user_tag_assignment insert
+        { executeTakeFirst: { signin_id: 11, uid: "email-user-uuid-5678" } },
+      ],
+      delete: [
+        { execute: undefined }, // user_invite_tag delete
+        { execute: undefined }, // user_invite delete
+      ],
+    });
+    mocks.getDB.mockReturnValue(db);
+    mocks.googleUserProfile.mockResolvedValue({
+      id: "google-subject-88888",
+      displayName: "Supporter",
+      emails: [{ value: "supporter@example.com" }],
+      photos: [{ value: "https://example.com/existing.png" }],
+    });
+
+    const authenticatedUser = await getAuthenticator(createContext()).authenticate(
+      "google",
+      createGetRequest("https://example.com/auth/google/callback")
+    );
+
+    expect(authenticatedUser.uid).toBe("email-user-uuid-5678");
+    expect(db.insertInto).not.toHaveBeenCalledWith("user");
+    expect(db.insertInto).toHaveBeenCalledWith("user_tag_assignment");
+    expect(db.deleteFrom).toHaveBeenCalledWith("user_invite_tag");
+    expect(db.deleteFrom).toHaveBeenCalledWith("user_invite");
+  });
 });
