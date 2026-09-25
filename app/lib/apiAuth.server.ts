@@ -22,6 +22,7 @@ export type ApiErrorCode =
   | "invalid_return_to"
   | "invalid_ticket"
   | "invalid_token"
+  | "unauthenticated"
   | "forbidden"
   | "not_found"
   | "conflict"
