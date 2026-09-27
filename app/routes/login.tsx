@@ -35,16 +35,17 @@ import {
   sendLoginEmail,
   verifyAuthCode,
 } from "~/lib/auth.server";
+import { getSafeRedirectTo } from "~/lib/redirects";
 
 export const meta: MetaFunction = () => privatePageMeta("Sign in");
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const user = await getSessionUser(request, context);
   const url = new URL(request.url);
-  const redirectTo = url.searchParams.get("redirectTo");
+  const redirectTo = getSafeRedirectTo(url.searchParams.get("redirectTo"));
 
   if (user) {
-    return redirect(redirectTo || "/topos");
+    return redirect(redirectTo ?? "/topos");
   }
 
   const errorParam = url.searchParams.get("error");
@@ -74,7 +75,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return data({ error: "Please enter a valid email address.", step: "email", email: "" }, { status: 400 });
     }
 
-    const formRedirectTo = formData.get("redirectTo")?.toString() || undefined;
+    const formRedirectTo = getSafeRedirectTo(formData.get("redirectTo")?.toString()) ?? undefined;
     const result = await sendLoginEmail(context, email, formRedirectTo);
     if (!result.success) {
       return data(
@@ -114,25 +115,21 @@ export async function action({ request, context }: ActionFunctionArgs) {
       );
     }
 
-    const formRedirectTo = formData.get("redirectTo")?.toString();
+    const formRedirectTo = getSafeRedirectTo(formData.get("redirectTo")?.toString());
     const cookieHeader = request.headers.get("Cookie");
     const cookies = cookieHeader
       ? Object.fromEntries(cookieHeader.split("; ").map((c) => c.split("=")))
       : {};
-    let finalRedirectTo = "/topos";
+    let cookieRedirectTo: string | null = null;
 
-    const targetRedirect = formRedirectTo || cookies.redirectTo;
-    if (targetRedirect) {
+    if (cookies.redirectTo) {
       try {
-        let decodedPath = decodeURIComponent(targetRedirect);
-        if (!decodedPath.startsWith("/")) {
-          decodedPath = `/${decodedPath}`;
-        }
-        finalRedirectTo = decodedPath;
+        cookieRedirectTo = getSafeRedirectTo(decodeURIComponent(cookies.redirectTo));
       } catch {
         // fallback to /topos
       }
     }
+    const finalRedirectTo = formRedirectTo ?? cookieRedirectTo ?? "/topos";
 
     const user = await findOrCreateEmailUser(context, email);
     return createUserSession(request, context, user, finalRedirectTo);

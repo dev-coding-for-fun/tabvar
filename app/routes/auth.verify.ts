@@ -1,5 +1,6 @@
 import { type LoaderFunctionArgs, redirect } from 'react-router';
 import { createUserSession, findOrCreateEmailUser, verifyMagicToken } from '~/lib/auth.server';
+import { getSafeRedirectTo } from '~/lib/redirects';
 
 export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
@@ -18,21 +19,17 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const cookies = cookieHeader
     ? Object.fromEntries(cookieHeader.split('; ').map((c) => c.split('=')))
     : {};
-  const queryRedirectTo = url.searchParams.get('redirectTo');
-  const targetRedirect = queryRedirectTo || cookies.redirectTo;
-  let finalRedirectTo = '/topos';
+  const queryRedirectTo = getSafeRedirectTo(url.searchParams.get('redirectTo'));
+  let cookieRedirectTo: string | null = null;
 
-  if (targetRedirect) {
+  if (cookies.redirectTo) {
     try {
-      let decodedPath = decodeURIComponent(targetRedirect);
-      if (!decodedPath.startsWith('/')) {
-        decodedPath = `/${decodedPath}`;
-      }
-      finalRedirectTo = decodedPath;
+      cookieRedirectTo = getSafeRedirectTo(decodeURIComponent(cookies.redirectTo));
     } catch {
       // fallback to /topos
     }
   }
+  const finalRedirectTo = queryRedirectTo ?? cookieRedirectTo ?? '/topos';
 
   const user = await findOrCreateEmailUser(context, result.email);
   return createUserSession(request, context, user, finalRedirectTo);

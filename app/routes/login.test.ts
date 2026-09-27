@@ -51,6 +51,42 @@ describe("login route", () => {
       expect((response as Response).headers.get("Location")).toBe("/discount");
     });
 
+    it("redirects authenticated users to absolute same-domain redirectTo", async () => {
+      mocks.getSessionUser.mockResolvedValue(createUser({ uid: "user-123" }));
+
+      const response = await loader(
+        createRouteArgs({
+          request: createGetRequest(
+            `https://example.com/login?redirectTo=${encodeURIComponent("https://app.tabvar.org/issues")}`
+          ),
+          context: createContext(),
+          params: {},
+        })
+      );
+
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(302);
+      expect((response as Response).headers.get("Location")).toBe("https://app.tabvar.org/issues");
+    });
+
+    it("falls back to /topos when redirectTo is an off-domain absolute URL", async () => {
+      mocks.getSessionUser.mockResolvedValue(createUser({ uid: "user-123" }));
+
+      const response = await loader(
+        createRouteArgs({
+          request: createGetRequest(
+            `https://example.com/login?redirectTo=${encodeURIComponent("https://evil.com/phish")}`
+          ),
+          context: createContext(),
+          params: {},
+        })
+      );
+
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(302);
+      expect((response as Response).headers.get("Location")).toBe("/topos");
+    });
+
     it("returns decoded error messages from query params", async () => {
       const response = await loader(
         createRouteArgs({
@@ -204,6 +240,68 @@ describe("login route", () => {
 
       expect(mocks.verifyAuthCode).toHaveBeenCalledWith(expect.anything(), "climber@example.com", "123456");
       expect(mocks.findOrCreateEmailUser).toHaveBeenCalledWith(expect.anything(), "climber@example.com");
+      expect(mocks.createUserSession).toHaveBeenCalledWith(
+        request,
+        expect.anything(),
+        user,
+        "/topos"
+      );
+    });
+
+    it("verifies code and redirects to absolute same-domain redirectTo", async () => {
+      const user = createUser({ uid: "user-1", email: "climber@example.com" });
+      mocks.verifyAuthCode.mockResolvedValue({ success: true });
+      mocks.findOrCreateEmailUser.mockResolvedValue(user);
+      mocks.createUserSession.mockResolvedValue(
+        new Response(null, { status: 302, headers: { Location: "https://app.tabvar.org/issues" } })
+      );
+
+      const request = createFormRequest("https://example.com/login", {
+        intent: "verify-code",
+        email: "climber@example.com",
+        code: "123456",
+        redirectTo: "https://app.tabvar.org/issues",
+      });
+
+      await action(
+        createRouteArgs({
+          request,
+          context: createContext(),
+          params: {},
+        })
+      );
+
+      expect(mocks.createUserSession).toHaveBeenCalledWith(
+        request,
+        expect.anything(),
+        user,
+        "https://app.tabvar.org/issues"
+      );
+    });
+
+    it("falls back to /topos when verify-code redirectTo is off-domain", async () => {
+      const user = createUser({ uid: "user-1", email: "climber@example.com" });
+      mocks.verifyAuthCode.mockResolvedValue({ success: true });
+      mocks.findOrCreateEmailUser.mockResolvedValue(user);
+      mocks.createUserSession.mockResolvedValue(
+        new Response(null, { status: 302, headers: { Location: "/topos" } })
+      );
+
+      const request = createFormRequest("https://example.com/login", {
+        intent: "verify-code",
+        email: "climber@example.com",
+        code: "123456",
+        redirectTo: "https://evil.com/phish",
+      });
+
+      await action(
+        createRouteArgs({
+          request,
+          context: createContext(),
+          params: {},
+        })
+      );
+
       expect(mocks.createUserSession).toHaveBeenCalledWith(
         request,
         expect.anything(),

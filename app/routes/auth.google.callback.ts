@@ -1,5 +1,6 @@
 import { type LoaderFunctionArgs } from 'react-router'
 import { createUserSession, getAuthenticator } from '~/lib/auth.server'
+import { getSafeRedirectTo } from '~/lib/redirects'
 
 export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const cookieHeader = request.headers.get("Cookie");
@@ -9,12 +10,7 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
 
   if (cookies.redirectTo) {
     try {
-      let decodedPath = decodeURIComponent(cookies.redirectTo);
-      // Ensure the path is absolute
-      if (!decodedPath.startsWith('/')) {
-        decodedPath = `/${decodedPath}`;
-      }
-      finalRedirectTo = decodedPath;
+      finalRedirectTo = getSafeRedirectTo(decodeURIComponent(cookies.redirectTo)) ?? '/topos';
     } catch (e) {
       console.error("Failed to decode redirectTo cookie, using default /topos:", e);
       // finalRedirectTo remains '/topos'

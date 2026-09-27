@@ -67,6 +67,26 @@ describe("auth.server passwordless email authentication", () => {
         })
       );
     });
+
+    it("embeds safe absolute redirectTo in the magic link and drops off-domain values", async () => {
+      const db = createMockDb({
+        select: [{ executeTakeFirst: undefined }, { executeTakeFirst: undefined }],
+        delete: [{ execute: undefined }, { execute: undefined }],
+        insert: [{ execute: undefined }, { execute: undefined }],
+      });
+      mocks.getDB.mockReturnValue(db);
+
+      const context = createContext();
+      await sendLoginEmail(context, "climber@example.com", "https://app.tabvar.org/issues");
+      await sendLoginEmail(context, "climber@example.com", "https://evil.com/phish");
+
+      const send = vi.mocked(context.cloudflare.env.EMAIL!.send);
+      expect(send).toHaveBeenCalledTimes(2);
+      const firstText = String(send.mock.calls[0][0].text);
+      const secondText = String(send.mock.calls[1][0].text);
+      expect(firstText).toContain(`redirectTo=${encodeURIComponent("https://app.tabvar.org/issues")}`);
+      expect(secondText).not.toContain("redirectTo=");
+    });
   });
 
   describe("verifyAuthCode", () => {

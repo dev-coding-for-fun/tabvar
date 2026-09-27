@@ -6,6 +6,7 @@ import { getDB } from './db';
 import { sql } from 'kysely';
 import { User } from './models';
 import { applyInviteTagsToUser } from './tags.server';
+import { getSafeRedirectTo } from './redirects';
 
 const SESSION_USER_KEY = "user";
 
@@ -186,7 +187,7 @@ export async function createUserSession(
     headers.append("Set-Cookie", await sessionStorage.commitSession(session));
     headers.append("Set-Cookie", "redirectTo=; Path=/; Max-Age=0; SameSite=Lax");
 
-    return redirect(redirectTo, { headers });
+    return redirect(getSafeRedirectTo(redirectTo) ?? "/topos", { headers });
 }
 
 export async function requireUser({ request, context, url }: LoaderFunctionArgs): Promise<User> {
@@ -278,8 +279,9 @@ export async function sendLoginEmail(
 
     const baseUrl = context.cloudflare.env.BASE_URL || "https://app.tabvar.org";
     let magicLink = `${baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
-    if (redirectTo) {
-        magicLink += `&redirectTo=${encodeURIComponent(redirectTo)}`;
+    const safeRedirectTo = redirectTo ? getSafeRedirectTo(redirectTo) : null;
+    if (safeRedirectTo) {
+        magicLink += `&redirectTo=${encodeURIComponent(safeRedirectTo)}`;
     }
     const fromAddress = context.cloudflare.env.AUTH_FROM_EMAIL || "auth@tabvar.org";
 

@@ -71,6 +71,30 @@ describe("auth.server session helpers", () => {
     expect(setCookieHeaders(response).join(", ")).toContain("redirectTo=;");
   });
 
+  it("passes absolute same-domain redirects through createUserSession", async () => {
+    const response = await createUserSession(
+      createGetRequest("https://example.com/login"),
+      createContext(),
+      createUser({ uid: "user-1" }),
+      "https://app.tabvar.org/issues"
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("https://app.tabvar.org/issues");
+  });
+
+  it("falls back to /topos when createUserSession redirect is off-domain", async () => {
+    const response = await createUserSession(
+      createGetRequest("https://example.com/login"),
+      createContext(),
+      createUser({ uid: "user-1" }),
+      "https://evil.com/phish"
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/topos");
+  });
+
   it("redirects unauthenticated users to login with the current path", async () => {
     try {
       await requireUser(
