@@ -71,7 +71,7 @@
     "yet-another-react-lightbox-lite": "^1.11.1"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.54.3",
+    "@cloudflare/vite-plugin": "^1.62.3",
     "@cloudflare/workers-types": "^4.20260426.1",
     "@react-router/dev": "^8.3.1",
     "@react-router/fs-routes": "^8.3.1",
@@ -98,13 +98,12 @@
     "happy-dom": "^20.9.0",
     "knip": "^6.8.0",
     "kysely-codegen": "^0.20.0",
-    "miniflare": "^4.20260424.0",
     "node-fetch": "^3.3.2",
     "qrcode": "^1.5.4",
     "typescript": "^5.9.3",
     "vite": "^8.3.1",
     "vitest": "^4.1.11",
-    "wrangler": "^4.85.0"
+    "wrangler": "^4.145.0"
   },
   "engines": {
     "node": ">=22.22.0"
