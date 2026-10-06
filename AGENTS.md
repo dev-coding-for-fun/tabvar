@@ -1,10 +1,40 @@
 # AGENTS.md
 
-Welcome to **demofinder** (also known as **tabvar**). This document is the authoritative guide for AI coding agents (Antigravity, Cursor, Claude Code, GitHub Copilot, Codex, etc.) developing in this repository.
+Repository guidance for **demofinder** (also known as **tabvar**).
+
+## Implementation
+
+- Complete the requested behavior end to end with a focused, coherent change.
+  Preserve unrelated work and existing public contracts unless the task changes them.
+- Use the relevant existing implementation and tests to establish local conventions.
+  Reuse established utilities and patterns where they fit.
+- Introduce dependencies, abstractions, configuration, and extension points only
+  when the current requirements justify them. Avoid speculative generalization.
+- Resolve uncertain APIs and commands from project scripts, installed types/source,
+  or documentation matching the installed version. Do not invent interfaces.
+- Handle realistic failures at the appropriate boundary. Preserve useful error
+  information; avoid silent fallbacks or broad catches that conceal broken behavior.
+- Keep comments focused on non-obvious intent and constraints. Update documentation
+  affected by the change; avoid unrelated documentation and formatting churn.
+
+## Correctness and completion
+
+- Implement the general behavior required by the task, including relevant edge cases.
+  Do not hardcode test examples or weaken checks to conceal defects. Change test
+  expectations when the intended contract changes, and explain why.
+- For changed behavior, add or update focused coverage when existing tests would
+  miss a meaningful regression. Test observable behavior rather than copying the
+  implementation into assertions.
+- Use the required checks below for the affected area. After they pass, repeat or
+  broaden checks only for subsequent changes, failures, or unresolved risks.
+- Report the result, checks actually run and their outcomes, and any remaining
+  limitation. Distinguish a passing check from one that could not run.
+- Make routine implementation decisions within the requested scope. Clarify an
+  ambiguity when different interpretations would materially change the result.
 
 ---
 
-## 1. System Overview & Tech Stack
+## System Overview & Tech Stack
 
 | Layer | Technology | Details |
 | :--- | :--- | :--- |
@@ -18,7 +48,7 @@ Welcome to **demofinder** (also known as **tabvar**). This document is the autho
 
 ---
 
-## 2. Invariants & Golden Rules
+## Invariants & Golden Rules
 
 Agents working in this codebase **must** adhere to the following rules:
 
@@ -63,19 +93,14 @@ Agents working in this codebase **must** adhere to the following rules:
 ### C. Testing with `app/test/helpers.ts`
 - **DO NOT** hand-roll custom Kysely database mocks or start external servers.
 - **DO** reuse the utilities in `app/test/helpers.ts`:
-  - `createMockDb(...)`: Fluent query mock supporting `.selectFrom()`, `.insertInto()`, `.updateTable()`, `.where()`, etc.
-  - `createRouteArgs(...)`: Constructs properly typed arguments for loaders and actions.
+  - `createMockDb({ select: [...], insert: [...], update: [...] })`: Fluent query mock supporting `.selectFrom()`, `.insertInto()`, `.updateTable()`, `.where()`, etc.
+  - `createRouteArgs({ request, context, params })`: Constructs properly typed arguments for loaders and actions.
   - `createContext(...)`: Supplies a mock `AppLoadContext` with Cloudflare bindings.
-  - `readJson(response)`: Reads and parses data from either a raw `Response` or a `DataWithResponseInit` object.
+  - `await readJson(response)`: Reads and parses data from either a raw `Response` or a `DataWithResponseInit` object.
   - `createUser(...)`: Mock authenticated user generator.
 
 ### D. Dependency Cascades & Collaborative Planning
-- **STOP AND UPDATE THE USER**: Whenever an upgrade, refactor, or new capability triggers a cascading dependency chain (e.g. a major framework bump requiring runtime version changes, dev-server plugin replacements, breaking context/typing shifts, or cascading deprecations across multiple layers), **do not proceed autonomously**.
-- **PLAN FIRST**:
-  1. Halt code modifications and destructive actions immediately.
-  2. Clearly communicate the full chain of affected layers, breaking changes, and trade-offs to the user.
-  3. Formulate an explicit, step-by-step implementation plan.
-  4. Obtain user review and explicit alignment before touching dependencies or modifying code.
+- If an upgrade, refactor, or new capability triggers a cascading dependency chain (e.g. a major framework bump requiring runtime changes, dev-server plugin replacements, context/typing shifts, or deprecations across layers), stop code modifications and destructive actions. Explain the affected layers, breaking changes, and trade-offs; obtain user alignment on a step-by-step plan before modifying dependencies or code.
 
 ### E. Type Hygiene: Reuse Canonical Types Over Ad-Hoc Interfaces
 - **DO NOT** invent ad-hoc interface wrappers for arguments already typed by the framework or runtime (e.g. do NOT define custom `interface AuthArgs` or `interface MyLoaderContext` when `LoaderFunctionArgs` / `ActionFunctionArgs` already exist).
@@ -97,7 +122,7 @@ Agents working in this codebase **must** adhere to the following rules:
 
 ---
 
-## 3. Cloudflare Wrangler & D1 Database Workflow
+## Cloudflare Wrangler & D1 Database Workflow
 
 Cloudflare D1 is a serverless SQLite database. In this repository, **Wrangler** manages D1 migrations, and **Kysely** provides type-safe SQL query building.
 
@@ -151,13 +176,18 @@ Production migrations are automated in CI during Cloudflare Pages builds (`npm r
 
 ---
 
-## 4. Golden Commands
+## Setup & Required Checks
+
+- Use Node.js `24.15.0` from `.nvmrc` (supported range: `>=22.22.0`) and npm `11.12.1` from `package.json`.
+- Run `npm ci` from the repository root to install dependencies from `package-lock.json`. Use npm for dependency changes and keep the lockfile in sync. `.npmrc` configures `legacy-peer-deps=true`.
+- Run `npm run verify` before completing a task; it runs both typecheck and tests. Use focused tests during implementation, and run lint or build when changes affect lint configuration or bundling/runtime integration, respectively.
+- Deployment commands and `build:cloudflare` can affect Cloudflare resources; use `npm run build` for local build validation.
 
 | Purpose | Command | Notes |
 | :--- | :--- | :--- |
-| **Verify All (Fast)** | `npm run verify` | Runs `typecheck && test` (~3.5s, run before finishing tasks) |
+| **Verify All** | `npm run verify` | Runs `typecheck && test` |
 | **Start Dev Server** | `npm run dev` | Runs React Router dev server on `127.0.0.1` |
-| **Run All Tests** | `npm test` | Runs Vitest once (fast, ~3s) |
+| **Run All Tests** | `npm test` | Runs Vitest once |
 | **Run Specific Test** | `npx vitest run <path-to-test>` | E.g. `npx vitest run app/routes/api.issues.test.ts` |
 | **Run Tests in Watch Mode** | `npm run test:watch` | Vitest interactive watcher |
 | **Typecheck** | `npm run typecheck` | Runs `react-router typegen && tsc` |
@@ -170,7 +200,7 @@ Production migrations are automated in CI during Cloudflare Pages builds (`npm r
 
 ---
 
-## 5. Repository Layout & Key Paths
+## Repository Layout & Key Paths
 
 ```
 demofinder/
@@ -209,10 +239,10 @@ demofinder/
 
 ---
 
-## 6. Testing Best Practices Checklist
+## Read when relevant
 
-When writing or updating tests:
-1. **Mock the database**: Use `createMockDb({ select: [...], insert: [...], update: [...] })`.
-2. **Mock the route args**: Use `createRouteArgs({ request, context, params })`.
-3. **Parse responses**: Use `await readJson(response)` to handle both `Response` and React Router `DataWithResponseInit` outputs.
-4. **Always verify clean runs**: Run both `npm test` and `npm run typecheck` before considering a task complete.
+- `.agents/skills/rr7-route-creator/SKILL.md`: consult when adding or refactoring React Router routes, loaders/actions, error boundaries, or Mantine UI.
+- `.agents/skills/test-writing/SKILL.md` and `app/test/helpers.ts`: consult when adding or updating Vitest coverage.
+- `.agents/skills/d1-migration/SKILL.md` and existing `migrations/`: consult for D1 schema changes or database type generation.
+- `.agents/skills/issue-sync-api/SKILL.md` and `docs/issue-sync-api.md`: consult for mobile sync, TopoBuilder sync, attachments, or delta sync.
+- `app/routes/api.v1.issues.ts`, `app/routes/api.v1.issues.sync.ts`, and their corresponding `.test.ts` files: reference implementations and coverage for v1 issue sync endpoints.
