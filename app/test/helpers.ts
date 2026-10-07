@@ -37,6 +37,7 @@ export type MockDb = {
   insertInto: Mock;
   updateTable: Mock;
   deleteFrom: Mock;
+  transaction: Mock;
   __queries: FluentQuery[];
 };
 
@@ -230,11 +231,15 @@ export function createMockDb(results: {
     return query;
   };
 
-  return {
+  const db: MockDb = {
     selectFrom: vi.fn(() => makeQuery(results.select)),
     insertInto: vi.fn(() => makeQuery(results.insert)),
     updateTable: vi.fn(() => makeQuery(results.update)),
     deleteFrom: vi.fn(() => makeQuery(results.delete)),
+    transaction: vi.fn(() => ({
+      execute: vi.fn(async (callback: (trx: MockDb) => Promise<unknown>) => callback(db)),
+    })),
     __queries: queries,
   };
+  return db;
 }

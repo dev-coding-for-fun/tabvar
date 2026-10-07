@@ -143,12 +143,39 @@ export const action = async (args: ActionFunctionArgs) => {
             const email = formData.get("email");
             if (userId && email != "dserink@gmail.com") {
                 const db = getDB(context);
-                await db.deleteFrom('signin_event')
+                const target = await db.selectFrom('user')
+                    .select('email')
                     .where('uid', '=', userId)
-                    .execute();
-                await db.deleteFrom('user')
-                    .where('uid', '=', userId)
-                    .execute();
+                    .executeTakeFirst();
+                if (!target || target.email?.trim().toLowerCase() === 'dserink@gmail.com') {
+                    return data({ success: true });
+                }
+
+                // The D1 dialect commits these mutations as one atomic batch.
+                await db.transaction().execute(async (trx) => {
+                    // Keep issues and their history, clearing only links to this account.
+                    for (const column of ['reported_by_uid', 'approved_by_uid', 'archived_by_uid', 'claimed_by_uid'] as const) {
+                        await trx.updateTable('issue')
+                            .set({ [column]: null })
+                            .where(column, '=', userId)
+                            .execute();
+                    }
+                    await trx.updateTable('topo_submission')
+                        .set({ reviewed_by_uid: null })
+                        .where('reviewed_by_uid', '=', userId)
+                        .execute();
+
+                    // Submissions are account-owned requests; published topos remain intact.
+                    for (const table of ['signin_event', 'api_token', 'topobuilder_connect_ticket', 'vote', 'topo_submission'] as const) {
+                        await trx.deleteFrom(table)
+                            .where('uid', '=', userId)
+                            .execute();
+                    }
+                    // Tag assignments cascade, and assignments made by this user lose their actor link.
+                    await trx.deleteFrom('user')
+                        .where('uid', '=', userId)
+                        .execute();
+                });
                 console.log(`deleting user with email ${email}`);
             }
             return data({ success: true });

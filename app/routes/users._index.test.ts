@@ -1,4 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+import { Kysely, SqliteDialect, type SqliteDatabase } from "kysely";
+import type { DB } from "~/lib/db.d";
 import {
   createContext,
   createFormRequest,
@@ -24,6 +30,103 @@ vi.mock("~/lib/auth.server", () => ({
 }));
 
 import { action, loader } from "./users._index";
+
+const Sqlite = createRequire(import.meta.url)("better-sqlite3") as new (path: string) =>
+  SqliteDatabase & Pick<DatabaseSync, "exec">;
+
+describe("user deletion with SQLite foreign keys", () => {
+  let sqlite: InstanceType<typeof Sqlite>;
+  let db: Kysely<DB>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sqlite = new Sqlite(":memory:");
+    db = new Kysely<DB>({ dialect: new SqliteDialect({ database: sqlite }) });
+    sqlite.exec("PRAGMA foreign_keys = ON");
+    for (const migration of [
+      "0002_initial_setup.sql", "0028_add_issue_audit_log.sql",
+      "0053_add_goldencrowbar.sql", "0056_add_topobuilder_auth.sql",
+      "0057_add_topo_submission.sql", "0061_add_user_tags.sql", "0062_add_raw_topos.sql",
+    ]) {
+      sqlite.exec(readFileSync(resolve("migrations", migration), "utf8"));
+    }
+    sqlite.exec(`
+      ALTER TABLE issue ADD COLUMN claimed_by_uid TEXT REFERENCES user(uid);
+      INSERT INTO user (uid, email) VALUES ('target', 'target@example.com'), ('other', 'other@example.com');
+      INSERT INTO route (id, name) VALUES (1, 'Test route');
+      INSERT INTO issue (id, route_id, issue_type, status, reported_by_uid, approved_by_uid, archived_by_uid, claimed_by_uid)
+        VALUES (1, 1, 'Other', 'Reported', 'target', 'other', 'target', 'target'),
+               (2, 1, 'Other', 'Reported', 'other', 'target', 'other', 'other');
+      INSERT INTO issue_audit_log (action, uid, user_display_name, issue_id) VALUES ('Create', 'target', 'Former User', 1);
+      INSERT INTO signin_event (uid) VALUES ('target'), ('other');
+      INSERT INTO api_token (id, uid, client, token_hash) VALUES ('target-token', 'target', 'test', 'hash1'), ('other-token', 'other', 'test', 'hash2');
+      INSERT INTO topobuilder_connect_ticket (id, uid, ticket_hash, return_to, expires_at)
+        VALUES ('target-ticket', 'target', 'ticket1', 'https://example.com', '2099-01-01'),
+               ('other-ticket', 'other', 'ticket2', 'https://example.com', '2099-01-01');
+      INSERT INTO campaign (id, name, end_date) VALUES (1, 'Test campaign', '2099-01-01');
+      INSERT INTO campaign_candidate (id, campaign_id, name) VALUES (1, 1, 'Test candidate');
+      INSERT INTO vote (campaign_id, uid, campaign_candidate_id) VALUES (1, 'target', 1), (1, 'other', 1);
+      INSERT INTO topo_submission (id, uid, client, kind, payload, reviewed_by_uid)
+        VALUES ('owned', 'target', 'test', 'topo', '{}', 'other'),
+               ('reviewed', 'other', 'test', 'topo', '{}', 'target'),
+               ('unrelated', 'other', 'test', 'topo', '{}', 'other');
+      INSERT INTO topo (uuid, name, background_image_url, raster_image_url) VALUES ('published', 'Published topo', 'bg.png', 'topo.png');
+      INSERT INTO user_tag (id, name) VALUES (1, 'Test tag');
+      INSERT INTO user_tag_assignment (uid, tag_id, assigned_by_uid) VALUES ('target', 1, 'other'), ('other', 1, 'target');
+    `);
+    mocks.getDB.mockReturnValue(db);
+    mocks.requireUser.mockResolvedValue(createUser({ uid: "admin-1", role: "admin" }));
+  });
+
+  afterEach(async () => {
+    await db.destroy();
+  });
+
+  const deleteTarget = () => action(createRouteArgs({
+    request: createFormRequest("https://example.com/users", { action: "delete_user", uid: "target", email: "target@example.com" }),
+    context: createContext(),
+    params: {},
+  }));
+
+  it("removes the account without foreign key errors and preserves other users and shared history", async () => {
+    // The original handler fails here even after removing sign-in events.
+    await db.deleteFrom("signin_event").where("uid", "=", "target").execute();
+    await expect(db.deleteFrom("user").where("uid", "=", "target").execute()).rejects.toThrow("FOREIGN KEY");
+    await db.insertInto("signin_event").values({ uid: "target" }).execute();
+
+    expect(await readJson(await deleteTarget())).toEqual({ success: true });
+    expect(await db.selectFrom("user").select("uid").execute()).toEqual([{ uid: "other" }]);
+    for (const table of ["signin_event", "api_token", "topobuilder_connect_ticket", "vote"] as const) {
+      expect(await db.selectFrom(table).select("uid").execute()).toEqual([{ uid: "other" }]);
+    }
+    expect(await db.selectFrom("issue").select(["id", "reported_by_uid", "approved_by_uid", "archived_by_uid", "claimed_by_uid"]).orderBy("id").execute()).toEqual([
+      { id: 1, reported_by_uid: null, approved_by_uid: "other", archived_by_uid: null, claimed_by_uid: null },
+      { id: 2, reported_by_uid: "other", approved_by_uid: null, archived_by_uid: "other", claimed_by_uid: "other" },
+    ]);
+    expect(await db.selectFrom("topo_submission").select(["id", "uid", "reviewed_by_uid"]).orderBy("id").execute()).toEqual([
+      { id: "reviewed", uid: "other", reviewed_by_uid: null },
+      { id: "unrelated", uid: "other", reviewed_by_uid: "other" },
+    ]);
+    expect(await db.selectFrom("topo").select("uuid").execute()).toEqual([{ uuid: "published" }]);
+    expect(await db.selectFrom("issue_audit_log").select(["uid", "user_display_name"]).execute()).toEqual([{ uid: "target", user_display_name: "Former User" }]);
+    expect(await db.selectFrom("user_tag_assignment").select(["uid", "assigned_by_uid"]).execute()).toEqual([{ uid: "other", assigned_by_uid: null }]);
+    expect(sqlite.prepare("PRAGMA foreign_key_check").all([])).toEqual([]);
+  });
+
+  it("rolls back all changes when the final deletion fails", async () => {
+    sqlite.exec(`CREATE TRIGGER prevent_user_delete BEFORE DELETE ON user
+      BEGIN SELECT RAISE(ABORT, 'Deletion blocked'); END;`);
+
+    await expect(deleteTarget()).rejects.toThrow("Deletion blocked");
+
+    expect(await db.selectFrom("user").select("uid").where("uid", "=", "target").executeTakeFirst()).toEqual({ uid: "target" });
+    for (const table of ["signin_event", "api_token", "topobuilder_connect_ticket", "vote", "topo_submission"] as const) {
+      expect(await db.selectFrom(table).select("uid").where("uid", "=", "target").execute()).toEqual([{ uid: "target" }]);
+    }
+    expect(await db.selectFrom("issue").select(["reported_by_uid", "claimed_by_uid"]).where("id", "=", 1).executeTakeFirst()).toEqual({ reported_by_uid: "target", claimed_by_uid: "target" });
+    expect(await db.selectFrom("topo_submission").select("reviewed_by_uid").where("id", "=", "reviewed").executeTakeFirst()).toEqual({ reviewed_by_uid: "target" });
+  });
+});
 
 describe("users._index loader", () => {
   beforeEach(() => {
@@ -138,9 +241,9 @@ describe("users._index action", () => {
     });
   });
 
-  it("deletes a user and related sign-in events", async () => {
+  it("deletes a user and account-owned records in a transaction", async () => {
     const db = createMockDb({
-      delete: [{ execute: undefined }, { execute: undefined }],
+      select: [{ executeTakeFirst: { email: "user2@example.com" } }],
     });
     mocks.getDB.mockReturnValue(db);
 
@@ -156,7 +259,51 @@ describe("users._index action", () => {
 
     expect(await readJson(response)).toEqual({ success: true });
     expect(db.deleteFrom).toHaveBeenCalledWith("signin_event");
+    expect(db.deleteFrom).toHaveBeenCalledWith("api_token");
+    expect(db.deleteFrom).toHaveBeenCalledWith("topobuilder_connect_ticket");
+    expect(db.deleteFrom).toHaveBeenCalledWith("vote");
+    expect(db.deleteFrom).toHaveBeenCalledWith("topo_submission");
     expect(db.deleteFrom).toHaveBeenCalledWith("user");
+    expect(db.transaction).toHaveBeenCalledOnce();
+    for (const query of db.__queries) {
+      expect(query.where).toHaveBeenCalledWith(expect.any(String), "=", "user-2");
+    }
+  });
+
+  it.each([undefined, "someone@example.com"])("protects the stored account even when the posted email is %s", async (email) => {
+    const db = createMockDb({
+      select: [{ executeTakeFirst: { email: "dserink@gmail.com" } }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await action(createRouteArgs({
+      request: createFormRequest("https://example.com/users", {
+        action: "delete_user",
+        uid: "protected",
+        ...(email ? { email } : {}),
+      }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(await readJson(response)).toEqual({ success: true });
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(db.deleteFrom).not.toHaveBeenCalled();
+    expect(db.updateTable).not.toHaveBeenCalled();
+  });
+
+  it("does not modify related records for a nonexistent account", async () => {
+    const db = createMockDb();
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await action(createRouteArgs({
+      request: createFormRequest("https://example.com/users", { action: "delete_user", uid: "missing" }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(await readJson(response)).toEqual({ success: true });
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   it("skips deleting the protected account", async () => {
