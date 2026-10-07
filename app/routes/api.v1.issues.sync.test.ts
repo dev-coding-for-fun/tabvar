@@ -101,6 +101,47 @@ describe("api.v1.issues.sync action (push)", () => {
     );
   });
 
+  it("preserves hardware provenance when creating an issue through sync", async () => {
+    const db = createMockDb({
+      insert: [{ executeTakeFirstOrThrow: { id: 55 } }],
+      select: [{ executeTakeFirst: fullIssueRow({
+        id: 55,
+        issue_type: "Anchor",
+        sub_issue_type: "Hardware provenance",
+        description: "Custom hardware of undocumented origin",
+      }) }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = (await action(createRouteArgs({
+      request: jsonRequest({
+        op: "create",
+        fields: {
+          routeId: 100,
+          issueType: "Anchor",
+          subIssueType: "Hardware provenance",
+          description: "Custom hardware of undocumented origin",
+          status: "Reported",
+        },
+      }),
+      context: createContext(),
+      params: {},
+    }))) as Response;
+
+    expect(response.status).toBe(201);
+    expect(db.__queries[0].values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: "Anchor",
+        sub_issue_type: "Hardware provenance",
+        description: "Custom hardware of undocumented origin",
+      }),
+    );
+    expect(await response.json()).toMatchObject({
+      status: "applied",
+      issue: { issueType: "Anchor", subIssueType: "Hardware provenance", isFlagged: false },
+    });
+  });
+
   it("rejects status changes from anonymous users", async () => {
     mocks.requireApiTokenUser.mockResolvedValue(tokenUser({ role: null }));
 

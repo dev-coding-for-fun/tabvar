@@ -155,10 +155,12 @@ When creating or modifying issues via `/api/v1/issues/sync`, values **must** con
 
 | Issue Type (`issueType`) | Permitted Sub-Issue Types (`subIssueType`) |
 | :--- | :--- |
-| **`Bolts`** | `Loose nut`, `Loose bolt`, `Loose glue-in`, `Rusted`, `Outdated`, `Worn`, `Missing (bolt and hanger)`, `Missing (hanger)`, `Other` |
+| **`Bolts`** | `Loose nut`, `Loose bolt`, `Loose glue-in`, `Rusted`, `Outdated`, `Worn`, `Hardware provenance`, `Missing (bolt and hanger)`, `Missing (hanger)`, `Other` |
 | **`All Bolts`** | *(Same as `Bolts`)* |
 | **`Anchor`** | *(Same as `Bolts`)* |
 | **`Rock`** | `Loose block`, `Loose flake`, `Other` |
+
+`Hardware provenance` documents uncertified, custom, or unusual route hardware to track its origin and long-term durability. This subtype catalogues provenance concerns and does not itself indicate a safety concern.
 
 ### Issue Status Life Cycle
 

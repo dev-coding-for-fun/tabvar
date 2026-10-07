@@ -108,6 +108,7 @@ export const subIssues = [
     { value: 'Rusted', label: 'Rusted' },
     { value: 'Outdated', label: 'Outdated' },
     { value: 'Worn', label: 'Worn' },
+    { value: 'Hardware provenance', label: 'Hardware provenance' },
     { value: 'Missing (bolt and hanger)', label: 'Missing (bolt and hanger)' },
     { value: 'Missing (hanger)', label: 'Missing (hanger)' },
     { value: 'Loose block', label: 'Loose block' },
@@ -115,10 +116,14 @@ export const subIssues = [
     { value: 'Other', label: 'Other' },
 ] as const;
 
+export const subIssueDescriptions: Partial<Record<SubIssueType, string>> = {
+    'Hardware provenance': 'Documents uncertified, custom, or unusual route hardware to track its origin and long-term durability.',
+};
+
 export const subIssuesByType: Record<IssueType, SubIssueType[]> = {
-    Bolts: ['Loose nut', 'Loose bolt', 'Loose glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
-    'All Bolts': ['Loose nut', 'Loose bolt', 'Loose glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
-    Anchor: ['Loose nut', 'Loose bolt', 'Loose glue-in', 'Rusted', 'Outdated', 'Worn', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
+    Bolts: ['Loose nut', 'Loose bolt', 'Loose glue-in', 'Rusted', 'Outdated', 'Worn', 'Hardware provenance', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
+    'All Bolts': ['Loose nut', 'Loose bolt', 'Loose glue-in', 'Rusted', 'Outdated', 'Worn', 'Hardware provenance', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
+    Anchor: ['Loose nut', 'Loose bolt', 'Loose glue-in', 'Rusted', 'Outdated', 'Worn', 'Hardware provenance', 'Missing (bolt and hanger)', 'Missing (hanger)', 'Other'],
     Rock: ['Loose block', 'Loose flake', 'Other'],
 } as const;
 

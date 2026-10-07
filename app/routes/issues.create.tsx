@@ -7,7 +7,7 @@ import { IconPhotoUp, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import RouteSearchBox, { SearchBoxRef } from "~/components/routeSearchBox";
 import { requireUser } from "~/lib/auth.server";
-import { SubIssueType, issueTypes, subIssues, subIssuesByType } from "~/lib/constants";
+import { SubIssueType, issueTypes, subIssues, subIssuesByType, subIssueDescriptions } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 import { createIssue } from "~/lib/issues.server";
 import { evaluateIssueModeration } from "~/lib/moderation.server";
@@ -320,6 +320,7 @@ export default function CreateIssue() {
                   key={subIssue.value}
                   value={subIssue.value}
                   label={subIssue.label}
+                  description={subIssueDescriptions[subIssue.value]}
                   disabled={isSubIssueDisabled(subIssue.value)}
                 />
               ))}

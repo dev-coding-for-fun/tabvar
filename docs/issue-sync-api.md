@@ -127,6 +127,7 @@ Content-Type: application/json
 | `baseUpdatedAt` | update            | required; the `updatedAt` you last saw (conflict basis)     |
 | `fields.routeId`    | create        | required                                                     |
 | `fields.issueType`  | create        | required                                                     |
+| `fields.subIssueType` | create, update | optional; see [allowed issue types](api-auth-and-onboarding.md#allowed-issue-types--sub-issue-types), including `Hardware provenance` for `Bolts`, `All Bolts`, and `Anchor` |
 | `fields.status`     | create, update    | create: optional (defaults `In Moderation`); update: optional |
 
 Operations:

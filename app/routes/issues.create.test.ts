@@ -231,6 +231,33 @@ describe("issues.create action", () => {
     );
   });
 
+  it.each(["Bolts", "All Bolts", "Anchor"])("persists hardware provenance for %s", async (issueType) => {
+    const db = createMockDb({
+      insert: [{ executeTakeFirstOrThrow: { id: 55 } }],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const response = await action(createRouteArgs({
+      request: createFormRequest("https://example.com/issues/create", {
+        route: "route:100",
+        issueType,
+        subIssueType: "Hardware provenance",
+        notes: "Custom hardware of undocumented origin",
+      }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect((response as Response).status).toBe(302);
+    expect(db.__queries[0].values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: issueType,
+        sub_issue_type: "Hardware provenance",
+        description: "Custom hardware of undocumented origin",
+      })
+    );
+  });
+
   it("uploads photos and inserts issue attachments", async () => {
     const file = new File(["photo"], "bolt.jpg", { type: "image/jpeg" });
     const db = createMockDb({
