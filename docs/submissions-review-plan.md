@@ -8,6 +8,10 @@ Rebuild `/admin/submissions` as the entry point for reviewing incoming route and
 
 Human and AI route submissions use the same changeset contract and publication service. Their source and supporting evidence differ. Issue reports retain their existing domain model, moderation rules, and repair lifecycle.
 
+Simplicity takes priority over exhaustive safeguards. There is no bulk approval requirement. Process one approval at a time with straightforward database operations; a future **Approve all** control can call the same operation sequentially and report each result independently. The database is quiet enough that live arrival handling, review locks, optimistic concurrency checks, and transactions spanning multiple approvals are unnecessary.
+
+The user confirmed that `topo_submission` is empty and the submission system is not in use yet. Its schema can be replaced by dropping the old table in a new migration. No submission backfill, legacy-data repair, or legacy payload compatibility layer is required. This permission is limited to submission data; retain published routes, topos, attachments, users, and issues.
+
 Deliver this in the requested order:
 
 1. Submission data model, intake API, publication service, and companion TopoBuilder changes.
@@ -24,7 +28,7 @@ AI ingestion, Google Docs access, document extraction, and automated publication
 - TopoBuilder currently calls `/api/topobuilder/submissions`. Its submission builder sends route names and grades and references routes by name. It omits linked TABVAR catalog routes, most route fields, annotations, and stable topo identity. It uploads the original photo rather than the rendered topo.
 - A separate `/api/v1/topos` API publishes raw topos and can create routes immediately. The inspected TopoBuilder submission flow does not call it. Its existing write contract needs an explicit policy so the new queue cannot be bypassed accidentally.
 - `app/routes/issues.manage.tsx` already supports issue moderation, edits, attachment display, and status history. `app/lib/issues.server.ts` supplies shared mutations and audit logging. Some reports become public without admin review.
-- The installed D1 Kysely dialect buffers transaction queries into a batch and returns no intermediate rows or insert IDs. Publication cannot depend on selecting or obtaining generated IDs inside an ordinary transaction callback.
+- The installed D1 Kysely dialect buffers transaction queries into a batch and returns no intermediate rows or insert IDs. Use straightforward writes and obtain generated IDs outside a buffered transaction rather than designing a complex whole-submission batch.
 - User deletion currently refers directly to `topo_submission`; schema changes must update this integration and its tests.
 
 ## Working decisions
@@ -33,6 +37,8 @@ AI ingestion, Google Docs access, document extraction, and automated publication
 - Use `human` and `ai` source categories independently of origin, such as `topobuilder` or a future claim-form importer. Set source from trusted server integration identity, not an arbitrary request field.
 - Keep submissions immutable as received. Store reviewer mappings, corrections, decisions, and actual applied changes separately.
 - Initially approve or reject a submission as a whole after mappings and corrections. Defer selective merge controls to phase 3. Approval must respect dependencies between new hierarchy records, routes, attachments, and topos.
+- Keep each approval independent. Use small per-item transactions where useful; do not require all-or-nothing publication of an entire queue or changeset. Handle failures explicitly and record applied results so remaining work can be retried without recreating successful items.
+- Defer stale-review checks and concurrent reviewer coordination to demonstrated needs. Competing-submission detection remains in phase 3, which covers actual incompatible proposals rather than a general concurrency framework.
 - New/updated route proposals and attachments do not require a topo. A topo-only submission may reference existing routes without proposing changes to them.
 - Omitted fields mean unchanged; explicit `null` means clear a nullable field. Existing route references do not imply updates. Initial route operations are create, update, and reference; route deletion is outside this scope.
 - **Confirmed issue scope:** only reports in `In Moderation` enter the issue review queue. Use existing statuses, approval/archival metadata, and audit history; no independent issue-review state is needed. Reports already made public by current rules remain in the existing issue workflows.
@@ -51,25 +57,25 @@ Define a versioned contract in canonical submission/domain types, with:
 - Optional attachments: stored object key, MIME type, original filename, size/hash, purpose, associated items, and whether the file is review evidence or should become a public attachment.
 - Provenance usable by a later AI producer: source document/link, reference location or excerpt, and optional field-level evidence. This is a data contract, not an ingestion pipeline.
 
-Matching policy: resolve explicit server IDs first. Legacy names can suggest matches within the specified crag/sector, but ambiguous matches and possible duplicate creates require reviewer mapping. A rename keeps entity identity. Never merge or overwrite a route solely because its name matches.
+Matching policy: resolve explicit server IDs first. Names can suggest matches within the specified crag/sector, but ambiguous matches and possible duplicate creates require reviewer mapping. A rename keeps entity identity. Never merge or overwrite a route solely because its name matches.
 
-### 1B. Migrate storage and normalize existing submissions
+### 1B. Replace the unused submission schema
 
-Generalize `topo_submission` into `submission`, with source, schema version, pending/approved/rejected status, review metadata, and idempotency identity. Add `submission_change` and `submission_attachment` records for explicit changes, baselines, associations, and publication results. Store small typed field patches/snapshots as JSON; retain the original payload for inspection and audit. Ensure serialized payload reads preserve exact values: the current database plugin applies HTML decoding to every string, which can alter JSON content and invalidate evidence or fingerprints.
+Create a new migration that drops the empty `topo_submission` table and creates `submission`, with source, schema version, pending/approved/rejected status, review metadata, and idempotency identity. Add `submission_change` and `submission_attachment` records for explicit changes, baselines, associations, and publication results. Store small typed field patches/snapshots as JSON; retain the original payload for inspection and audit. Ensure serialized payload reads preserve exact values: the current database plugin applies HTML decoding to every string, which can alter JSON content.
 
 Keep approved/rejected records and the effective reviewed proposal, including actual before/after values and resulting server IDs. Ensure account deletion cannot remove publication history or shared files unintentionally; preserve actor display information while clearing account links where appropriate. Update the existing account-deletion policy and tests deliberately for these retained records.
 
-Backfill current submissions as human/TopoBuilder. Normalize their trees and attachments without changing IDs or uploaded URLs. Mark missing identity, missing baselines, unresolved matches, and image-only legacy topos explicitly. A legacy photo must not be represented as if it contained annotations. Invalid legacy payloads remain visible with an explanation and cannot be approved until corrected.
+Do not implement backfill, legacy normalization, preservation of old submission IDs/URLs, or repair UI. Update callers and types to the new schema directly. Published data and the existing issue moderation system remain intact.
 
-Use Wrangler to create the next migration number, apply locally, and regenerate database types. Determine the number at implementation time; unrelated migration work already exists. Preserve existing publication tables and external API contracts.
+Use Wrangler to create the next migration number, apply locally, and regenerate database types. Determine the number at implementation time; unrelated migration work already exists. Do not rewrite existing migrations. Preserve publication tables and unrelated external API contracts.
 
 ### 1C. Implement validated, retry-safe intake
 
-Add a shared intake service and `/api/v1/submissions` endpoint, accepting JSON without files and multipart requests with files. Keep `/api/topobuilder/submissions` as a compatibility adapter for the current client and legacy tree format. Preserve its `{ id, status }` response.
+Add a shared intake service and `/api/v1/submissions` endpoint, accepting JSON without files and multipart requests with files. Update TopoBuilder to this contract in the same implementation phase. The unused submission flow does not need a legacy tree parser or compatibility adapter; retain the old endpoint path only if a simple alias helps rollout. Keep the response straightforward: `{ id, status }` plus useful validation information when needed.
 
 Validate the complete payload and file references before upload. Check entity IDs, parent relationships, duplicate references, supported fields, annotations, attachment types, and reasonable request/file limits. Allow route-only and attachment-only proposals with valid targets. Reject empty/no-op submissions with a useful explanation.
 
-Deduplicate retries by authenticated submitter, origin, and client request ID. A repeated ID with different content is an error, not a silent replacement. Legacy requests without a request ID remain accepted, but cannot receive the same retry guarantee; do not infer retry identity from route names or identical content. Upload only referenced files, persist server-generated object metadata, and clean up files written by failed intake without deleting shared objects. Return validation failures as 4xx and storage/database failures as 5xx.
+Use a client request ID to recognize ordinary upload retries; do not build a general exactly-once delivery system. A repeated ID with different content is an error, not a silent replacement. Do not infer retry identity from route names or identical content. Upload only referenced files, persist server-generated object metadata, and clean up files written by failed intake without deleting shared objects. Return validation failures as 4xx and storage/database failures as 5xx.
 
 Add a caller-scoped status/read endpoint reporting review status, notes, and applied ID mappings so the client can distinguish queued submission from publication.
 
@@ -81,11 +87,13 @@ Build one comparison service that resolves targets and returns new records, chan
 
 Implement approve/reject services with reviewer notes and server-side validation. Publication applies only the effective reviewed patch, creates dependencies in order, stores ordinary attachments in the existing attachment/junction model, and stores editable topos in `topo`/`route_topo`. Reuse established validation, storage, timestamp, hierarchy, and search conventions; split existing helpers where needed to avoid repeating uploads or doing unguarded incremental writes.
 
-Publish database changes, decision state, audit results, and ID mappings atomically using a D1-compatible prebuilt batch. Resolve new IDs through stable mapping keys/SQL references rather than expecting IDs during the buffered Kysely transaction. Guard status and reviewed data in the same operation so concurrent reviewers and repeated approval requests cannot publish twice or leave partial changes.
+Process one submission approval using straightforward operations in dependency order. Use small transactions/batches for an individual change where practical, obtaining generated IDs before later operations that need them. Do not require a prebuilt atomic batch for the entire submission, conditional snapshot writes, or coordination between reviewers. Check the existing decision status and disable the action while it is running as ordinary UI safeguards.
 
-Handle R2 separately from the database transaction: prepare assets before committing, publish references only after assets are available, and clean up only newly created unreferenced objects after failure. Rejection retains review evidence; destructive retention cleanup is a separate policy.
+Record successfully applied item IDs and actual changes as work proceeds. If a later operation fails, return a useful error and leave the submission pending with its progress visible; retry only the remaining operations. Mark the submission approved once its intended work is complete. Do not silently undo successful work or describe a partial result as a complete approval/rejection. A future **Approve all** action can iterate these independent approvals without a shared transaction.
 
-Before committing, verify that the canonical values shown to the reviewer still match. Return a refresh-required result if they changed after the page was loaded. This is the minimum approval safeguard in phases 1-2; comparing competing pending submissions is deferred to phase 3.
+Use assets stored during intake when publishing; publish references only after files are available. Clean up only newly created unreferenced objects after failure. Rejection retains review evidence; destructive retention cleanup is a separate policy. Do not introduce a distributed transaction or asset-promotion workflow merely to coordinate R2 and D1.
+
+Use the current published data when loading a review. Phases 1-2 do not need freshness fingerprints, automatic mid-review refreshes, or locking. Comparing incompatible proposals is deferred to phase 3.
 
 Verify that approved data appears in public route views and existing route/topo delta sync, including search indexes and attachment/route timestamps.
 
@@ -99,9 +107,9 @@ Update `../topobuilder` submission types, builder, export bundle, upload client,
 - Retain synced route base values/revisions needed to identify intended changes. If storage must change, follow the companion repository's shipped-schema migration rules; do not rewrite released migrations.
 - Generate one persistent request ID per submission attempt, reuse it on retry, and distinguish submitted/pending from approved/published in client state and messaging. Apply returned mappings after approval so later submissions update the same published entities.
 
-Use the existing upload and rendering APIs; no dependency or native configuration changes are planned. Preserve the old server adapter until the upgraded client is deployed.
+Use the existing upload and rendering APIs; no dependency or native configuration changes are planned. Coordinate the server and client contract changes; there is no live submission data or legacy client workflow to migrate.
 
-**Phase 1 acceptance:** a mixed submission containing new routes, route updates, existing references, and optional topos/attachments can be queued, compared, and published once. Retry, rejection, and failure leave published data consistent. Old submissions remain reviewable.
+**Phase 1 acceptance:** a mixed submission containing new routes, route updates, existing references, and optional topos/attachments can be queued, compared, and approved independently. Rejection does not publish changes. Failed operations report their partial progress, and retries do not recreate successfully applied items. The new schema is installed without submission backfill.
 
 ## Phase 2: rebuild the review page
 
@@ -122,7 +130,7 @@ The detail view shows:
 - Added/changed crag or sector data and unresolved mapping choices when relevant.
 - Attachment thumbnails/previews/downloads, topo background/raster previews, and the routes represented by each topo. Keep source evidence separate from proposed public attachments.
 - Corrections and target mapping controls, with required fixes shown next to the affected item. Preserve original versus reviewer-corrected values.
-- Approve/reject actions with decision notes, pending state, validation errors, refresh-required handling, and navigation to the next pending item. History displays the actual applied before/after values rather than recalculating them from today's database.
+- Approve/reject actions with decision notes, pending state, validation errors, partial-progress/error display, and navigation to the next pending item. History displays the actual applied before/after values rather than recalculating them from today's database. Bulk approval is optional future UI work.
 
 Human submissions emphasize contributor context and topo imagery. AI submissions emphasize document provenance and supporting evidence, using the same diff and approval components. Do not build AI model controls or require artificial confidence scores.
 
@@ -130,7 +138,7 @@ Human submissions emphasize contributor context and topo imagery. AI submissions
 
 Query only reports whose current status is `In Moderation`. Reuse issue models, attachment components, mutation services, and audit history. Present route/location, description, taxonomy, affected bolts, safety flag, attachments, and report/status history. Every existing moderated report is eligible; no issue backfill or separate review-state table is necessary.
 
-Offer edits, accept to `Reported`, and archive through the existing mutation services, preserving approval/archival actor metadata and audit logging. Guard each decision against stale report content/status and remove decided reports from the queue after revalidation. Reports already public or completed do not enter this queue. Repair actions such as completion remain in `/issues/manage`; include a link to that workflow and its history. Preserve current automatic publication and member workflows.
+Offer edits, accept to `Reported`, and archive through the existing mutation services, preserving approval/archival actor metadata and audit logging. Remove decided reports from the queue after normal action revalidation; no stale-content guard or concurrency mechanism is required. Reports already public or completed do not enter this queue. Repair actions such as completion remain in `/issues/manage`; include a link to that workflow and its history. Preserve current automatic publication and member workflows.
 
 Keep `/issues/manage` available, especially for member repair workflows. Extract shared pieces rather than maintaining a second copy of its moderation logic. The existing modal posts to its current route; adapt its action target when reused.
 
@@ -148,22 +156,22 @@ For each changed field, compare base, current, and proposed values:
 - Canonical value changed since the supplied base: a potential conflict; preserve unrelated changes.
 - Missing/deleted targets, incompatible hierarchy changes, duplicate route creation, and incompatible topo/link changes: explicit structural conflicts.
 
-For legacy submissions with no reliable client base, label that limitation and require an explicit reviewer decision where intent cannot be established. Do not infer a historical base from current data.
+If a producer cannot supply a reliable client base, record that limitation and require an explicit reviewer decision where intent cannot be established. Do not infer a historical base from current data. No legacy submission support is needed.
 
 Add conflict counts and a warning on the affected submission/route/field. Show **Base | Current | This proposal | Other proposal**, with links to the other submissions and their sources. Cross-source conflicts are visible without combining the queues.
 
 Allow keeping the current value, choosing the proposal, or entering a corrected value. Allow mapping a duplicate create to an existing route and rejecting conflicting portions, respecting dependent topo and attachment links. Define an explicit partially-approved outcome with item decisions and skipped-change reasons so history and client status remain truthful.
 
-Resolve each submission independently; do not introduce a bulk merge of submissions. Store resolution choices and reviewer rationale separately from original proposals. Recheck conflicts and reviewed revisions at approval time, atomically guard publication, and refresh affected pending submissions after a decision.
+Resolve each submission independently; do not introduce a bulk merge of submissions. Store resolution choices and reviewer rationale separately from original proposals. Recalculate conflicts when opening an affected submission after a decision, using ordinary request/revalidation behavior. Do not introduce live monitoring, revision locks, or atomic coordination across submissions; reassess those only if actual usage warrants them.
 
 **Phase 3 acceptance:** compatible edits preserve each other, incompatible edits cannot silently overwrite one another, and every chosen resolution is visible and auditable. Humans and AI use the same correctness rules.
 
 ## Verification and delivery
 
-Use focused Vitest tests and `app/test/helpers.ts` for intake, mapping/diffs, approvals, permissions, issue review, and route actions. Use existing SQLite integration-test conventions for migration/backfill, foreign keys, hierarchy/search/timestamp triggers, and rollback. Validate batch behavior against local D1 because the mock and standard SQLite transaction behaviors differ from the installed D1 adapter.
+Use focused Vitest tests and `app/test/helpers.ts` for intake, mapping/diffs, individual approvals, permissions, issue review, and route actions. Use existing SQLite integration-test conventions for schema replacement, foreign keys, hierarchy/search/timestamp triggers, and the small transactions actually used. Validate those operations against local D1 where its behavior differs from the installed mocks or SQLite driver.
 
-Meaningful regression cases include omitted versus cleared values, renamed routes, same-name routes in different sectors, shared route references across topos, linked catalog routes, route-only submissions, legacy image-only topos, ambiguous mapping, corrupt payloads, retry with changed content, failed upload/commit, concurrent/double approval, issue filtering to `In Moderation`, stale issue decisions after content/attachment edits, and preserved account-deletion history. Phase 3 adds field-level and structural conflict cases.
+Meaningful regression cases include omitted versus cleared values, renamed routes, same-name routes in different sectors, shared route references across topos, linked catalog routes, route-only submissions, ambiguous mapping, invalid payloads, ordinary retries, failed upload/write with accurate partial progress, already-decided submissions, issue filtering to `In Moderation`, and preserved account-deletion history. Do not add legacy backfill, mid-review arrival, or concurrent approval tests. Phase 3 adds field-level and structural conflict cases.
 
 After each implementation slice, run `npm run verify` in tabvar using the pinned Node/npm versions. Run `npm run build` for API/UI/runtime integration changes. In TopoBuilder run typecheck and Jest; run its Playwright web checks for changed UI or web behavior. Inspect the final admin UI at desktop and narrow widths with empty, pending, error, and reviewed states.
 
-Deliver server compatibility and backfill before the upgraded TopoBuilder client. Publish the review UI after the shared services are tested. Add conflict tools after phases 1-2 work end to end. Update the submission, topo sync, route sync, and issue sync documentation as their contracts change. Production migration/deployment is a separate approved step.
+Deliver the new submission schema and contract together with the TopoBuilder producer changes. Publish the review UI after the shared services are tested. Add conflict tools after phases 1-2 work end to end. Update the submission, topo sync, route sync, and issue sync documentation as their contracts change. Production migration/deployment is a separate approved step.
