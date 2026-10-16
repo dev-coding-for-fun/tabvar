@@ -12,6 +12,7 @@ import { useUser } from "~/lib/hooks/useUser";
 import { useEffect } from "react";
 import { notifications } from "@mantine/notifications";
 import { privatePageMeta } from "~/lib/seo";
+import { sql } from "kysely";
 
 // Keep export order as is for logical data presentation
 const TABLES_TO_EXPORT = [
@@ -143,30 +144,19 @@ export const action = async (args: ActionFunctionArgs) => {
             const importStats: Record<string, number> = {};
             let totalRows = 0;
 
-            // Delete all data in a single statement to minimize foreign key issues
-            const deleteStatement = DELETE_ORDER.map(table => 
-                `DELETE FROM ${table}`
-            ).join('; ');
-            
-            await db.executeQuery({
-                sql: deleteStatement,
-                parameters: []
-            } as any);
+            // Delete all data in reverse dependency order (children first)
+            for (const table of DELETE_ORDER) {
+                await sql.raw(`DELETE FROM ${table}`).execute(db);
+            }
 
             // Then import in dependency order (parents first)
             for (const table of IMPORT_ORDER) {
                 if (importData[table]) {
                     // Reset the auto-increment sequence
-                    await db.executeQuery({
-                        sql: `DELETE FROM sqlite_sequence WHERE name = ?;`,
-                        parameters: [table]
-                    } as any);
+                    await sql`DELETE FROM sqlite_sequence WHERE name = ${table}`.execute(db);
                     
                     if (importData[table].length > 0) {
-                        await db.executeQuery({
-                            sql: `UPDATE sqlite_sequence SET seq = 0 WHERE name = ?;`,
-                            parameters: [table]
-                        } as any);
+                        await sql`UPDATE sqlite_sequence SET seq = 0 WHERE name = ${table}`.execute(db);
                         
                         // Insert one record at a time
                         for (const record of importData[table]) {
@@ -176,10 +166,7 @@ export const action = async (args: ActionFunctionArgs) => {
                         // Update sequence
                         const maxId = Math.max(...importData[table].map(row => row.id || 0));
                         if (maxId > 0) {
-                            await db.executeQuery({
-                                sql: `UPDATE sqlite_sequence SET seq = ? WHERE name = ?;`,
-                                parameters: [maxId, table]
-                            } as any);
+                            await sql`UPDATE sqlite_sequence SET seq = ${maxId} WHERE name = ${table}`.execute(db);
                         }
 
                         importStats[table] = importData[table].length;
@@ -189,10 +176,7 @@ export const action = async (args: ActionFunctionArgs) => {
             }
 
             // Rebuild the search index
-            await db.executeQuery({
-                sql: 'INSERT INTO route_search(route_search) VALUES("rebuild");',
-                parameters: []
-            } as any);
+            await sql`INSERT INTO route_search(route_search) VALUES('rebuild');`.execute(db);
 
             // Create a detailed success message
             const tableStats = Object.entries(importStats)
@@ -214,24 +198,22 @@ export const action = async (args: ActionFunctionArgs) => {
         }
     }
 
-    const queryString = formData.get("query")?.toString();
+    const queryString = formData.get("query")?.toString()?.trim();
     if (!queryString) {
         return data({ error: "No query provided" });
     }
 
     try {
         const db = getDB(context);
-        const result = await db.executeQuery({
-            sql: queryString,
-            parameters: []
-        } as any);
+        const result = await sql.raw(queryString).execute(db);
 
-        const { rows } = result;
+        const rows = (result.rows || []) as Record<string, unknown>[];
+        const numAffectedRows = result.numAffectedRows !== undefined ? Number(result.numAffectedRows) : undefined;
         return data({
             success: true,
             rows,
-            numRows: rows.length,
-            columns: rows && rows.length > 0 ? Object.keys(rows[0] as object) : [],
+            numRows: rows.length > 0 ? rows.length : (numAffectedRows ?? 0),
+            columns: rows.length > 0 ? Object.keys(rows[0] as object) : [],
             query: queryString
         });
     } catch (error) {
@@ -384,9 +366,9 @@ export default function AdminQuery() {
                         </Form>
                     </Stack>
 
-                    {fetcher.data?.error && (
+                    {(actionData?.error || fetcher.data?.error) && (
                         <Alert title="Error" color="red">
-                            <Code block>{fetcher.data.error}</Code>
+                            <Code block>{actionData?.error || fetcher.data?.error}</Code>
                         </Alert>
                     )}
 
