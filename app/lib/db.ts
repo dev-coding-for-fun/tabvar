@@ -1,11 +1,10 @@
 
-import { Kysely, KyselyPlugin, PluginTransformQueryArgs, PluginTransformResultArgs, QueryResult, RootOperationNode, UnknownRow } from 'kysely';
+import { Kysely, KyselyPlugin, LogEvent, PluginTransformQueryArgs, PluginTransformResultArgs, QueryResult, RootOperationNode, UnknownRow } from 'kysely';
 import { D1Dialect } from '@notsplol/kysely-d1';
 import { DB } from './db.d'
 import { AppLoadContext } from 'react-router';
 
-// Create a plugin to decode HTML entities
-class HtmlDecodePlugin implements KyselyPlugin {
+export class HtmlDecodePlugin implements KyselyPlugin {
   private decodeHtml(text: string): string {
     const entities: Record<string, string> = {
       '&#39;': "'",
@@ -46,6 +45,20 @@ class HtmlDecodePlugin implements KyselyPlugin {
   }
 }
 
+export function logDatabaseEvent(event: LogEvent) {
+  if (event.level === 'query') {
+    console.log(event.query.sql)
+    console.log(event.query.parameters)
+  }
+  if (event.level === 'error') {
+    console.error(event.error)
+    if (event.query) {
+      console.error(event.query.sql)
+      console.error(event.query.parameters)
+    }
+  }
+}
+
 export function getDB(context: AppLoadContext) {
   const env = context.cloudflare.env as unknown as Env;
   if (!env.DB) {
@@ -54,14 +67,6 @@ export function getDB(context: AppLoadContext) {
   return new Kysely<DB>({
     dialect: new D1Dialect({ database: env.DB }),
     plugins: [new HtmlDecodePlugin()],
-    log(event) {
-      if (event.level === 'query') {
-        console.log(event.query.sql)
-        console.log(event.query.parameters)
-      }
-      if (event.level === 'error') {
-        console.error(event.error)
-      }
-    } 
+    log: logDatabaseEvent
   });
 }
