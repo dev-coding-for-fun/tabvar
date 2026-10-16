@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loader } from "./api.discounts.$filename";
 import {
   createContext,
@@ -9,8 +9,37 @@ import {
 } from "~/test/helpers";
 import * as authServer from "~/lib/auth.server";
 import * as dbModule from "~/lib/db";
+import * as tagsServer from "~/lib/tags.server";
 
 describe("api.discounts.$filename", () => {
+  beforeEach(() => {
+    vi.spyOn(tagsServer, "userHasActiveTag").mockResolvedValue(false);
+  });
+
+  it.each([true, false])("only lets an active manager view another user's QR (%s)", async (active) => {
+    vi.mocked(tagsServer.userHasActiveTag).mockRestore();
+    vi.spyOn(authServer, "getAuthenticator").mockReturnValue({
+      isAuthenticated: vi.fn().mockResolvedValue(createUser()),
+    } as unknown as ReturnType<typeof authServer.getAuthenticator>);
+    const db = createMockDb({ select: [
+      { executeTakeFirst: { id: 1, expiresAt: active ? "2099-01-01" : "2020-01-01" } },
+      { executeTakeFirst: { claimedEmail: "other@example.com", claimedUid: "other-1" } },
+    ] });
+    vi.spyOn(dbModule, "getDB").mockReturnValue(db as unknown as ReturnType<typeof dbModule.getDB>);
+    const context = createContext();
+    vi.mocked(context.cloudflare.env.TABVAR_MISC.get).mockResolvedValue({
+      body: new ReadableStream(), httpEtag: "test-etag", writeHttpMetadata: vi.fn(),
+    } as unknown as R2ObjectBody);
+    const args = createRouteArgs({ request: createGetRequest("https://example.com/api/discounts/other.png"), context, params: { filename: "other.png" } });
+    if (active) {
+      expect((await loader(args)).status).toBe(200);
+      expect(db.selectFrom).toHaveBeenCalledTimes(1);
+    } else {
+      await expect(loader(args)).rejects.toMatchObject({ status: 403 });
+      expect(context.cloudflare.env.TABVAR_MISC.get).not.toHaveBeenCalled();
+    }
+  });
+
   it("throws 401 if user is not authenticated", async () => {
     vi.spyOn(authServer, "getAuthenticator").mockReturnValue({
       isAuthenticated: vi.fn().mockResolvedValue(null),

@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { getAuthenticator } from "~/lib/auth.server";
 import { getDB } from "~/lib/db";
+import { canManageDiscounts } from "~/lib/discounts.server";
 
 export async function loader({ request, context, params }: LoaderFunctionArgs) {
   const filename = params.filename;
@@ -14,9 +15,9 @@ export async function loader({ request, context, params }: LoaderFunctionArgs) {
     throw new Response("Unauthorized", { status: 401 });
   }
 
-  // 2. Authorize access: must be admin or the assigned owner of this code
-  if (user.role !== "admin") {
-    const db = getDB(context);
+  // 2. Authorize access for discount managers or the assigned owner.
+  const db = getDB(context);
+  if (!(await canManageDiscounts(db, user))) {
     const code = await db
       .selectFrom("user_discount_code")
       .select(["claimed_email as claimedEmail", "claimed_uid as claimedUid"])

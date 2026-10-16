@@ -1,7 +1,14 @@
 import { sql, type Kysely } from "kysely";
 import type { DB } from "./db.d";
+import type { User } from "./models";
+import { userHasActiveTag } from "./tags.server";
 
 export const DEFAULT_DISCOUNT_TAG = "super_supporter_2026";
+export const DISCOUNT_MANAGER_TAG = "supporter_prog_manager";
+
+export async function canManageDiscounts(db: Kysely<DB>, user: User): Promise<boolean> {
+  return user.role === "admin" || userHasActiveTag(db, user.uid, DISCOUNT_MANAGER_TAG);
+}
 
 export interface ClaimedDiscountCode {
   id: number;

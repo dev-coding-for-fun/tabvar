@@ -17,6 +17,7 @@ import {
   Stack,
   Table,
   Text,
+  TextInput,
   Title,
   Tooltip,
 } from "@mantine/core";
@@ -36,8 +37,10 @@ import {
 import { useEffect, useState } from "react";
 import {
   data,
+  Form,
   useActionData,
   useLoaderData,
+  useNavigation,
   useSubmit,
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
@@ -45,13 +48,17 @@ import {
 } from "react-router";
 import { requireUser } from "~/lib/auth.server";
 import { getDB } from "~/lib/db";
+import { sql } from "kysely";
 import {
+  canManageDiscounts,
   claimDiscountCode,
+  DEFAULT_DISCOUNT_TAG,
   getUserDiscountCode,
   isUserEligibleForDiscount,
 } from "~/lib/discounts.server";
 import type { User } from "~/lib/models";
 import { privatePageMeta } from "~/lib/seo";
+import { addInviteTags, assignUserTag, userHasActiveTag } from "~/lib/tags.server";
 
 export const meta: MetaFunction = () => privatePageMeta("Exclusive Discount QR Code");
 
@@ -101,9 +108,9 @@ export async function loader(args: LoaderFunctionArgs) {
     eligible = true;
   }
 
-  // 4. If site admin, load pool statistics, assignments, and unassigned codes
+  // 4. Load management data for admins and active program managers.
   let adminStats: AdminDiscountStats | null = null;
-  if (user.role === "admin") {
+  if (await canManageDiscounts(db, user)) {
     const allCodes = await db
       .selectFrom("user_discount_code")
       .select([
@@ -153,16 +160,86 @@ export async function loader(args: LoaderFunctionArgs) {
 
 export async function action(args: ActionFunctionArgs) {
   const user: User = await requireUser(args);
-  if (user.role !== "admin") {
-    return data({ error: "Only site admins can manage discount codes." }, { status: 403 });
+  const db = getDB(args.context);
+  if (!(await canManageDiscounts(db, user))) {
+    return data({ error: "Only site admins and supporter program managers can manage discounts." }, { status: 403 });
   }
 
   const { request, context } = args;
   const formData = await request.formData();
   const formAction = formData.get("action");
-  const db = getDB(context);
 
   switch (formAction) {
+    case "add_supporter": {
+      const rawEmail = formData.get("email");
+      const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return data({ error: "Enter a valid email address." }, { status: 400 });
+      }
+
+      try {
+        const tag = await db.selectFrom("user_tag")
+          .select("id")
+          .where("name", "=", DEFAULT_DISCOUNT_TAG)
+          .executeTakeFirst();
+        if (tag?.id == null) {
+          return data({ error: "The super supporter tag is missing. Ask a site admin to restore it." }, { status: 500 });
+        }
+
+        const target = await db.selectFrom("user")
+          .select("uid")
+          .where(sql<string>`email COLLATE NOCASE`, "=", email)
+          .executeTakeFirst();
+        if (target) {
+          if (await userHasActiveTag(db, target.uid, DEFAULT_DISCOUNT_TAG)) {
+            return { info: true, message: `${email} already has the super supporter tag.` };
+          }
+          await assignUserTag(db, { uid: target.uid, tagId: tag.id, assignedByUid: user.uid });
+          return { success: true, message: `Super supporter tag added to ${email}.` };
+        }
+
+        const invite = await db.selectFrom("user_invite")
+          .select("email")
+          .where("email", "=", email)
+          .executeTakeFirst();
+        if (invite) {
+          const existingTag = await db.selectFrom("user_invite_tag")
+            .select(["id", "expires_at as expiresAt"])
+            .where("email", "=", email)
+            .where("tag_id", "=", tag.id)
+            .executeTakeFirst();
+          if (existingTag) {
+            if (!existingTag.expiresAt || new Date(existingTag.expiresAt) > new Date()) {
+              return { info: true, message: `The invite for ${email} already has the super supporter tag.` };
+            }
+            await db.updateTable("user_invite_tag")
+              .set({ expires_at: null })
+              .where("id", "=", existingTag.id)
+              .execute();
+          } else {
+            await addInviteTags(db, email, [tag.id]);
+          }
+          return { success: true, message: `Super supporter tag added to the existing invite for ${email}.` };
+        }
+
+        await db.insertInto("user_invite")
+          .values({
+            email,
+            display_name: null,
+            role: "member",
+            invited_by_uid: user.uid,
+            invited_by_name: user.displayName ?? "",
+            token_expires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .execute();
+        await addInviteTags(db, email, [tag.id]);
+        return { success: true, message: `Member invite created for ${email} with the super supporter tag.` };
+      } catch (error) {
+        console.error("Failed to add super supporter tag:", error);
+        return data({ error: "Could not add the super supporter tag. Please retry; any existing user or invite will be reused." }, { status: 500 });
+      }
+    }
+
     case "unassign_code": {
       const codeId = Number(formData.get("code_id"));
       if (!codeId) {
@@ -231,7 +308,8 @@ export async function action(args: ActionFunctionArgs) {
 
 export default function DiscountPage() {
   const { user, code, eligible, exhausted, adminStats } = useLoaderData<typeof loader>();
-  const actionData = useActionData<{ success?: boolean; message?: string; error?: string }>();
+  const actionData = useActionData<{ success?: boolean; info?: boolean; message?: string; error?: string }>();
+  const navigation = useNavigation();
   const submit = useSubmit();
 
   const [unassignTarget, setUnassignTarget] = useState<{ id: number; email: string } | null>(null);
@@ -247,6 +325,8 @@ export default function DiscountPage() {
       });
       setUnassignTarget(null);
       setDeleteTarget(null);
+    } else if (actionData?.info && actionData?.message) {
+      showNotification({ title: "Already added", message: actionData.message, color: "blue" });
     } else if (actionData?.error) {
       showNotification({
         title: "Error",
@@ -366,7 +446,7 @@ export default function DiscountPage() {
           ) : null}
         </Stack>
 
-        {/* Admin Management Section */}
+        {/* Discount Management Section */}
         {adminStats && (
           <Card withBorder shadow="sm" radius="md" p="lg">
             <Stack gap="md">
@@ -381,9 +461,25 @@ export default function DiscountPage() {
                   </div>
                 </Group>
                 <Badge color="violet" variant="light" size="sm">
-                  Admin Section
+                  Management
                 </Badge>
               </Group>
+
+              <Paper withBorder p="md" radius="sm">
+                <Form method="post">
+                  <input type="hidden" name="action" value="add_supporter" />
+                  <Stack gap="sm">
+                    <Title order={4}>Add a super supporter</Title>
+                    <Text size="sm" c="dimmed">
+                      Add discount eligibility to a user or invite. If neither exists, a member invite is created and the tag is applied when they sign in.
+                    </Text>
+                    <TextInput name="email" type="email" label="Email address" placeholder="supporter@example.com" required />
+                    <Button type="submit" loading={navigation.state !== "idle" && navigation.formData?.get("action") === "add_supporter"}>
+                      Add super supporter
+                    </Button>
+                  </Stack>
+                </Form>
+              </Paper>
 
               {/* Pool Metrics */}
               <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
