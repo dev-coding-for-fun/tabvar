@@ -1,177 +1,199 @@
-# Submissions review implementation plan
+# Submissions review plan
 
-Status: proposed implementation plan. No application changes are included.
+Status: proposed. No application changes yet.
 
-## Goal and boundaries
+## The idea
 
-Rebuild `/admin/submissions` as the entry point for reviewing incoming route and topo data and issue reports. Present three separate queues: **TopoBuilder**, **Issue reports**, and **AI updates**. Review one submission at a time; do not provide a combined feed or approval across queues.
+Proposed data changes sit in one table until an admin approves them. Approval writes them to the main tables.
 
-Human and AI route submissions use the same changeset contract and publication service. Their source and supporting evidence differ. Issue reports retain their existing domain model, moderation rules, and repair lifecycle.
+1. **In:** a client posts a submission, which is a list of creates and edits to crags, sectors, routes, and topos.
+2. **Wait:** it's stored as one row with `status = 'pending'`. Nothing is published.
+3. **Review:** `/admin/submissions` shows each change. Edits show current → proposed, and conflicts get a warning.
+4. **Approve:** the changes are written to the main tables in order. **Reject:** only the status changes.
 
-Simplicity takes priority over exhaustive safeguards. There is no bulk approval requirement. Process one approval at a time with straightforward database operations; a future **Approve all** control can call the same operation sequentially and report each result independently. The database is quiet enough that live arrival handling, review locks, optimistic concurrency checks, and transactions spanning multiple approvals are unnecessary.
+Issue reports keep their existing moderation (`In Moderation` status). They'll get a tab on the same page later, but they don't use the submission table.
 
-Published route data lives in the primary tables only. Store the submitted fields and compare them with those tables when opening a review. Do not save original route copies, intake snapshots, before/after route values, or historical route versions. Use timestamps for advisory stale-change warnings; the reviewer decides whether to proceed.
+## Table
 
-The user confirmed that `topo_submission` is empty and the submission system is not in use yet. Its schema can be replaced by dropping the old table in a new migration. No submission backfill, legacy-data repair, or legacy payload compatibility layer is required. This permission is limited to submission data; retain published routes, topos, attachments, users, and issues.
+`topo_submission` is empty and unused. Replace it with `submission`:
 
-Deliver this in the requested order:
+| Column | Notes |
+| :--- | :--- |
+| `id` | TEXT uuid |
+| `uid` | Submitter |
+| `source` | e.g. `topobuilder` |
+| `status` | `pending`, `approved`, or `rejected` |
+| `payload` | JSON; format below |
+| `error` | Last approval error, if any |
+| `created_at` | |
+| `reviewed_by_uid`, `reviewed_at` | Set on approve or reject |
 
-1. Submission data model, intake API, publication service, and companion TopoBuilder changes.
-2. The review page and issue review integration.
-3. Conflict detection and resolution.
+## Payload
 
-AI ingestion, Google Docs access, document extraction, and automated publication are outside this project. Build the shared contract and the empty AI queue now; implement its producer separately.
+An ordered list of changes. Each change creates or edits one record.
 
-## Findings from the current implementation
+```json
+{
+  "changes": [
+    { "ref": "c1", "entity": "crag", "op": "create", "fields": { "name": "New Crag" } },
+    { "ref": "s1", "entity": "sector", "op": "create", "fields": { "name": "Main Wall", "cragId": "c1" } },
+    { "ref": "r1", "entity": "route", "op": "create", "fields": { "name": "New Line", "sectorId": "s1", "gradeYds": "5.11a" } },
+    { "entity": "route", "op": "update", "id": 456, "baseUpdatedAt": "2026-06-09 10:00:00", "fields": { "boltCount": 7 } },
+    { "entity": "topo", "op": "create", "fields": {
+      "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "name": "Main Wall Left", "sectorId": "s1",
+      "background": "file:bg", "raster": "file:raster", "annotations": { "version": 1, "elements": [] },
+      "routes": [{ "routeId": 456, "label": "1" }, { "routeId": "r1", "label": "2" }]
+    } }
+  ]
+}
+```
 
-- `app/routes/admin.submissions.tsx` loads `topo_submission` and displays its JSON payload. It permits `admin` and `super` users, but has no review actions.
-- `app/lib/submission.server.ts` accepts crag/sector/topo trees and stores uploaded images under a submission prefix in R2. It requires at least one topo, uses permissive payload types, and does not resolve entities or calculate changes.
-- `topo_submission` already has reviewer, review timestamp, and notes columns. It lacks a structured proposal model, source classification, and applied entity mappings.
-- TopoBuilder currently calls `/api/topobuilder/submissions`. Its submission builder sends route names and grades and references routes by name. It omits linked TABVAR catalog routes, most route fields, annotations, and stable topo identity. It uploads the original photo rather than the rendered topo.
-- A separate `/api/v1/topos` API publishes raw topos and can create routes immediately. The inspected TopoBuilder submission flow does not call it. Its existing write contract needs an explicit policy so the new queue cannot be bypassed accidentally.
-- `app/routes/issues.manage.tsx` already supports issue moderation, edits, attachment display, and status history. `app/lib/issues.server.ts` supplies shared mutations and audit logging. Some reports become public without admin review.
-- The installed D1 Kysely dialect buffers transaction queries into a batch and returns no intermediate rows or insert IDs. Use straightforward writes and obtain generated IDs outside a buffered transaction rather than designing a complex whole-submission batch.
-- User deletion currently refers directly to `topo_submission`; schema changes must update this integration and its tests.
+- **Fields** use the sync API's camelCase names. Each entity has a fixed list of editable fields, and intake rejects anything else:
+  - crag: `name`, `notes`, `latitude`, `longitude`
+  - sector: `name`, `cragId`, `notes`, `latitude`, `longitude`, `sortOrder`
+  - route: `name`, `altNames`, `sectorId`, `gradeYds`, `climbStyle`, `boltCount`, `pitchCount`, `routeLength`, `firstAscentBy`, `firstAscentDate`, `routeBuiltDate`, `year`, `status`, `notes`, `sortOrder`, `latitude`, `longitude`
+  - topo: `uuid`, `name`, `description`, `cragId`, `sectorId`, `latitude`, `longitude`, `status`, `annotations`, `background`, `raster`, `routes`
+- **Edits** carry only the fields being changed. `null` clears a field.
+- **Parent IDs** (`cragId`, `sectorId`, `routeId`) are either an existing numeric ID or the `ref` of an earlier create in the same submission.
+- **`baseUpdatedAt`** is the record's `updatedAt` as the submitter last saw it. It's optional and used only for conflict warnings.
+- **Files** are multipart parts referenced as `file:<part name>`. Intake stores them in R2 under `submissions/<id>/`.
+- **No deletes:** retire a route or topo by setting `status`. Moves and reordering are ordinary edits to `cragId`, `sectorId`, or `sortOrder`. Existing DB triggers keep denormalized names, search, and issue crag IDs in sync.
 
-## Working decisions
+## Intake
 
-- Preserve `/admin/submissions` and its `admin`/`super` access policy. Enforce permissions on loaders and actions. Make the review navigation available to both roles while keeping other admin-only links restricted.
-- Use `human` and `ai` source categories independently of origin, such as `topobuilder` or a future claim-form importer. Set source from trusted server integration identity, not an arbitrary request field.
-- Keep the submitted proposal and any reviewer corrections, mappings, and decisions. Record applied item IDs and status; do not copy the previous published route values into the submission or a new audit table.
-- Initially approve or reject a submission as a whole after mappings and corrections. Defer selective merge controls to phase 3. Approval must respect dependencies between new hierarchy records, routes, attachments, and topos.
-- Keep each approval independent. Use small per-item transactions where useful; do not require all-or-nothing publication of an entire queue or changeset. Handle failures explicitly and record applied results so remaining work can be retried without recreating successful items.
-- Show an advisory stale-change warning using the route's current `updated_at` and a last-seen server timestamp when supplied, or the submission time otherwise. No locking or concurrent reviewer coordination is needed. Competing-submission detection remains in phase 3.
-- New/updated route proposals and attachments do not require a topo. A topo-only submission may reference existing routes without proposing changes to them.
-- Omitted fields mean unchanged; explicit `null` means clear a nullable field. Existing route references do not imply updates. Initial route operations are create, update, and reference; route deletion is outside this scope.
-- **Confirmed issue scope:** only reports in `In Moderation` enter the issue review queue. Use existing statuses, approval/archival metadata, and audit history; no independent issue-review state is needed. Reports already made public by current rules remain in the existing issue workflows.
+Keep `POST /api/topobuilder/submissions` and change it to the new payload. It checks:
 
-## Phase 1: submission data and APIs
+- the entity and op are known;
+- every field is on the entity's list;
+- each edit target exists;
+- each `ref` points to an earlier create;
+- every referenced file is present and is an image.
 
-### 1A. Define and document the changeset contract
+Bad input returns 400 with a message, and storage or DB failures return 500.
 
-Define a versioned contract in canonical submission/domain types, with:
+`GET /api/topobuilder/submissions?id=` returns the caller's own submission with its status and the ID created for each `ref`, so TopoBuilder can link its local records after approval.
 
-- Submission identity, client request ID for idempotent retry, trusted source/origin, submitter or service account, submission time, and optional source references and evidence.
-- Stable item IDs, existing TABVAR numeric IDs where known, client IDs for new entities, and explicit parent and attachment references.
-- Explicit create/update/reference operations for routes and the hierarchy needed to place them. Support proposed crags and sectors already present in the current intake contract.
-- Route patches restricted to explicitly proposed editable fields, plus the producer's last-seen server `updatedAt` timestamp when available. Do not include a second set of original field values or capture route snapshots at intake.
-- Optional topo data: stable UUID, existing server ID where known, metadata, clean background, rendered raster, versioned annotations, and route links with labels and ordering.
-- Optional attachments: stored object key, MIME type, original filename, size/hash, purpose, associated items, and whether the file is review evidence or should become a public attachment.
-- Provenance usable by a later AI producer: source document/link, reference location or excerpt, and optional field-level evidence. This is a data contract, not an ingestion pipeline.
+`POST /api/v1/topos` lets any member publish topos and new routes directly, and soft-delete any topo. Restrict its writes to admin/super so member changes go through submissions. Admin and super edits in the crag editor stay direct and unchanged.
 
-Matching policy: resolve explicit server IDs first. Names can suggest matches within the specified crag/sector, but ambiguous matches and possible duplicate creates require reviewer mapping. A rename keeps entity identity. Never merge or overwrite a route solely because its name matches.
+## Approve and reject
 
-### 1B. Replace the unused submission schema
+Approve runs through the changes in order:
 
-Create a new migration that drops the empty `topo_submission` table and creates `submission`, with source, schema version, pending/approved/rejected status, review metadata, and idempotency identity. Add `submission_change` and `submission_attachment` records for proposed fields, target IDs, optional last-seen timestamps, associations, and applied IDs/status. Store proposed fields as JSON. Do not add baseline payloads, original route copies, or stored before/after values. Ensure serialized payload reads preserve exact values: the current database plugin applies HTML decoding to every string, which can alter JSON content.
+- **create:** insert the row, then write its new ID onto the change (`"id": 789`) so later changes can resolve the `ref`. New crags get a slug from `slugifyUnique`, the same as the crag page does.
+- **update:** set only the fields in the change.
+- **topo:** call the existing `saveRawTopo` with the stored image URLs and the resolved route IDs.
 
-Keep approved/rejected proposals, reviewer decisions/notes, decision timestamps, and resulting server IDs. History describes what was submitted and accepted; it does not retain previous published route values or promise an exact historical diff. Ensure account deletion handles these records and shared files deliberately, updating the existing schema references and tests.
+Each applied change also writes an audit row (see [Audit log](#audit-log)).
 
-Do not implement backfill, legacy normalization, preservation of old submission IDs/URLs, or repair UI. Update callers and types to the new schema directly. Published data and the existing issue moderation system remain intact.
+When every change succeeds, set `status = 'approved'`. If a change fails, stop. Save the payload with the IDs created so far, store the error, and leave the submission pending. Approving again skips creates that already have an ID.
 
-Use Wrangler to create the next migration number, apply locally, and regenerate database types. Determine the number at implementation time; unrelated migration work already exists. Do not rewrite existing migrations. Preserve publication tables and unrelated external API contracts.
+Reject sets `status = 'rejected'` and writes one audit row per change. It doesn't touch the main tables.
 
-### 1C. Implement validated, retry-safe intake
+Each submission is approved or rejected as a whole. To accept part of one, reject it and make the edit by hand in the crag editor.
 
-Add a shared intake service and `/api/v1/submissions` endpoint, accepting JSON without files and multipart requests with files. Update TopoBuilder to this contract in the same implementation phase. The unused submission flow does not need a legacy tree parser or compatibility adapter; retain the old endpoint path only if a simple alias helps rollout. Keep the response straightforward: `{ id, status }` plus useful validation information when needed.
+## Conflicts
 
-Validate the complete payload and file references before upload. Check entity IDs, parent relationships, duplicate references, supported fields, annotations, attachment types, and reasonable request/file limits. Allow route-only and attachment-only proposals with valid targets. Reject empty/no-op submissions with a useful explanation.
+These are checked for each `update` when a submission is opened:
 
-Use a client request ID to recognize ordinary upload retries; do not build a general exactly-once delivery system. A repeated ID with different content is an error, not a silent replacement. Do not infer retry identity from route names or identical content. Upload only referenced files, persist server-generated object metadata, and clean up files written by failed intake without deleting shared objects. Return validation failures as 4xx and storage/database failures as 5xx.
+1. **Changed since submitted:** the record's `updated_at` is later than `baseUpdatedAt`, or later than the submission's `created_at` if no `baseUpdatedAt` was sent.
+2. **Overlap:** another pending submission edits the same field on the same record.
 
-Add a caller-scoped status/read endpoint reporting review status, notes, and applied ID mappings so the client can distinguish queued submission from publication.
+A conflict shows as a warning on that change, with the current value, the proposed value, and a link to any overlapping submission. The reviewer decides what to do; conflicts never block approval and nothing resolves them automatically. `updated_at` also moves when photos or topo links change, so the timestamp check may flag false positives. That's acceptable.
 
-Resolve the existing direct topo-write contract explicitly. Recommended policy: external contributions use the submissions API; any retained direct-write endpoint requires a clearly authorized trusted publishing identity. Do not silently change a response that currently returns a published topo into one returning a pending submission. Update the API documentation and caller tests with the chosen transition.
+## Audit log
 
-### 1D. Implement comparison and publication services
+The audit log is one table for manual investigation and tracing. App code writes a row for every crag, sector, route, or topo change, and for every change in a rejected submission. It has no UI; read it with SQL on `/admin/query`.
 
-Build one comparison service that resolves targets and returns new records, changed fields, unchanged references, attachments, and validation/mapping requirements. Read target records directly from the primary tables and compare their current values with the submitted patch at review time. Generate this diff for display only; do not persist it or retain a copy of the current route.
+| Column | Notes |
+| :--- | :--- |
+| `id` | INTEGER autoincrement |
+| `created_at` | When the change was written or rejected |
+| `author_uid`, `author_name` | Who made or proposed the change: the submitter, or the editor for a direct edit |
+| `reviewer_uid`, `reviewer_name` | Who approved or rejected it. `null` for a direct edit. |
+| `decision` | `approved`, `rejected`, or `null` for a direct edit |
+| `entity` | `crag`, `sector`, `route`, or `topo` |
+| `entity_id` | `null` for a rejected create |
+| `action` | `create`, `update`, or `delete` |
+| `changes` | JSON `{ "column": [before, after] }` for the changed columns only. Creates have `null` before values. Deletes store the whole row as the before value. For a rejected change, `after` is the proposed value, which was never applied. |
+| `submission_id` | Set when the change came from a submission |
 
-Implement approve/reject services with reviewer notes and server-side validation. Publication applies only the effective reviewed patch, creates dependencies in order, stores ordinary attachments in the existing attachment/junction model, and stores editable topos in `topo`/`route_topo`. Reuse established validation, storage, timestamp, hierarchy, and search conventions; split existing helpers where needed to avoid repeating uploads or doing unguarded incremental writes.
+The uid and name columns have no foreign key, so rows survive account deletion, the same as `issue_audit_log`. Author and reviewer are stored on each row rather than looked up through `submission_id`, because a submitter's submissions are deleted along with their account.
 
-Process one submission approval using straightforward operations in dependency order. Use small transactions/batches for an individual change where practical, obtaining generated IDs before later operations that need them. Do not require a prebuilt atomic batch for the entire submission or coordination between reviewers. Check the existing decision status and disable the action while it is running as ordinary UI safeguards.
+Index `(entity, entity_id)` and `(author_uid)`.
 
-Record successfully applied item IDs/status as work proceeds, without copying the values they replaced. If a later operation fails, return a useful error and leave the submission pending with its progress visible; retry only the remaining operations. Mark the submission approved once its intended work is complete. Do not silently undo successful work or describe a partial result as a complete approval/rejection. A future **Approve all** action can iterate these independent approvals without a shared transaction.
+```sql
+SELECT * FROM audit_log WHERE entity = 'route' AND entity_id = 456 ORDER BY id DESC;
+SELECT * FROM audit_log WHERE author_uid = 'abc123' ORDER BY id DESC;
+```
 
-Use assets stored during intake when publishing; publish references only after files are available. Clean up only newly created unreferenced objects after failure. Rejection retains review evidence; destructive retention cleanup is a separate policy. Do not introduce a distributed transaction or asset-promotion workflow merely to coordinate R2 and D1.
+A single `writeAudit` helper in `app/lib/audit.server.ts` inserts the rows. It's called from:
 
-When loading a review, warn if the primary record's `updated_at` is newer than the last-seen server timestamp supplied for that item. If none was supplied, compare against the server-recorded submission time and label the warning **Changed since submission**. Normalize timestamps to the same UTC format. This fallback cannot identify changes made before intake, and timestamps do not identify which field changed; a conservative warning is sufficient. Do not block approval or add route fingerprints, automatic mid-review refreshes, or locking. Comparing incompatible proposals is deferred to phase 3.
+- **Approval and rejection:** one row per change. The author is the submission's `uid` and the reviewer is the admin who decided. Before values come from the same read the review diff uses.
+- **The crag editor action (`topos.$crag.tsx`) and the crag create and position actions (`topos._index.tsx`):** the author is the signed-in editor. Read the row before each update or delete.
+- **`/api/v1/topos` writes:** the author is the token's user. `saveRawTopo` already receives this `uid` but ignores it today; pass it through to `writeAudit`.
 
-Verify that approved data appears in public route views and existing route/topo delta sync, including search indexes and attachment/route timestamps.
+The submitter is already recorded for submissions: intake stores the API token's user as `uid`. Direct writes record no author anywhere today, because crags, sectors, routes, and topos have no creator column. The audit log fills that gap from now on without adding columns to the main tables. Changes made before it exists stay unattributed.
 
-### 1E. Update the TopoBuilder producer
+These aren't logged:
 
-Update `../topobuilder` submission types, builder, export bundle, upload client, and submission state together:
+- the bulk JSON import and Sloper sync;
+- rows that DB triggers change, such as a route's `sector_name` after a sector rename. The sector's own row covers it.
 
-- Include linked TABVAR routes and their numeric IDs. Preserve local identities rather than deduplicating routes by name.
-- Submit supported route metadata and explicit update patches where existing-route editing is supported. Linked unchanged catalog routes remain references. Add a focused edit-proposal flow if the existing editor cannot express changes to catalog routes.
-- Include existing crag/sector IDs and stable topo UUIDs, annotations, the original background, and a raster generated through the existing rendering pipeline.
-- Submit only fields explicitly edited/proposed, reusing the existing catalog data for display. Include its last-seen server `updatedAt` timestamp when available; do not add an original-route snapshot or version history. If storing the timestamp requires a schema change, follow the companion repository's shipped-schema migration rules; do not rewrite released migrations.
-- Generate one persistent request ID per submission attempt, reuse it on retry, and distinguish submitted/pending from approved/published in client state and messaging. Apply returned mappings after approval so later submissions update the same published entities.
+Issues and attachments keep their existing audit logs.
 
-Use the existing upload and rendering APIs; no dependency or native configuration changes are planned. Coordinate the server and client contract changes; there is no live submission data or legacy client workflow to migrate.
+Logging lives in app code rather than SQLite triggers for two reasons: triggers can't tell who made a change, and the existing `updated_at` and denormalization triggers would fill the log with noise.
 
-**Phase 1 acceptance:** a mixed submission containing new routes, route updates, existing references, and optional topos/attachments can be queued, compared, and approved independently. Rejection does not publish changes. Failed operations report their partial progress, and retries do not recreate successfully applied items. The new schema is installed without submission backfill.
+## Review page
 
-## Phase 2: rebuild the review page
+Rebuild `/admin/submissions`. Access stays admin/super.
 
-### 2A. Add separate queues and a focused review layout
+- **Route data tab:** pending submissions, newest first, showing submitter, source, time, and counts of creates and edits. A status filter shows approved and rejected submissions.
+- **Detail:** one card per change.
+  - Creates list their fields.
+  - Edits show current → proposed for the changed fields only, read live from the main tables.
+  - Topos show the raster image and the routes they link.
+  - Conflict warnings appear on the affected card.
+- **Actions:** Approve and Reject. If an approval failed, show its error.
+- **Issues tab (later):** `In Moderation` issues, using the existing actions and components from `/issues/manage`.
 
-Rename the page and navigation to **Submissions**. Use three tabs with pending counts: **TopoBuilder**, **Issue reports**, and **AI updates**. The AI tab initially explains that no producer is connected. Do not synthesize AI records or add importer settings.
+## Left out
 
-Each tab has its own appropriate filters, search, sorting, empty state, and selected item. Human/AI submissions have pending/approved/rejected status filters; the issue queue contains only `In Moderation` reports and links to the existing issue manager for other statuses and history. Persist tab/filter/selection in URL query parameters for links and refresh. Load complete modest changesets without requiring pagination or virtualization.
+These are left out on purpose:
 
-On desktop, use a list beside the selected submission; on narrow screens, open the selected item in a single-column detail view. List summaries show location, submitter/source, time, status, and counts of new routes, changed routes, and attachments. Distinguish source with text and an icon as well as color.
+- per-change tables;
+- change history beyond the submission row and the audit log;
+- an audit log viewer or retention policy;
+- partial approval or field merging;
+- bulk approve;
+- deletes;
+- photo attachments from `api.attachments`, which stay as they are;
+- an AI producer.
 
-### 2B. Build the shared human/AI changeset reviewer
+Add any of these only when they're actually needed.
 
-The detail view shows:
+## Steps
 
-- Source, submission context, review history, and summary counts.
-- New route cards with proposed metadata; existing route cards with explicit **Current -> Proposed** field comparisons calculated from the primary tables each time the review is loaded. Show the timestamp warning beside an affected record. Collapse unchanged fields and keep unchanged linked routes distinguishable from edits.
-- Added/changed crag or sector data and unresolved mapping choices when relevant.
-- Attachment thumbnails/previews/downloads, topo background/raster previews, and the routes represented by each topo. Keep source evidence separate from proposed public attachments.
-- Corrections and target mapping controls, with required fixes shown next to the affected item. Preserve original versus reviewer-corrected values.
-- Approve/reject actions with decision notes, pending state, validation errors, partial-progress/error display, and navigation to the next pending item. History shows the proposal, accepted fields, reviewer, decision time, notes, and resulting IDs. Do not present today's live comparison as an exact historical before/after diff. Bulk approval is optional future UI work.
+1. Audit log: a migration (next free number) that creates `audit_log`, then `npm run typegen`, the `writeAudit` helper, and calls from the crag editor, the crag create and position actions, and `/api/v1/topos`. It doesn't depend on submissions, so it's useful for admin edits right away.
+2. Migration that drops `topo_submission` and creates `submission`. Apply it locally, run `npm run typegen`, and update user deletion in `users._index.tsx` and its test.
+3. Payload validation, the intake endpoint, and the status GET.
+4. Approve and reject, including audit rows.
+5. Review page.
+6. Conflict warnings.
+7. TopoBuilder (`../topobuilder`): send the new payload and read back the created IDs. The payload includes linked routes by ID, edits as changed fields only, `baseUpdatedAt`, and topo images and annotations. Ship this together with step 3.
+8. Restrict `/api/v1/topos` writes to admin/super, and update `docs/topo-sync-api.md` and `docs/route-sync-api.md`.
+9. Issues tab.
 
-Human submissions emphasize contributor context and topo imagery. AI submissions emphasize document provenance and supporting evidence, using the same diff and approval components. Do not build AI model controls or require artificial confidence scores.
+## Tests
 
-### 2C. Integrate issue reports
+Focused Vitest tests using `app/test/helpers.ts`:
 
-Query only reports whose current status is `In Moderation`. Reuse issue models, attachment components, mutation services, and audit history. Present route/location, description, taxonomy, affected bolts, safety flag, attachments, and report/status history. Every existing moderated report is eligible; no issue backfill or separate review-state table is necessary.
+- intake rejects unknown fields, bad refs, missing files, and missing edit targets;
+- approving a crag → sector → route → topo submission creates every record with the right parents;
+- an edit changes only its own fields;
+- a failed approval stays pending, and approving again doesn't duplicate creates;
+- both conflict types are detected;
+- crag editor edits write audit rows containing only the changed columns, with the editor as author and no reviewer, and deletes store the whole row;
+- approvals and rejections write one audit row per change, with the submitter as author and the deciding admin as reviewer;
+- only admin/super can approve, and members can't write through `/api/v1/topos`.
 
-Offer edits, accept to `Reported`, and archive through the existing mutation services, preserving approval/archival actor metadata and audit logging. Remove decided reports from the queue after normal action revalidation; no stale-content guard or concurrency mechanism is required. Reports already public or completed do not enter this queue. Repair actions such as completion remain in `/issues/manage`; include a link to that workflow and its history. Preserve current automatic publication and member workflows.
-
-Keep `/issues/manage` available, especially for member repair workflows. Extract shared pieces rather than maintaining a second copy of its moderation logic. The existing modal posts to its current route; adapt its action target when reused.
-
-**Phase 2 acceptance:** an admin can review and decide a complete TopoBuilder submission and an issue report from one page, understand each proposed field change, inspect attachments, and find decision history. Tabs stay separate and AI has a ready empty queue.
-
-## Phase 3: conflict detection and resolution
-
-Use the target identities, proposed fields, and timestamps introduced in phase 1. Compare pending proposals with the current primary records and with other pending proposals across human and AI sources, even though their queues remain separate. Do not add saved originals or a three-way merge model.
-
-For each explicitly proposed field, compare current and proposed values, and the corresponding fields in other pending proposals:
-
-- Different fields changed on the same route: compatible if structural constraints permit both.
-- Same field changed to the same value: compatible/already satisfied.
-- Same field changed to different values: requires resolution.
-- Primary record newer than the last-seen timestamp or submission time: show the advisory stale-change warning. It does not prove a particular field was changed incompatibly.
-- Missing/deleted targets, incompatible hierarchy changes, duplicate route creation, and incompatible topo/link changes: explicit structural conflicts.
-
-Add conflict counts and a warning on the affected submission/route/field. Show **Current | This proposal | Other proposal**, with links to the other submissions and their sources. Show relevant record/submission timestamps for context. Cross-source conflicts are visible without combining the queues.
-
-Allow keeping the current value, choosing the proposal, or entering a corrected value. Allow mapping a duplicate create to an existing route and rejecting conflicting portions, respecting dependent topo and attachment links. Define an explicit partially-approved outcome with item decisions and skipped-change reasons so history and client status remain truthful.
-
-Resolve each submission independently; do not introduce a bulk merge of submissions. Store resolution choices and reviewer rationale separately from original proposals. Recalculate conflicts when opening an affected submission after a decision, using ordinary request/revalidation behavior. Do not introduce live monitoring, revision locks, or atomic coordination across submissions; reassess those only if actual usage warrants them.
-
-**Phase 3 acceptance:** compatible patches preserve unrelated fields, competing values are highlighted for a reviewer to decide, and stale proposals have a timestamp warning. Decisions and chosen proposal values remain recorded without storing original route copies. Humans and AI use the same comparison rules.
-
-## Verification and delivery
-
-Use focused Vitest tests and `app/test/helpers.ts` for intake, mapping/diffs, individual approvals, permissions, issue review, and route actions. Use existing SQLite integration-test conventions for schema replacement, foreign keys, hierarchy/search/timestamp triggers, and the small transactions actually used. Validate those operations against local D1 where its behavior differs from the installed mocks or SQLite driver.
-
-Meaningful regression cases include live diffs reflecting primary-table updates, advisory timestamp warnings with and without a last-seen timestamp, omitted versus cleared values, renamed routes, same-name routes in different sectors, shared route references across topos, linked catalog routes, route-only submissions, ambiguous mapping, invalid payloads, ordinary retries, failed upload/write with accurate partial progress, already-decided submissions, issue filtering to `In Moderation`, and appropriate account-deletion handling. Do not add legacy backfill, stored-baseline reconstruction, mid-review arrival, or concurrent approval tests. Phase 3 adds field-level and structural conflict cases.
-
-After each implementation slice, run `npm run verify` in tabvar using the pinned Node/npm versions. Run `npm run build` for API/UI/runtime integration changes. In TopoBuilder run typecheck and Jest; run its Playwright web checks for changed UI or web behavior. Inspect the final admin UI at desktop and narrow widths with empty, pending, error, and reviewed states.
-
-Deliver the new submission schema and contract together with the TopoBuilder producer changes. Publish the review UI after the shared services are tested. Add conflict tools after phases 1-2 work end to end. Update the submission, topo sync, route sync, and issue sync documentation as their contracts change. Production migration/deployment is a separate approved step.
+Run `npm run verify` after each step, and run `npm run build` for the API and UI changes.
