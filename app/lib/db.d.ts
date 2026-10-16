@@ -46,6 +46,23 @@ export interface AttachmentAuditLog {
   user_role: string | null;
 }
 
+export interface AuditLog {
+  action: string;
+  author_name: string | null;
+  author_uid: string | null;
+  changes: string;
+  created_at: Generated<string>;
+  decision: string | null;
+  entity: string;
+  entity_id: number | null;
+  id: Generated<number>;
+  ref: string | null;
+  reviewer_name: string | null;
+  reviewer_uid: string | null;
+  source: string;
+  submission_id: string | null;
+}
+
 export interface AuthToken {
   attempts: Generated<number>;
   code_hash: string;
@@ -428,6 +445,7 @@ export interface DB {
   _cf_METADATA: _CfMETADATA;
   api_token: ApiToken;
   attachment_audit_log: AttachmentAuditLog;
+  audit_log: AuditLog;
   auth_token: AuthToken;
   campaign: Campaign;
   campaign_candidate: CampaignCandidate;

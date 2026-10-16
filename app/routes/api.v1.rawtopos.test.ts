@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DirectWrite } from "~/lib/audit.server";
 import {
   createContext,
   createFormRequest,
@@ -14,10 +15,17 @@ const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
   requireApiTokenUser: vi.fn(),
   uploadFileToR2: vi.fn(),
+  auditedWrite: vi.fn(async (_context: unknown, change: DirectWrite<unknown>) => change.write()),
+  auditCreatedRows: vi.fn(),
 }));
 
 vi.mock("~/lib/db", () => ({
   getDB: mocks.getDB,
+}));
+
+vi.mock("~/lib/audit.server", () => ({
+  auditedWrite: mocks.auditedWrite,
+  auditCreatedRows: mocks.auditCreatedRows,
 }));
 
 vi.mock("~/lib/s3.server", async (importOriginal) => ({
@@ -216,6 +224,7 @@ describe("api.v1.topos endpoint", () => {
 
       const db = createMockDb({
         select: [
+          { executeTakeFirst: undefined }, // find existing topo for the audit log
           { executeTakeFirst: undefined }, // check existing
           { executeTakeFirst: { // loadTopoById after save
             id: 10,
@@ -296,6 +305,7 @@ describe("api.v1.topos endpoint", () => {
 
       const db = createMockDb({
         select: [
+          { executeTakeFirst: undefined }, // find existing topo for the audit log
           { executeTakeFirst: undefined }, // check existing topo
           { executeTakeFirst: { // loadTopoById after save
             id: 20,
@@ -343,6 +353,18 @@ describe("api.v1.topos endpoint", () => {
         expect.objectContaining({ routeId: 101, label: "1", routeName: "Existing Route" }),
         expect.objectContaining({ routeId: 999, label: "2", routeName: "Brand New Line" }),
       ]);
+      expect(mocks.auditedWrite).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        author: { uid: "u1", displayName: "Mod" },
+        source: "api",
+        entity: "topo",
+        ids: [],
+      }));
+      expect(mocks.auditCreatedRows).toHaveBeenCalledWith(expect.anything(), {
+        author: { uid: "u1", displayName: "Mod" },
+        source: "api",
+        entity: "route",
+        ids: [999],
+      });
       expect(db.insertInto).toHaveBeenCalledWith("route");
       expect(db.insertInto).toHaveBeenCalledWith("route_topo");
     });
@@ -399,6 +421,7 @@ describe("api.v1.topos endpoint", () => {
 
       const db = createMockDb({
         select: [
+          { executeTakeFirst: undefined }, // find existing topo for the audit log
           { executeTakeFirst: undefined },
           { executeTakeFirst: {
             id: 15,
@@ -458,6 +481,11 @@ describe("api.v1.topos endpoint", () => {
       const body = await readJson(response);
       expect(body.success).toBe(true);
       expect(db.updateTable).toHaveBeenCalledWith("topo");
+      expect(mocks.auditedWrite).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        author: expect.objectContaining({ uid: "u1" }),
+        source: "api",
+        entity: "topo",
+      }));
     });
   });
 });

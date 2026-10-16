@@ -11,6 +11,7 @@ import { getAuthenticator } from "~/lib/auth.server";
 import { IconMapPinPlus, IconEdit } from "@tabler/icons-react";
 import { useMapboxContext } from "~/contexts/MapboxContext";
 import { slugifyUnique } from "~/lib/slug";
+import { auditedWrite } from "~/lib/audit.server";
 
 const mapboxgl = mapboxglNamespace.default;
 
@@ -37,17 +38,24 @@ export const action: ActionFunction = async ({ context, request }) => {
 
       const db = getDB(context);
       const slug = await slugifyUnique(db, name);
-      const newCrag = await db
-        .insertInto('crag')
-        .values({
-          name,
-          slug,
-          latitude: null,
-          longitude: null,
-          created_at: new Date().toISOString()
-        })
-        .returning(['id', 'name', 'slug', 'latitude', 'longitude'])
-        .executeTakeFirst();
+      const newCrag = await auditedWrite(context, {
+        author: user,
+        source: "web",
+        entity: "crag",
+        ids: [],
+        write: () => db
+          .insertInto('crag')
+          .values({
+            name,
+            slug,
+            latitude: null,
+            longitude: null,
+            created_at: new Date().toISOString()
+          })
+          .returning(['id', 'name', 'slug', 'latitude', 'longitude'])
+          .executeTakeFirst(),
+        createdIds: (crag) => crag ? [crag.id] : [],
+      });
 
       return data({ success: true, crag: newCrag });
     }
@@ -62,14 +70,20 @@ export const action: ActionFunction = async ({ context, request }) => {
       }
 
       const db = getDB(context);
-      await db
-        .updateTable('crag')
-        .set({
-          latitude: Number(latitude),
-          longitude: Number(longitude)
-        })
-        .where('id', '=', Number(cragId))
-        .execute();
+      await auditedWrite(context, {
+        author: user,
+        source: "web",
+        entity: "crag",
+        ids: [Number(cragId)],
+        write: () => db
+          .updateTable('crag')
+          .set({
+            latitude: Number(latitude),
+            longitude: Number(longitude)
+          })
+          .where('id', '=', Number(cragId))
+          .execute(),
+      });
 
       return data({ success: true });
     }

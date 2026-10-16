@@ -5,6 +5,7 @@ import {
   jsonResponse,
   requireApiTokenUser,
 } from "~/lib/apiAuth.server";
+import { auditCreatedRows, auditedWrite } from "~/lib/audit.server";
 import {
   deleteTopo,
   loadTopoById,
@@ -60,7 +61,14 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     if (!idOrUuid) {
       return apiError("bad_request", 400, "Topo id or uuid is required for deletion.", headers);
     }
-    const success = await deleteTopo(context, idOrUuid);
+    const existing = await loadTopoById(context, idOrUuid);
+    const success = await auditedWrite(context, {
+      author: tokenUser,
+      source: "api",
+      entity: "topo",
+      ids: existing ? [existing.id] : [],
+      write: () => deleteTopo(context, idOrUuid),
+    });
     return jsonResponse({ success }, { headers });
   }
 
@@ -121,12 +129,35 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
 
     const parsedPayload = parseSaveRawTopoPayload(payload);
 
-    const topo = await saveRawTopo(context, {
-      uid: tokenUser.uid,
-      backgroundFile,
-      rasterFile,
-      payload: parsedPayload,
+    // saveRawTopo matches an existing topo by id first, then uuid.
+    const existing = (parsedPayload.id !== undefined ? await loadTopoById(context, parsedPayload.id) : null)
+      ?? (parsedPayload.uuid ? await loadTopoById(context, parsedPayload.uuid) : null);
+    const author = { uid: tokenUser.uid, displayName: tokenUser.displayName };
+
+    const topo = await auditedWrite(context, {
+      author,
+      source: "api",
+      entity: "topo",
+      ids: existing ? [existing.id] : [],
+      write: () => saveRawTopo(context, {
+        uid: tokenUser.uid,
+        backgroundFile,
+        rasterFile,
+        payload: parsedPayload,
+      }),
+      createdIds: (saved) => [saved.id],
     });
+
+    // Route entries without a routeId were created by saveRawTopo.
+    if (parsedPayload.routes) {
+      const linkedRouteIds = new Set(parsedPayload.routes.map((route) => route.routeId));
+      await auditCreatedRows(context, {
+        author,
+        source: "api",
+        entity: "route",
+        ids: topo.routes.map((route) => route.routeId).filter((routeId) => !linkedRouteIds.has(routeId)),
+      });
+    }
 
     return jsonResponse({ topo }, { status: 201, headers });
   } catch (error) {

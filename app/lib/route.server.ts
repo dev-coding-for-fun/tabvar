@@ -7,7 +7,11 @@ interface RouteResponse {
     error?: string;
 }
 
-export async function createRoute(context: any, route: Partial<Route>): Promise<RouteResponse> {
+interface CreateRouteResponse extends RouteResponse {
+    id?: number;
+}
+
+export async function createRoute(context: any, route: Partial<Route>): Promise<CreateRouteResponse> {
     try {
         const db = getDB(context);
 
@@ -15,7 +19,7 @@ export async function createRoute(context: any, route: Partial<Route>): Promise<
             return { success: false, error: "Missing required fields" };
         }
 
-        await db.insertInto('route')
+        const created = await db.insertInto('route')
             .values({
                 name: route.name!,
                 sector_id: route.sectorId!,
@@ -28,9 +32,10 @@ export async function createRoute(context: any, route: Partial<Route>): Promise<
                 year: route.year,
                 notes: route.notes
             })
-            .execute();
+            .returning('id')
+            .executeTakeFirstOrThrow();
 
-        return { success: true };
+        return { success: true, id: Number(created.id) };
     } catch (error) {
         return { success: false, error: "Failed to create route" };
     }
@@ -71,14 +76,15 @@ export async function updateRouteOrder(context: any, sectorId: number, routes: {
 
         if (!sectorId || !routes.length) {
             return { success: false, error: "Missing required fields" };
-          }
-        // Update each route's sort order
-        await Promise.all(routes.map(({ id, sortOrder }) =>
-            db.updateTable('route')
-                .set({ sort_order: sortOrder })
-                .where('id', '=', id)
-                .execute()
-        ));
+        }
+        await db.transaction().execute(async (trx) => {
+            for (const { id, sortOrder } of routes) {
+                await trx.updateTable('route')
+                    .set({ sort_order: sortOrder })
+                    .where('id', '=', id)
+                    .execute();
+            }
+        });
 
         return { success: true };
     } catch (error) {

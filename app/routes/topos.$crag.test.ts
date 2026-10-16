@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DirectWrite } from "~/lib/audit.server";
 import {
   createContext,
   createFormRequest,
@@ -23,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   updateRoute: vi.fn(),
   updateRouteOrder: vi.fn(),
   deleteRoute: vi.fn(),
+  auditedWrite: vi.fn(async (_context: unknown, change: DirectWrite<unknown>) => change.write()),
+  auditCreatedRows: vi.fn(),
 }));
 
 vi.mock("~/lib/db", () => ({
@@ -32,6 +35,11 @@ vi.mock("~/lib/db", () => ({
 vi.mock("~/lib/auth.server", () => ({
   getAuthenticator: mocks.getAuthenticator,
   requireUser: mocks.requireUser,
+}));
+
+vi.mock("~/lib/audit.server", () => ({
+  auditedWrite: mocks.auditedWrite,
+  auditCreatedRows: mocks.auditCreatedRows,
 }));
 
 vi.mock("~/lib/crag.server", () => ({
@@ -203,6 +211,12 @@ describe("topos.$crag action", () => {
       params: {},
     }));
     expect(mocks.deleteSector).toHaveBeenCalledWith(expect.anything(), 2);
+
+    const [create, rename, remove] = mocks.auditedWrite.mock.calls.map(([, change]) => change);
+    expect(create).toEqual(expect.objectContaining({ source: "web", entity: "sector", ids: [] }));
+    expect(create.createdIds?.({ success: true, sector: { id: 1 } })).toEqual([1]);
+    expect(rename).toEqual(expect.objectContaining({ entity: "sector", ids: [2] }));
+    expect(remove).toEqual(expect.objectContaining({ entity: "sector", ids: [2] }));
   });
 
   it("delegates route management actions", async () => {
@@ -248,6 +262,37 @@ describe("topos.$crag action", () => {
       params: {},
     }));
     expect(mocks.deleteRoute).toHaveBeenCalledWith(expect.anything(), 3);
+
+    const [create, update, remove] = mocks.auditedWrite.mock.calls.map(([, change]) => change);
+    expect(create).toEqual(expect.objectContaining({
+      author: expect.objectContaining({ uid: "user-1" }),
+      source: "web",
+      entity: "route",
+      ids: [],
+    }));
+    expect(create.createdIds?.({ success: true, id: 9 })).toEqual([9]);
+    expect(update).toEqual(expect.objectContaining({ entity: "route", ids: [3] }));
+    expect(remove).toEqual(expect.objectContaining({ entity: "route", ids: [3] }));
+    expect(update.succeeded?.({ success: false })).toBe(false);
+  });
+
+  it("audits every route in a reorder", async () => {
+    mocks.updateRouteOrder.mockResolvedValue({ success: true });
+
+    await action(createRouteArgs({
+      request: createFormRequest("https://example.com/topos/test-crag", {
+        action: "update_route_order",
+        sectorId: "2",
+        routes: JSON.stringify([{ id: 4, sortOrder: 1 }, { id: 3, sortOrder: 2 }]),
+      }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(mocks.auditedWrite).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      entity: "route",
+      ids: [4, 3],
+    }));
   });
 
   it("updates crag fields and deletes crags", async () => {

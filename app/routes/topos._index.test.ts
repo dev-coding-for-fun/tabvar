@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DirectWrite } from "~/lib/audit.server";
 import {
   createContext,
   createFormRequest,
@@ -14,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
   getAuthenticator: vi.fn(),
   slugifyUnique: vi.fn(),
+  auditedWrite: vi.fn(async (_context: unknown, change: DirectWrite<unknown>) => change.write()),
+  auditCreatedRows: vi.fn(),
 }));
 
 vi.mock("mapbox-gl", () => ({
@@ -30,6 +33,11 @@ vi.mock("~/lib/db", () => ({
 
 vi.mock("~/lib/auth.server", () => ({
   getAuthenticator: mocks.getAuthenticator,
+}));
+
+vi.mock("~/lib/audit.server", () => ({
+  auditedWrite: mocks.auditedWrite,
+  auditCreatedRows: mocks.auditCreatedRows,
 }));
 
 vi.mock("~/lib/slug", () => ({
@@ -135,6 +143,9 @@ describe("topos._index action", () => {
       },
     });
     expect(mocks.slugifyUnique).toHaveBeenCalledWith(db, "New Crag");
+    const audit = mocks.auditedWrite.mock.calls[0][1];
+    expect(audit).toEqual(expect.objectContaining({ source: "web", entity: "crag", ids: [] }));
+    expect(audit.createdIds?.({ id: 5 })).toEqual([5]);
   });
 
   it("updates crag coordinates", async () => {
@@ -161,5 +172,10 @@ describe("topos._index action", () => {
       latitude: 51.1,
       longitude: -114.2,
     });
+    expect(mocks.auditedWrite).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      source: "web",
+      entity: "crag",
+      ids: [5],
+    }));
   });
 });

@@ -26,7 +26,7 @@ describe("route.server helpers", () => {
   });
 
   it("creates a route", async () => {
-    const db = createMockDb({ insert: [{ execute: undefined }] });
+    const db = createMockDb({ insert: [{ executeTakeFirstOrThrow: { id: 42 } }] });
     mocks.getDB.mockReturnValue(db);
 
     await expect(
@@ -37,7 +37,7 @@ describe("route.server helpers", () => {
         climbStyle: "Sport",
         boltCount: 8,
       })
-    ).resolves.toEqual({ success: true });
+    ).resolves.toEqual({ success: true, id: 42 });
 
     expect(db.insertInto).toHaveBeenCalledWith("route");
     expect(db.__queries[0].values).toHaveBeenCalledWith(
@@ -52,7 +52,7 @@ describe("route.server helpers", () => {
   });
 
   it("returns a failure when createRoute DB write fails", async () => {
-    const db = createMockDb({ insert: [{ execute: new Error("write failed") }] });
+    const db = createMockDb({ insert: [{ executeTakeFirstOrThrow: new Error("write failed") }] });
     mocks.getDB.mockReturnValue(db);
 
     await expect(createRoute(createContext(), { sectorId: 1, name: "Bad" })).resolves.toEqual({

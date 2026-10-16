@@ -16,6 +16,7 @@ import { TopoGallery } from "~/components/TopoGallery";
 import { RichTextViewer } from "~/components/RichTextViewer";
 import { ConfiguredRichTextEditor } from "~/components/ConfiguredRichTextEditor";
 import { getAuthenticator, requireUser } from "~/lib/auth.server";
+import { auditedWrite, type AuditEntity } from "~/lib/audit.server";
 import { cragMetaDescription, pageTitle, publicPageMeta } from "~/lib/seo";
 
 // Define a type for action responses
@@ -98,6 +99,21 @@ export const action = async (args: ActionFunctionArgs) => {
   const formData = await request.formData();
   const action = formData.get("action");
 
+  const audited = <T extends ActionResponse>(
+    entity: AuditEntity,
+    ids: number[],
+    write: () => Promise<T>,
+    createdIds?: (result: T) => number[],
+  ) => auditedWrite(context, {
+    author: user,
+    source: "web",
+    entity,
+    ids,
+    write,
+    succeeded: (result) => result.success,
+    createdIds,
+  });
+
   switch (action) {
     case "create_sector": {
       const cragId = formData.get("cragId")?.toString();
@@ -107,7 +123,8 @@ export const action = async (args: ActionFunctionArgs) => {
         return { success: false, error: "Sector must be associated with a crag" };
       }
 
-      return await createSector(context, parseInt(cragId), name);
+      return await audited("sector", [], () => createSector(context, parseInt(cragId), name),
+        (result) => result.sector ? [result.sector.id] : []);
     }
 
     case "update_sector_name": {
@@ -118,7 +135,7 @@ export const action = async (args: ActionFunctionArgs) => {
         return { success: false, error: "Missing required fields" };
       }
 
-      return await updateSectorName(context, parseInt(sectorId), name);
+      return await audited("sector", [parseInt(sectorId)], () => updateSectorName(context, parseInt(sectorId), name));
     }
 
     case "move_sector": {
@@ -130,12 +147,13 @@ export const action = async (args: ActionFunctionArgs) => {
       }
 
       const db = getDB(context);
-      await db.updateTable('sector')
-        .set({ crag_id: parseInt(targetCragId) })
-        .where('id', '=', parseInt(sectorId))
-        .execute();
-
-      return { success: true };
+      return await audited("sector", [parseInt(sectorId)], async () => {
+        await db.updateTable('sector')
+          .set({ crag_id: parseInt(targetCragId) })
+          .where('id', '=', parseInt(sectorId))
+          .execute();
+        return { success: true };
+      });
     }
 
     case "update_crag_name": {
@@ -147,12 +165,13 @@ export const action = async (args: ActionFunctionArgs) => {
       }
 
       const db = getDB(context);
-      await db.updateTable('crag')
-        .set({ name })
-        .where('id', '=', parseInt(cragId))
-        .execute();
-
-      return { success: true };
+      return await audited("crag", [parseInt(cragId)], async () => {
+        await db.updateTable('crag')
+          .set({ name })
+          .where('id', '=', parseInt(cragId))
+          .execute();
+        return { success: true };
+      });
     }
 
     case "update_crag_notes": {
@@ -164,16 +183,18 @@ export const action = async (args: ActionFunctionArgs) => {
       }
 
       const db = getDB(context);
-      try {
-        await db.updateTable('crag')
-          .set({ notes: notes })
-          .where('id', '=', cragId)
-          .executeTakeFirstOrThrow();
-        return { success: true };
-      } catch (error: any) {
-        console.error("Error updating crag notes:", error);
-        return { success: false, error: error.message || "Failed to update crag notes" };
-      }
+      return await audited("crag", [cragId], async () => {
+        try {
+          await db.updateTable('crag')
+            .set({ notes: notes })
+            .where('id', '=', cragId)
+            .executeTakeFirstOrThrow();
+          return { success: true };
+        } catch (error: any) {
+          console.error("Error updating crag notes:", error);
+          return { success: false, error: error.message || "Failed to update crag notes" };
+        }
+      });
     }
 
     case "update_sector_notes": {
@@ -186,12 +207,12 @@ export const action = async (args: ActionFunctionArgs) => {
       if (!sectorId) {
           return { success: false, error: "Sector ID is required" };
       }
-      return await updateSectorNotes(context, sectorId, notes);
+      return await audited("sector", [sectorId], () => updateSectorNotes(context, sectorId, notes));
     }
 
     case "delete_sector": {
       const sectorId = Number(formData.get("sectorId")) ?? null;
-      return await deleteSector(context, sectorId);
+      return await audited("sector", [sectorId], () => deleteSector(context, sectorId));
     }
 
     case "create_route": {
@@ -220,7 +241,8 @@ export const action = async (args: ActionFunctionArgs) => {
         notes
       };
 
-      return await createRoute(context, newRoute);
+      return await audited("route", [], () => createRoute(context, newRoute),
+        (result) => result.id ? [result.id] : []);
     }
 
     case "update_route": {
@@ -249,7 +271,7 @@ export const action = async (args: ActionFunctionArgs) => {
         notes
       };
 
-      return await updateRoute(context, updatedRoute);
+      return await audited("route", [routeId], () => updateRoute(context, updatedRoute));
     }
 
     case "move_route": {
@@ -261,50 +283,55 @@ export const action = async (args: ActionFunctionArgs) => {
       }
 
       const db = getDB(context);
-      try {
-        await db.updateTable('route')
-          .set({ sector_id: destinationSectorId })
-          .where('id', '=', routeId)
-          .executeTakeFirstOrThrow(); // Use executeTakeFirstOrThrow for better error handling if route doesn't exist
-        return { success: true };
-      } catch (error: any) {
-        console.error("Error moving route:", error);
-        return { success: false, error: error.message || "Failed to move route" };
-      }
+      return await audited("route", [routeId], async () => {
+        try {
+          await db.updateTable('route')
+            .set({ sector_id: destinationSectorId })
+            .where('id', '=', routeId)
+            .executeTakeFirstOrThrow(); // Use executeTakeFirstOrThrow for better error handling if route doesn't exist
+          return { success: true };
+        } catch (error: any) {
+          console.error("Error moving route:", error);
+          return { success: false, error: error.message || "Failed to move route" };
+        }
+      });
     }
 
     case "update_route_order": {
       const sectorId = Number(formData.get("sectorId")) ?? null;
-      const routesData = JSON.parse(formData.get("routes")?.toString() ?? "[]");
+      const routesData: { id: number; sortOrder: number }[] = JSON.parse(formData.get("routes")?.toString() ?? "[]");
 
-      return await updateRouteOrder(context, sectorId, routesData);
+      return await audited("route", routesData.map((route) => route.id),
+        () => updateRouteOrder(context, sectorId, routesData));
     }
 
     case "delete_route": {
       const routeId = Number(formData.get("routeId")) ?? null;
 
-      return await deleteRoute(context, routeId);
+      return await audited("route", [routeId], () => deleteRoute(context, routeId));
     }
 
     case "update_sector_order": {
-      const sectorsData = JSON.parse(formData.get("sectors")?.toString() ?? "[]");
+      const sectorsData: { id: number; sortOrder: number }[] = JSON.parse(formData.get("sectors")?.toString() ?? "[]");
       const db = getDB(context);
-      
-      // Update each sector's sort order
-      for (const sector of sectorsData) {
-        await db.updateTable('sector')
-          .set({ sort_order: sector.sortOrder })
-          .where('id', '=', sector.id)
-          .execute();
-      }
-      
-      return { success: true };
+
+      return await audited("sector", sectorsData.map((sector) => sector.id), async () => {
+        await db.transaction().execute(async (trx) => {
+          for (const sector of sectorsData) {
+            await trx.updateTable('sector')
+              .set({ sort_order: sector.sortOrder })
+              .where('id', '=', sector.id)
+              .execute();
+          }
+        });
+        return { success: true };
+      });
     }
 
     case "delete_crag": {
       const cragId = Number(formData.get("cragId")) ?? null;
 
-      const result = await deleteCrag(context, cragId);
+      const result = await audited("crag", [cragId], () => deleteCrag(context, cragId));
       if (!result.success) {
         return new Response(result.error, { status: 400 });
       }
