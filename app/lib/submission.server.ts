@@ -1,6 +1,6 @@
 import type { Kysely } from "kysely";
 import type { AppLoadContext } from "react-router";
-import type { AuditEntity } from "./audit.server";
+import { chunk, MAX_IDS_PER_QUERY, type AuditEntity } from "./audit.server";
 import { IMAGE_TYPES } from "./constants";
 import { getDB } from "./db";
 import type { DB } from "./db.d";
@@ -17,8 +17,6 @@ import { toStoredJson } from "./storedJson";
 const MAX_CHANGES = 500;
 const MAX_TOPO_ROUTES = 200;
 const MAX_REPORTED_ERRORS = 10;
-// D1 allows at most 100 bound parameters per query.
-const MAX_IDS_PER_QUERY = 90;
 const FILE_PLACEHOLDER_PREFIX = "file:";
 
 export type SubmissionEntity = AuditEntity;
@@ -150,14 +148,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
-}
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-  return chunks;
 }
 
 /** Reads a submission from a JSON body, or from a multipart `submission` field plus file parts. */

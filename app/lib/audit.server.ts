@@ -48,11 +48,11 @@ const AUDITED_COLUMNS: Record<AuditEntity, readonly string[]> = {
 };
 
 // D1 allows at most 100 bound parameters per query.
-const MAX_IDS_PER_QUERY = 90;
+export const MAX_IDS_PER_QUERY = 90;
 const AUDIT_COLUMN_COUNT = 12;
 const MAX_ENTRIES_PER_INSERT = Math.floor(100 / AUDIT_COLUMN_COUNT);
 
-function chunk<T>(items: T[], size: number): T[][] {
+export function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let index = 0; index < items.length; index += size) {
     chunks.push(items.slice(index, index + size));
@@ -60,12 +60,11 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-function sameValue(a: unknown, b: unknown) {
-  if (a === b) return true;
-  if (typeof a === "object" && typeof b === "object" && a !== null && b !== null) {
-    return JSON.stringify(a) === JSON.stringify(b);
-  }
-  return false;
+export function sameValue(a: unknown, b: unknown) {
+  const left = a ?? null;
+  const right = b ?? null;
+  if (left === right) return true;
+  return typeof left === "object" && typeof right === "object" && JSON.stringify(left) === JSON.stringify(right);
 }
 
 /** Loads full rows for the given ids, keyed by id. Topos include their route links. */

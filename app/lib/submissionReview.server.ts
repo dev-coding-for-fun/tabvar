@@ -89,44 +89,16 @@ function topoRoutes(change: SubmissionChange, refIds: Map<string, number>) {
 }
 
 async function insertRecord(db: Kysely<DB>, entity: Exclude<SubmissionEntity, "topo">, values: Record<string, unknown>) {
-  switch (entity) {
-    case "crag": {
-      const slug = await slugifyUnique(db, String(values.name));
-      const row = await db.insertInto("crag")
-        .values({ ...values, slug } as Insertable<DB["crag"]>)
-        .returning("id")
-        .executeTakeFirstOrThrow();
-      return Number(row.id);
-    }
-    case "sector": {
-      const row = await db.insertInto("sector")
-        .values(values as Insertable<DB["sector"]>)
-        .returning("id")
-        .executeTakeFirstOrThrow();
-      return Number(row.id);
-    }
-    case "route": {
-      const row = await db.insertInto("route")
-        .values(values as Insertable<DB["route"]>)
-        .returning("id")
-        .executeTakeFirstOrThrow();
-      return Number(row.id);
-    }
-  }
+  const rowValues = entity === "crag" ? { ...values, slug: await slugifyUnique(db, String(values.name)) } : values;
+  const row = await db.insertInto(entity)
+    .values(rowValues as Insertable<DB[typeof entity]>)
+    .returning("id")
+    .executeTakeFirstOrThrow();
+  return Number(row.id);
 }
 
 async function updateRecord(db: Kysely<DB>, entity: Exclude<SubmissionEntity, "topo">, id: number, values: Record<string, unknown>) {
-  switch (entity) {
-    case "crag":
-      await db.updateTable("crag").set(values as Updateable<DB["crag"]>).where("id", "=", id).execute();
-      return;
-    case "sector":
-      await db.updateTable("sector").set(values as Updateable<DB["sector"]>).where("id", "=", id).execute();
-      return;
-    case "route":
-      await db.updateTable("route").set(values as Updateable<DB["route"]>).where("id", "=", id).execute();
-      return;
-  }
+  await db.updateTable(entity).set(values as Updateable<DB[typeof entity]>).where("id", "=", id).execute();
 }
 
 async function saveTopo(
@@ -202,15 +174,13 @@ export async function approveSubmission(
   }
 
   const refIds = new Map<string, number>();
-  for (const change of submission.payload.changes) {
-    if (change.op === "create" && change.ref && change.id) {
-      refIds.set(change.ref, change.id);
-    }
-  }
 
   try {
     for (const change of submission.payload.changes) {
-      if (change.applied) continue;
+      if (change.applied) {
+        if (change.ref && change.id) refIds.set(change.ref, change.id);
+        continue;
+      }
 
       const applied = await applyChange(context, db, submission, change, refIds);
       if (change.op === "create") {

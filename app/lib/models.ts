@@ -217,19 +217,6 @@ export function topoToAttachment(topo: Topo): TopoAttachment {
     };
 }
 
-export interface TopoSubmission {
-    id: string;
-    uid: string;
-    client: string;
-    status: string;
-    kind: string;
-    payload: string;
-    createdAt?: string | null;
-    reviewedByUid?: string | null;
-    reviewedAt?: string | null;
-    reviewNotes?: string | null;
-}
-
 export interface TopoAnnotationDocument {
     version: number;
     items: unknown[];

@@ -1,5 +1,5 @@
 import type { Kysely } from "kysely";
-import { loadAuditRows } from "./audit.server";
+import { loadAuditRows, sameValue } from "./audit.server";
 import type { DB } from "./db.d";
 import {
   SUBMISSION_FIELDS,
@@ -96,13 +96,6 @@ export function countChanges(payload: SubmissionPayload): ChangeCounts {
   };
 }
 
-function sameValue(a: unknown, b: unknown) {
-  const left = a ?? null;
-  const right = b ?? null;
-  if (left === right) return true;
-  return typeof left === "object" && typeof right === "object" && JSON.stringify(left) === JSON.stringify(right);
-}
-
 function rowName(row: Row | undefined) {
   return typeof row?.name === "string" ? row.name : null;
 }
@@ -190,6 +183,11 @@ class ViewBuilder {
   change(change: SubmissionChange, index: number): ChangeView {
     const base = { index, entity: change.entity, op: change.op, ref: change.ref ?? null, id: change.id ?? null };
     const fieldNames = Object.keys(change.fields);
+    const proposedFields = () => fieldNames.map((field) => ({
+      name: field,
+      label: fieldLabel(field),
+      proposed: this.display(change.entity, field, change.fields[field]),
+    }));
 
     if (change.op === "create") {
       const name = change.fields.name;
@@ -197,11 +195,7 @@ class ViewBuilder {
         ...base,
         title: `New ${change.entity}${typeof name === "string" ? ` “${name}”` : ""}`,
         location: null,
-        fields: fieldNames.map((field) => ({
-          name: field,
-          label: fieldLabel(field),
-          proposed: this.display(change.entity, field, change.fields[field]),
-        })),
+        fields: proposedFields(),
         unchangedCount: 0,
         missing: false,
       };
@@ -213,11 +207,7 @@ class ViewBuilder {
         ...base,
         title: `Edit ${change.entity} ${change.id}`,
         location: null,
-        fields: fieldNames.map((field) => ({
-          name: field,
-          label: fieldLabel(field),
-          proposed: this.display(change.entity, field, change.fields[field]),
-        })),
+        fields: proposedFields(),
         unchangedCount: 0,
         missing: true,
       };

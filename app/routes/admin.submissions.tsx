@@ -121,7 +121,7 @@ export async function loader(args: LoaderFunctionArgs) {
     }
     : null;
 
-  return data<LoaderData>({ submissions, selected });
+  return { submissions, selected } satisfies LoaderData;
 }
 
 export async function action(args: ActionFunctionArgs) {
@@ -360,13 +360,21 @@ function ChangeCard({ change, conflicts }: { change: ChangeView; conflicts: Chan
   );
 }
 
-function ReviewActions({ id }: { id: string }) {
+function ReviewActions({ id, savedError }: { id: string; savedError: string | null }) {
   const fetcher = useFetcher<ReviewResult>();
   const busy = fetcher.state !== "idle";
   const intent = fetcher.formData?.get("intent");
+  const actionError = !savedError && fetcher.data && !fetcher.data.ok ? fetcher.data.error : null;
 
   return (
-    <Stack gap="xs">
+    <>
+      {savedError ? (
+        <Alert color="red" title="The last approval attempt failed">
+          {savedError} Changes made before the failure stay applied; approving again continues from there.
+        </Alert>
+      ) : actionError ? (
+        <Alert color="red" title="Couldn't complete">{actionError}</Alert>
+      ) : null}
       <fetcher.Form method="post" action={PAGE_PATH}>
         <input type="hidden" name="id" value={id} />
         <Group gap="xs">
@@ -378,10 +386,7 @@ function ReviewActions({ id }: { id: string }) {
           </Button>
         </Group>
       </fetcher.Form>
-      {fetcher.data && !fetcher.data.ok ? (
-        <Alert color="red" title="Couldn't complete">{fetcher.data.error}</Alert>
-      ) : null}
-    </Stack>
+    </>
   );
 }
 
@@ -406,12 +411,7 @@ function SubmissionDetail({ submission, changes, conflicts }: {
             </div>
             <SourceBadge source={submission.source} />
           </Group>
-          {submission.error ? (
-            <Alert color="red" title="The last approval attempt failed">
-              {submission.error} Changes made before the failure stay applied; approving again continues from there.
-            </Alert>
-          ) : null}
-          <ReviewActions key={submission.id} id={submission.id} />
+          <ReviewActions key={submission.id} id={submission.id} savedError={submission.error} />
         </Stack>
       </Paper>
 

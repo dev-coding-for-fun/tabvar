@@ -1,4 +1,5 @@
 import type { Kysely } from "kysely";
+import { chunk, MAX_IDS_PER_QUERY } from "./audit.server";
 import type { DB } from "./db.d";
 import { SUBMISSION_FIELDS, type SubmissionEntity, type SubmissionPayload } from "./submission.server";
 import { fieldLabel } from "./submissionView.server";
@@ -12,8 +13,6 @@ import { fieldLabel } from "./submissionView.server";
 // can trail the updated_at a submitter saw. Rows this close to the base time
 // are treated as the submitter's own starting point.
 const AUDIT_SLACK_MS = 5_000;
-// D1 allows at most 100 bound parameters per query.
-const MAX_IDS_PER_QUERY = 90;
 
 export type FieldConflict = {
   field: string;
@@ -51,14 +50,6 @@ export function timestampMs(value: string | null | undefined): number {
   if (!value) return NaN;
   const sqlite = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(value);
   return Date.parse(sqlite ? `${value.replace(" ", "T")}Z` : value);
-}
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-  return chunks;
 }
 
 const LABELS_BY_COLUMN = Object.fromEntries(
