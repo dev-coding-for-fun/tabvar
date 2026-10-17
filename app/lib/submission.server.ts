@@ -120,7 +120,7 @@ export const SUBMISSION_FIELDS: Record<SubmissionEntity, Record<string, FieldSpe
     sectorId: { column: "sector_id", kind: "optionalParent", parent: "sector" },
     latitude: number("latitude"),
     longitude: number("longitude"),
-    status: text("status"),
+    status: { column: "status", kind: "requiredText" },
     annotations: { column: "annotations_json", kind: "annotations" },
     background: { column: "background_image_url", kind: "file" },
     raster: { column: "raster_image_url", kind: "file" },

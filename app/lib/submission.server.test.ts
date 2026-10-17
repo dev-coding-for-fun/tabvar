@@ -49,7 +49,7 @@ const fullSubmission = {
         sectorId: "s1",
         background: "file:bg",
         raster: "file:raster",
-        annotations: { version: 1, elements: [] },
+        annotations: { version: 1, items: [] },
         routes: [{ routeId: 100, label: "1" }, { routeId: "r1", label: "2", sortOrder: 2 }],
       },
     },
@@ -133,6 +133,7 @@ describe("submission intake", () => {
     ["an unknown field", { changes: [{ entity: "route", op: "update", id: 100, fields: { grade: "5.9" } }] }, "changes[0].fields.grade is not an editable route field"],
     ["a wrongly typed field", { changes: [{ entity: "route", op: "update", id: 100, fields: { boltCount: "7" } }] }, "boltCount must be an integer or null"],
     ["clearing a required field", { changes: [{ entity: "route", op: "update", id: 100, fields: { name: null } }] }, "name must be a non-empty string"],
+    ["clearing a topo status", { changes: [{ entity: "topo", op: "update", id: 7, fields: { status: null } }] }, "status must be a non-empty string"],
     ["a create missing required fields", { changes: [{ entity: "route", op: "create", fields: { name: "Line" } }] }, "fields.sectorId is required to create a route"],
     ["an empty update", { changes: [{ entity: "route", op: "update", id: 100, fields: {} }] }, "must include at least one field to change"],
     ["a ref to a later create", { changes: [
