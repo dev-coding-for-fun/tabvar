@@ -8,7 +8,7 @@ Proposed data changes wait in a queue table until an admin decides on them. Appr
 
 1. **In:** a client posts a submission, which is a list of creates and edits to crags, sectors, routes, and topos.
 2. **Wait:** it's stored as one row in `submission`. Nothing is published.
-3. **Review:** `/admin/submissions` shows each change. Edits show current → proposed, and conflicts get a warning.
+3. **Review:** `/admin/submissions` shows each change. Edits show current → proposed, and conflicts found in the audit log are flagged.
 4. **Approve:** the changes are written to the main tables in order, each one writes an audit row, and the submission row is deleted. **Reject:** the changes are recorded in the audit log as rejected, and the submission row is deleted.
 
 The `submission` table is only a queue. The [audit log](#audit-log) is the only history.
@@ -55,7 +55,7 @@ An ordered list of changes. Each change creates or edits one record.
   - topo: `uuid`, `name`, `description`, `cragId`, `sectorId`, `latitude`, `longitude`, `status`, `annotations`, `background`, `raster`, `routes`
 - **Edits** carry only the fields being changed. `null` clears a field.
 - **Parent IDs** (`cragId`, `sectorId`, `routeId`) are either an existing numeric ID or the `ref` of an earlier create in the same submission.
-- **`baseUpdatedAt`** is the record's `updatedAt` as the submitter last saw it. It's optional and used only for conflict warnings.
+- **`baseUpdatedAt`** is the record's `updatedAt` as the submitter last saw it. It's optional and used only for [conflict checks](#conflicts).
 - **Files** are multipart parts referenced as `file:<part name>`. Intake stores them in R2 under `submissions/<id>/` and replaces each placeholder with the stored file's URL before saving the payload. From then on, the payload and any audit rows point at real files.
 - **No deletes:** retire a route or topo by setting `status`. Moves and reordering are ordinary edits to `cragId`, `sectorId`, or `sortOrder`. Existing DB triggers keep denormalized names, search, and issue crag IDs in sync.
 
@@ -96,12 +96,21 @@ Each submission is approved or rejected as a whole. To accept part of one, rejec
 
 ## Conflicts
 
-These are checked for each `update` when a submission is opened:
+These are checked for each `update` when a submission is opened. Creates have no existing record, so they aren't checked.
 
-1. **Changed since submitted:** the record's `updated_at` is later than `baseUpdatedAt`, or later than the submission's `created_at` if no `baseUpdatedAt` was sent.
-2. **Overlap:** another queued submission edits the same field on the same record.
+The **base time** is the change's `baseUpdatedAt` (when the submitter last saw the record), or the submission's `created_at` if no `baseUpdatedAt` was sent.
 
-A conflict shows as a warning on that change, with the current value, the proposed value, and a link to any overlapping submission. The reviewer decides what to do; conflicts never block approval and nothing resolves them automatically. `updated_at` also moves when photos or topo links change, so the timestamp check may flag false positives. That's acceptable.
+1. **Field conflict:** the audit log has a change to this record after the base time, and that change touched a field this submission edits. Only applied changes count, meaning direct edits and approved changes. Rejected rows don't count, and neither do rows from this same submission (left by an earlier, partly failed approval). The conflict shows the field, who changed it, when, and its before → after values.
+2. **Overlap:** another queued submission edits the same field on the same record. The conflict links to that submission. Only fields are compared, not values: two submissions proposing the same value are rare and get no special handling.
+3. **Record changed since submitted** (a warning, not a conflict): the record changed after the base time, but not on any field this submission edits. This covers two cases:
+   - The audit log shows changes only to other fields. The warning lists them.
+   - `updated_at` is later than the base time with no audit row to explain it. That can come from the bulk JSON import, Sloper sync, changes made before the audit log existed, or triggers bumping `updated_at` when a photo or topo link changes. The warning says the cause isn't recorded.
+
+   Either way, a record moving underneath a submission is unusual and worth a closer look.
+
+Conflicts and the warning appear together in a conflict section on the affected change's card. Conflicts are marked as conflicts, the warning in a lighter style, and the submission's list entry shows a count. They never block approval and nothing resolves them automatically; the reviewer decides. The live current → proposed diff still shows the values that would actually be replaced.
+
+Compare timestamps in one format, UTC `YYYY-MM-DD HH:MM:SS`. Most rows use that, but some write paths store ISO strings, and `baseUpdatedAt` comes from the sync API. An audit row is written just after the change it records, so its `created_at` can be a second or two later than the `updated_at` the submitter saw. Only count audit rows more than a few seconds after the base time, so the submitter's own starting point isn't flagged.
 
 ## Audit log
 
@@ -158,7 +167,7 @@ Rebuild `/admin/submissions`. Access stays admin/super.
   - Creates list their fields.
   - Edits show current → proposed for the changed fields only, read live from the main tables.
   - Topos show the raster image and the routes they link.
-  - Conflict warnings appear on the affected card.
+  - Conflicts and the record-changed warning appear in a conflict section on the affected card.
 - **Actions:** Approve and Reject. If an approval failed, show its error.
 - **Issues tab (later):** `In Moderation` issues, using the existing actions and components from `/issues/manage`.
 
@@ -173,9 +182,14 @@ These are left out on purpose:
 - bulk approve;
 - deletes;
 - photo attachments from `api.attachments`, which stay as they are;
-- an AI producer.
+- an AI producer;
+- detecting duplicate creates, such as two submissions adding the same route (see [Future: name matching](#future-name-matching)).
 
 Add any of these only when they're actually needed.
+
+## Future: name matching
+
+Phase after this plan: fuzzy name matching to catch creates that duplicate an existing or queued record, such as "Me and My Shadow" vs. "Me & My Shadow" in the same sector. It would flag likely duplicates on the review page. It's deliberately not part of the conflict checks above, so don't add name comparisons there in the meantime.
 
 ## Steps
 
@@ -184,7 +198,7 @@ Add any of these only when they're actually needed.
 3. Payload validation, the intake endpoint (including the swap from file placeholders to URLs), and the status GET.
 4. Approve and reject, including audit rows and deleting the decided row.
 5. Review page.
-6. Conflict warnings.
+6. Conflict checks against the audit log and other queued submissions, shown on the review page.
 7. TopoBuilder (`../topobuilder`): send the new payload and read back the created IDs. The payload includes linked routes by ID, edits as changed fields only, `baseUpdatedAt`, and topo images and annotations. Ship this together with step 3.
 8. Restrict `/api/v1/topos` writes to admin/super, and update `docs/topo-sync-api.md` and `docs/route-sync-api.md`.
 9. Issues tab.
@@ -197,7 +211,10 @@ Focused Vitest tests using `app/test/helpers.ts`:
 - approving a crag → sector → route → topo submission creates every record with the right parents;
 - an edit changes only its own fields;
 - a failed approval stays queued, and approving again doesn't duplicate creates or audit rows;
-- both conflict types are detected;
+- a field conflict is found from an applied audit row after the base time, but not from rejected rows, rows from the same submission, or rows within the few-second slack;
+- an overlap with another queued submission on the same field is found;
+- a record changed only on other fields, or with a newer `updated_at` and no audit row, gets the record-changed warning instead of a conflict;
+- ISO and SQLite timestamps compare correctly;
 - crag editor edits write audit rows containing only the changed columns, with the editor as author and no reviewer, and deletes store the whole row;
 - approvals and rejections write one audit row per change, with the submitter as author and the deciding admin as reviewer, and delete the submission row;
 - after a decision, the status GET reports the outcome and the created IDs from the audit log;
