@@ -57,7 +57,7 @@ Creates a new topo or updates an existing topo if matching `id` or `uuid` is pro
   "status": "Active",
   "annotations": {
     "version": 1,
-    "elements": [...]
+    "items": [...]
   },
   "routes": [
     {
@@ -110,7 +110,7 @@ The API supports submitting both **existing routes** and **new routes** in the `
     "backgroundImageUrl": "https://files.tabvar.org/topos/raw/abc123hash.jpg",
     "rasterImageUrl": "https://files.tabvar.org/topos/raster/def456hash.jpg",
     "status": "Active",
-    "annotations": { "version": 1, "elements": [...] },
+    "annotations": { "version": 1, "items": [...] },
     "createdAt": "2026-09-12 12:00:00",
     "updatedAt": "2026-09-12 12:00:00",
     "routes": [

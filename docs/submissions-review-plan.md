@@ -41,7 +41,7 @@ An ordered list of changes. Each change creates or edits one record.
     { "entity": "route", "op": "update", "id": 456, "baseUpdatedAt": "2026-06-09 10:00:00", "fields": { "boltCount": 7 } },
     { "entity": "topo", "op": "create", "fields": {
       "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "name": "Main Wall Left", "sectorId": "s1",
-      "background": "file:bg", "raster": "file:raster", "annotations": { "version": 1, "elements": [] },
+      "background": "file:bg", "raster": "file:raster", "annotations": { "version": 1, "items": [] },
       "routes": [{ "routeId": 456, "label": "1" }, { "routeId": "r1", "label": "2" }]
     } }
   ]

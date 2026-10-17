@@ -137,7 +137,7 @@ class ViewBuilder {
         return { kind: "image", url: String(value) };
       case "annotations": {
         const document = typeof value === "string" ? JSON.parse(value) : value;
-        const items = Array.isArray(document) ? document : document?.items ?? document?.elements ?? [];
+        const items = Array.isArray(document) ? document : document?.items ?? [];
         return { kind: "annotations", count: Array.isArray(items) ? items.length : 0 };
       }
       case "routes":

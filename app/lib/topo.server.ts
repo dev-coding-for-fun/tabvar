@@ -1,6 +1,7 @@
 import type { AppLoadContext } from "react-router";
 import { getDB } from "./db";
 import { uploadFileToR2 } from "./s3.server";
+import { toStoredJson } from "./storedJson";
 import { formatSqliteTimestamp, serverTimeFromUpdatedRows } from "./topoSync.server";
 import type {
   Topo,
@@ -284,7 +285,7 @@ export async function saveRawTopo(
   const annotationsDoc = normalizeAnnotationDocument(
     payload.annotations ?? (existing ? parseAnnotationsJson(existing.annotations_json) : null),
   );
-  const annotationsJson = JSON.stringify(annotationsDoc);
+  const annotationsJson = toStoredJson(annotationsDoc);
   const status = payload.status ?? existing?.status ?? "Active";
 
   const now = formatSqliteTimestamp();

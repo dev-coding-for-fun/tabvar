@@ -281,7 +281,7 @@ function checkField(
       return;
     }
     case "annotations":
-      if (!isRecord(value) && !Array.isArray(value)) {
+      if (!Array.isArray(value) && !(isRecord(value) && Array.isArray(value.items))) {
         problems.add(`${path} must be an annotation document`);
       }
       return;

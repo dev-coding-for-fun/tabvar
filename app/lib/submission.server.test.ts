@@ -149,6 +149,7 @@ describe("submission intake", () => {
     ] }, 'ref "c1" is already used'],
     ["a missing file part", { changes: [{ entity: "topo", op: "update", id: 7, fields: { raster: "file:nope" } }] }, 'missing file part "nope"'],
     ["a file value that isn't a placeholder", { changes: [{ entity: "topo", op: "update", id: 7, fields: { raster: "https://elsewhere/x.jpg" } }] }, "reference to an uploaded file"],
+    ["an annotation document without items", { changes: [{ entity: "topo", op: "update", id: 7, fields: { annotations: { version: 1 } } }] }, "fields.annotations must be an annotation document"],
     ["a missing update target", { changes: [{ entity: "route", op: "update", id: 999, fields: { name: "X" } }] }, "changes[0].id refers to route 999, which doesn't exist"],
     ["a missing parent", { changes: [{ entity: "route", op: "create", fields: { name: "Line", sectorId: 55 } }] }, "fields.sectorId refers to sector 55"],
     ["a missing linked route", { changes: [{ entity: "topo", op: "update", id: 7, fields: { routes: [{ routeId: 404 }] } }] }, "routes[0].routeId refers to route 404"],
