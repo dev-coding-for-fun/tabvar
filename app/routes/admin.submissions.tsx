@@ -35,6 +35,12 @@ import { privatePageMeta } from "~/lib/seo";
 import type { SubmissionPayload } from "~/lib/submission.server";
 import { approveSubmission, rejectSubmission, type ReviewResult } from "~/lib/submissionReview.server";
 import {
+  countConflicts,
+  findConflicts,
+  type ChangeConflicts,
+  type ConflictCounts,
+} from "~/lib/submissionConflicts.server";
+import {
   countChanges,
   describeSubmissionChanges,
   type ChangeCounts,
@@ -54,12 +60,13 @@ type SubmissionSummary = {
   submitterName: string | null;
   submitterEmail: string | null;
   counts: ChangeCounts;
+  conflictCounts: ConflictCounts;
 };
 
 type LoaderData = {
   error?: string;
   submissions: SubmissionSummary[];
-  selected: { id: string; changes: ChangeView[] } | null;
+  selected: { id: string; changes: ChangeView[]; conflicts: Record<number, ChangeConflicts> } | null;
 };
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Submissions");
@@ -86,13 +93,32 @@ export async function loader(args: LoaderFunctionArgs) {
     .orderBy("submission.created_at", "desc")
     .execute();
 
-  const payloads = new Map(rows.map((row) => [row.id, JSON.parse(row.payload) as SubmissionPayload]));
-  const submissions = rows.map(({ payload: _payload, ...row }) => ({ ...row, counts: countChanges(payloads.get(row.id)!) }));
+  const queued = rows.map((row) => ({
+    id: row.id,
+    createdAt: row.createdAt,
+    submitterName: row.submitterName,
+    payload: JSON.parse(row.payload) as SubmissionPayload,
+  }));
+  // The queue is small, so every submission is checked to show conflict counts in the list.
+  const conflictsById = new Map(await Promise.all(queued.map(async (submission) => [
+    submission.id,
+    await findConflicts(db, submission, queued.filter((other) => other.id !== submission.id)),
+  ] as const)));
+
+  const submissions = rows.map(({ payload: _payload, ...row }, index) => ({
+    ...row,
+    counts: countChanges(queued[index].payload),
+    conflictCounts: countConflicts(conflictsById.get(row.id)!),
+  }));
 
   const selectedId = new URL(args.request.url).searchParams.get("id");
-  const selectedPayload = selectedId ? payloads.get(selectedId) : undefined;
-  const selected = selectedId && selectedPayload
-    ? { id: selectedId, changes: await describeSubmissionChanges(db, selectedPayload) }
+  const selectedSubmission = queued.find((submission) => submission.id === selectedId);
+  const selected = selectedSubmission
+    ? {
+      id: selectedSubmission.id,
+      changes: await describeSubmissionChanges(db, selectedSubmission.payload),
+      conflicts: Object.fromEntries(conflictsById.get(selectedSubmission.id)!),
+    }
     : null;
 
   return data<LoaderData>({ submissions, selected });
@@ -159,10 +185,67 @@ function SubmissionListItem({ submission, active }: { submission: SubmissionSumm
           <Group gap="xs">
             <Text size="xs" c="dimmed">{submission.createdAt} UTC</Text>
             {submission.error ? <Badge size="xs" color="red">approval failed</Badge> : null}
+            <ConflictBadges counts={submission.conflictCounts} />
           </Group>
         </Stack>
       </Paper>
     </UnstyledButton>
+  );
+}
+
+function ConflictBadges({ counts }: { counts: ConflictCounts }) {
+  return (
+    <>
+      {counts.conflicts > 0 ? (
+        <Badge size="xs" color="orange">{counts.conflicts} {counts.conflicts === 1 ? "conflict" : "conflicts"}</Badge>
+      ) : null}
+      {counts.warnings > 0 ? <Badge size="xs" color="yellow" variant="light">record changed</Badge> : null}
+    </>
+  );
+}
+
+function plainValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function ConflictSection({ conflicts }: { conflicts: ChangeConflicts }) {
+  const { fieldConflicts, overlaps, recordChanged } = conflicts;
+
+  return (
+    <Stack gap="xs">
+      {fieldConflicts.length > 0 || overlaps.length > 0 ? (
+        <Alert color="orange" title="Conflicts">
+          <List size="sm" spacing={4}>
+            {fieldConflicts.map((conflict, index) => (
+              <List.Item key={`field-${index}`}>
+                <Text span size="sm" fw={600}>{conflict.label}</Text> changed after the submitter last saw it:{" "}
+                {plainValue(conflict.before)} → {plainValue(conflict.after)}, by {conflict.authorName ?? "an unknown user"}
+                {conflict.reviewerName ? ` (approved by ${conflict.reviewerName})` : ""} at {conflict.at} UTC.
+              </List.Item>
+            ))}
+            {overlaps.map((overlap) => (
+              <List.Item key={`overlap-${overlap.submissionId}`}>
+                {overlap.fields.join(", ")} {overlap.fields.length === 1 ? "is" : "are"} also edited in{" "}
+                <Anchor component={Link} to={`?id=${encodeURIComponent(overlap.submissionId)}`} size="sm">
+                  a submission from {overlap.submitterName ?? "another user"}
+                </Anchor>.
+              </List.Item>
+            ))}
+          </List>
+        </Alert>
+      ) : null}
+      {recordChanged ? (
+        <Alert color="yellow" variant="light" title="Record changed since submitted">
+          <Text size="sm">
+            {recordChanged.kind === "otherFields"
+              ? `Other fields changed after the submitter last saw this record: ${recordChanged.fields.join(", ")}.`
+              : `This record was updated at ${recordChanged.updatedAt} UTC by a change the audit log doesn't record, such as an import or a photo or topo link.`}
+            {" "}It's unusual, so take a closer look.
+          </Text>
+        </Alert>
+      ) : null}
+    </Stack>
   );
 }
 
@@ -205,8 +288,9 @@ function Value({ value }: { value: DisplayValue | undefined }) {
   }
 }
 
-function ChangeCard({ change }: { change: ChangeView }) {
+function ChangeCard({ change, conflicts }: { change: ChangeView; conflicts: ChangeConflicts | undefined }) {
   const isEdit = change.op === "update";
+  const hasConflict = Boolean(conflicts && (conflicts.fieldConflicts.length > 0 || conflicts.overlaps.length > 0));
 
   return (
     <Paper withBorder p="md">
@@ -215,9 +299,12 @@ function ChangeCard({ change }: { change: ChangeView }) {
           <Group gap="xs">
             <Badge color={isEdit ? "blue" : "green"} variant="light">{isEdit ? "Edit" : "New"}</Badge>
             <Text fw={600}>{change.title}</Text>
+            {hasConflict ? <Badge color="orange">Conflict</Badge> : null}
           </Group>
           {change.location ? <Text size="sm" c="dimmed" mt={4}>{change.location}</Text> : null}
         </div>
+
+        {conflicts ? <ConflictSection conflicts={conflicts} /> : null}
 
         {change.missing ? (
           <Alert color="red" title="Record not found">
@@ -298,7 +385,11 @@ function ReviewActions({ id }: { id: string }) {
   );
 }
 
-function SubmissionDetail({ submission, changes }: { submission: SubmissionSummary; changes: ChangeView[] }) {
+function SubmissionDetail({ submission, changes, conflicts }: {
+  submission: SubmissionSummary;
+  changes: ChangeView[];
+  conflicts: Record<number, ChangeConflicts>;
+}) {
   return (
     <Stack gap="md">
       <Anchor component={Link} to={PAGE_PATH} hiddenFrom="md" size="sm">
@@ -324,7 +415,7 @@ function SubmissionDetail({ submission, changes }: { submission: SubmissionSumma
         </Stack>
       </Paper>
 
-      {changes.map((change) => <ChangeCard key={change.index} change={change} />)}
+      {changes.map((change) => <ChangeCard key={change.index} change={change} conflicts={conflicts[change.index]} />)}
     </Stack>
   );
 }
@@ -367,7 +458,7 @@ export default function AdminSubmissions() {
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 8 }}>
                 {selected && selectedSummary ? (
-                  <SubmissionDetail submission={selectedSummary} changes={selected.changes} />
+                  <SubmissionDetail submission={selectedSummary} changes={selected.changes} conflicts={selected.conflicts} />
                 ) : (
                   <Paper withBorder p="md" visibleFrom="md">
                     <Text c="dimmed">Choose a submission to review.</Text>

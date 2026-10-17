@@ -16,6 +16,12 @@ const mocks = vi.hoisted(() => ({
   approveSubmission: vi.fn(),
   rejectSubmission: vi.fn(),
   describeSubmissionChanges: vi.fn(),
+  findConflicts: vi.fn(),
+}));
+
+vi.mock("~/lib/submissionConflicts.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/lib/submissionConflicts.server")>()),
+  findConflicts: mocks.findConflicts,
 }));
 
 vi.mock("~/lib/db", () => ({
@@ -111,6 +117,8 @@ describe("admin.submissions loader", () => {
       }],
     }));
     mocks.describeSubmissionChanges.mockResolvedValue([{ index: 0, title: "Edit route" }]);
+    const conflict = { fieldConflicts: [], overlaps: [], recordChanged: { kind: "unrecorded", updatedAt: "2026-10-16 13:00:00" } };
+    mocks.findConflicts.mockResolvedValue(new Map([[0, conflict]]));
 
     const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/admin/submissions?id=sub-1"),
@@ -119,9 +127,14 @@ describe("admin.submissions loader", () => {
     }));
 
     const body = await readJson(response);
-    expect(body.submissions).toEqual([expect.objectContaining({ id: "sub-1", counts: { creates: 0, edits: 1 } })]);
+    expect(body.submissions).toEqual([expect.objectContaining({
+      id: "sub-1",
+      counts: { creates: 0, edits: 1 },
+      conflictCounts: { conflicts: 0, warnings: 1 },
+    })]);
     expect(body.submissions[0]).not.toHaveProperty("payload");
-    expect(body.selected).toEqual({ id: "sub-1", changes: [{ index: 0, title: "Edit route" }] });
+    expect(body.selected).toEqual({ id: "sub-1", changes: [{ index: 0, title: "Edit route" }], conflicts: { 0: conflict } });
+    expect(mocks.findConflicts).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: "sub-1", payload }), []);
     expect(mocks.describeSubmissionChanges).toHaveBeenCalledWith(expect.anything(), payload);
   });
 

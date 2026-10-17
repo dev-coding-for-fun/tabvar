@@ -82,6 +82,10 @@ const FIELD_LABELS: Record<string, string> = {
 
 const RICH_TEXT_FIELDS = new Set(["notes", "description"]);
 
+export function fieldLabel(field: string) {
+  return FIELD_LABELS[field] ?? field;
+}
+
 type Row = Record<string, unknown>;
 type Rows = Record<SubmissionEntity, Map<number, Row>>;
 
@@ -195,7 +199,7 @@ class ViewBuilder {
         location: null,
         fields: fieldNames.map((field) => ({
           name: field,
-          label: FIELD_LABELS[field] ?? field,
+          label: fieldLabel(field),
           proposed: this.display(change.entity, field, change.fields[field]),
         })),
         unchangedCount: 0,
@@ -211,7 +215,7 @@ class ViewBuilder {
         location: null,
         fields: fieldNames.map((field) => ({
           name: field,
-          label: FIELD_LABELS[field] ?? field,
+          label: fieldLabel(field),
           proposed: this.display(change.entity, field, change.fields[field]),
         })),
         unchangedCount: 0,
@@ -230,7 +234,7 @@ class ViewBuilder {
       }
       fields.push({
         name: field,
-        label: FIELD_LABELS[field] ?? field,
+        label: fieldLabel(field),
         current: this.display(change.entity, field, current),
         proposed: this.display(change.entity, field, proposed),
       });
