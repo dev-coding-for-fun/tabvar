@@ -27,7 +27,7 @@ export function EditorMenu() {
         zIndex: 1000
       }}
     >
-      <Tooltip label="Approve Topos" position="right">
+      <Tooltip label="Review submissions" position="right">
         <ActionIcon
           component={Link}
           to="/admin/submissions"
