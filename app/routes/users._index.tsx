@@ -160,13 +160,9 @@ export const action = async (args: ActionFunctionArgs) => {
                             .where(column, '=', userId)
                             .execute();
                     }
-                    await trx.updateTable('topo_submission')
-                        .set({ reviewed_by_uid: null })
-                        .where('reviewed_by_uid', '=', userId)
-                        .execute();
-
-                    // Submissions are account-owned requests; published topos remain intact.
-                    for (const table of ['signin_event', 'api_token', 'topobuilder_connect_ticket', 'vote', 'topo_submission'] as const) {
+                    // Queued submissions are account-owned requests. Published data and the
+                    // audit log, which records decided submissions, remain intact.
+                    for (const table of ['signin_event', 'api_token', 'topobuilder_connect_ticket', 'vote', 'submission'] as const) {
                         await trx.deleteFrom(table)
                             .where('uid', '=', userId)
                             .execute();

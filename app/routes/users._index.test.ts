@@ -46,7 +46,8 @@ describe("user deletion with SQLite foreign keys", () => {
     for (const migration of [
       "0002_initial_setup.sql", "0028_add_issue_audit_log.sql",
       "0053_add_goldencrowbar.sql", "0056_add_topobuilder_auth.sql",
-      "0057_add_topo_submission.sql", "0061_add_user_tags.sql", "0062_add_raw_topos.sql",
+      "0061_add_user_tags.sql", "0062_add_raw_topos.sql", "0070_add_audit_log.sql",
+      "0071_replace_topo_submission.sql",
     ]) {
       sqlite.exec(readFileSync(resolve("migrations", migration), "utf8"));
     }
@@ -66,10 +67,11 @@ describe("user deletion with SQLite foreign keys", () => {
       INSERT INTO campaign (id, name, end_date) VALUES (1, 'Test campaign', '2099-01-01');
       INSERT INTO campaign_candidate (id, campaign_id, name) VALUES (1, 1, 'Test candidate');
       INSERT INTO vote (campaign_id, uid, campaign_candidate_id) VALUES (1, 'target', 1), (1, 'other', 1);
-      INSERT INTO topo_submission (id, uid, client, kind, payload, reviewed_by_uid)
-        VALUES ('owned', 'target', 'test', 'topo', '{}', 'other'),
-               ('reviewed', 'other', 'test', 'topo', '{}', 'target'),
-               ('unrelated', 'other', 'test', 'topo', '{}', 'other');
+      INSERT INTO submission (id, uid, source, payload)
+        VALUES ('owned', 'target', 'test', '{}'),
+               ('unrelated', 'other', 'test', '{}');
+      INSERT INTO audit_log (author_uid, author_name, reviewer_uid, source, entity, entity_id, action, changes)
+        VALUES ('target', 'Former User', 'other', 'test', 'route', 1, 'update', '{}');
       INSERT INTO topo (uuid, name, background_image_url, raster_image_url) VALUES ('published', 'Published topo', 'bg.png', 'topo.png');
       INSERT INTO user_tag (id, name) VALUES (1, 'Test tag');
       INSERT INTO user_tag_assignment (uid, tag_id, assigned_by_uid) VALUES ('target', 1, 'other'), ('other', 1, 'target');
@@ -103,10 +105,8 @@ describe("user deletion with SQLite foreign keys", () => {
       { id: 1, reported_by_uid: null, approved_by_uid: "other", archived_by_uid: null, claimed_by_uid: null },
       { id: 2, reported_by_uid: "other", approved_by_uid: null, archived_by_uid: "other", claimed_by_uid: "other" },
     ]);
-    expect(await db.selectFrom("topo_submission").select(["id", "uid", "reviewed_by_uid"]).orderBy("id").execute()).toEqual([
-      { id: "reviewed", uid: "other", reviewed_by_uid: null },
-      { id: "unrelated", uid: "other", reviewed_by_uid: "other" },
-    ]);
+    expect(await db.selectFrom("submission").select(["id", "uid"]).execute()).toEqual([{ id: "unrelated", uid: "other" }]);
+    expect(await db.selectFrom("audit_log").select(["author_uid", "author_name"]).execute()).toEqual([{ author_uid: "target", author_name: "Former User" }]);
     expect(await db.selectFrom("topo").select("uuid").execute()).toEqual([{ uuid: "published" }]);
     expect(await db.selectFrom("issue_audit_log").select(["uid", "user_display_name"]).execute()).toEqual([{ uid: "target", user_display_name: "Former User" }]);
     expect(await db.selectFrom("user_tag_assignment").select(["uid", "assigned_by_uid"]).execute()).toEqual([{ uid: "other", assigned_by_uid: null }]);
@@ -120,11 +120,10 @@ describe("user deletion with SQLite foreign keys", () => {
     await expect(deleteTarget()).rejects.toThrow("Deletion blocked");
 
     expect(await db.selectFrom("user").select("uid").where("uid", "=", "target").executeTakeFirst()).toEqual({ uid: "target" });
-    for (const table of ["signin_event", "api_token", "topobuilder_connect_ticket", "vote", "topo_submission"] as const) {
+    for (const table of ["signin_event", "api_token", "topobuilder_connect_ticket", "vote", "submission"] as const) {
       expect(await db.selectFrom(table).select("uid").where("uid", "=", "target").execute()).toEqual([{ uid: "target" }]);
     }
     expect(await db.selectFrom("issue").select(["reported_by_uid", "claimed_by_uid"]).where("id", "=", 1).executeTakeFirst()).toEqual({ reported_by_uid: "target", claimed_by_uid: "target" });
-    expect(await db.selectFrom("topo_submission").select("reviewed_by_uid").where("id", "=", "reviewed").executeTakeFirst()).toEqual({ reviewed_by_uid: "target" });
   });
 });
 
@@ -262,7 +261,7 @@ describe("users._index action", () => {
     expect(db.deleteFrom).toHaveBeenCalledWith("api_token");
     expect(db.deleteFrom).toHaveBeenCalledWith("topobuilder_connect_ticket");
     expect(db.deleteFrom).toHaveBeenCalledWith("vote");
-    expect(db.deleteFrom).toHaveBeenCalledWith("topo_submission");
+    expect(db.deleteFrom).toHaveBeenCalledWith("submission");
     expect(db.deleteFrom).toHaveBeenCalledWith("user");
     expect(db.transaction).toHaveBeenCalledOnce();
     for (const query of db.__queries) {

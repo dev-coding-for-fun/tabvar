@@ -9,10 +9,9 @@ import { privatePageMeta } from "~/lib/seo";
 type SubmissionRow = {
   id: string;
   uid: string;
-  client: string;
-  status: string;
-  kind: string;
+  source: string;
   payload: string;
+  error: string | null;
   createdAt: string;
   submitterName: string | null;
   submitterEmail: string | null;
@@ -31,7 +30,7 @@ function prettyPayload(payload: string) {
   }
 }
 
-export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Topo submissions");
+export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Submissions");
 
 export async function loader(args: LoaderFunctionArgs) {
   const user = await requireUser(args);
@@ -40,20 +39,19 @@ export async function loader(args: LoaderFunctionArgs) {
   }
 
   const db = getDB(args.context);
-  const submissions = await db.selectFrom("topo_submission")
-    .leftJoin("user", "topo_submission.uid", "user.uid")
+  const submissions = await db.selectFrom("submission")
+    .leftJoin("user", "submission.uid", "user.uid")
     .select([
-      "topo_submission.id",
-      "topo_submission.uid",
-      "topo_submission.client",
-      "topo_submission.status",
-      "topo_submission.kind",
-      "topo_submission.payload",
-      "topo_submission.created_at as createdAt",
+      "submission.id",
+      "submission.uid",
+      "submission.source",
+      "submission.payload",
+      "submission.error",
+      "submission.created_at as createdAt",
       "user.display_name as submitterName",
       "user.email as submitterEmail",
     ])
-    .orderBy("topo_submission.created_at", "desc")
+    .orderBy("submission.created_at", "desc")
     .execute();
 
   return data<LoaderData>({ submissions });
@@ -67,9 +65,9 @@ export default function AdminSubmissions() {
       <Container size="100%" py="xl">
         <Stack gap="lg">
           <div>
-            <Title order={2}>Topo Submissions</Title>
+            <Title order={2}>Submissions</Title>
             <Text c="dimmed" size="sm">
-              Quarantined TopoBuilder submissions. Approval tooling will be added later.
+              Queued submissions waiting for review. Approval tooling will be added later.
             </Text>
           </div>
 
@@ -81,7 +79,7 @@ export default function AdminSubmissions() {
 
           {submissions.length === 0 ? (
             <Paper withBorder p="md">
-              <Text c="dimmed">No topo submissions are queued.</Text>
+              <Text c="dimmed">No submissions are queued.</Text>
             </Paper>
           ) : (
             <Table.ScrollContainer minWidth={1100}>
@@ -100,14 +98,10 @@ export default function AdminSubmissions() {
                         <Stack gap="xs">
                           <Text fw={600}>{submission.id}</Text>
                           <Group gap="xs">
-                            <Badge>{submission.kind}</Badge>
-                            <Badge color={submission.status === "pending" ? "yellow" : "gray"}>
-                              {submission.status}
-                            </Badge>
+                            <Badge>{submission.source}</Badge>
+                            {submission.error ? <Badge color="red">approval failed</Badge> : null}
                           </Group>
-                          <Text size="sm" c="dimmed">
-                            {submission.client} · {submission.createdAt}
-                          </Text>
+                          <Text size="sm" c="dimmed">{submission.createdAt}</Text>
                         </Stack>
                       </Table.Td>
                       <Table.Td style={{ verticalAlign: "top", minWidth: 220 }}>

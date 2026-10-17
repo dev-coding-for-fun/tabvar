@@ -1,6 +1,7 @@
 import type { Kysely } from "kysely";
 import type { AppLoadContext } from "react-router";
 import { getDB } from "./db";
+import { toStoredJson } from "./storedJson";
 import type { DB } from "./db.d";
 import type { User } from "./models";
 
@@ -154,7 +155,7 @@ async function insertAuditEntries(db: Kysely<DB>, entries: AuditEntry[]) {
       entity: entry.entity,
       entity_id: entry.entityId,
       action: entry.action,
-      changes: JSON.stringify(entry.changes),
+      changes: toStoredJson(entry.changes),
       submission_id: entry.submissionId ?? null,
       ref: entry.ref ?? null,
     })))

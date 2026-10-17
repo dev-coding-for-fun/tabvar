@@ -26,7 +26,8 @@ export type ApiErrorCode =
   | "forbidden"
   | "not_found"
   | "conflict"
-  | "method_not_allowed";
+  | "method_not_allowed"
+  | "server_error";
 
 export type ApiTokenUser = {
   tokenId: string;

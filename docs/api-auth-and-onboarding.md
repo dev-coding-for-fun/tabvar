@@ -199,12 +199,14 @@ All API endpoints return errors in a standardized JSON envelope:
 | Status Code | Error Code (`error`) | Typical Cause |
 | :---: | :--- | :--- |
 | **400** | `bad_request` | Missing required payload field (e.g. missing `routeId` or `issueType`). |
+| **400** | `invalid_submission` | A submission to `/api/topobuilder/submissions` failed validation; `message` lists the problems. |
 | **401** | `invalid_token` | Missing, expired, or revoked Bearer token. |
 | **401** | `invalid_ticket` | Connection ticket expired (older than 5 minutes) or already used. |
 | **403** | `forbidden` | Role lacks permission (e.g. anonymous user attempting to edit or delete). |
 | **404** | `not_found` | Target route ID, crag ID, or issue ID does not exist. |
 | **405** | `method_not_allowed` | Incorrect HTTP method used (e.g. `POST` instead of `GET`). |
 | **409** | `conflict` | **Server-wins conflict**: Incoming `baseUpdatedAt` is older than the server's current record. |
+| **500** | `server_error` | The server couldn't store the request (e.g. a storage failure). Safe to retry. |
 
 ---
 

@@ -319,6 +319,15 @@ export interface SigninEvent {
   uid: string;
 }
 
+export interface Submission {
+  created_at: Generated<string>;
+  error: string | null;
+  id: string;
+  payload: string;
+  source: string;
+  uid: string;
+}
+
 export interface Topo {
   annotations_json: Generated<string>;
   background_image_hash: string | null;
@@ -359,19 +368,6 @@ export interface TopobuilderConnectTicket {
   ticket_hash: string;
   uid: string;
   used_at: string | null;
-}
-
-export interface TopoSubmission {
-  client: string;
-  created_at: Generated<string>;
-  id: string;
-  kind: string;
-  payload: string;
-  review_notes: string | null;
-  reviewed_at: string | null;
-  reviewed_by_uid: string | null;
-  status: Generated<string>;
-  uid: string;
 }
 
 export interface User {
@@ -471,9 +467,9 @@ export interface DB {
   sector: Sector;
   sector_attachment: SectorAttachment;
   signin_event: SigninEvent;
+  submission: Submission;
   topo: Topo;
   topo_attachment: TopoAttachment;
-  topo_submission: TopoSubmission;
   topobuilder_connect_ticket: TopobuilderConnectTicket;
   user: User;
   user_discount_code: UserDiscountCode;
