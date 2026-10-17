@@ -38,6 +38,8 @@ export type SubmissionChange = {
   op: SubmissionOp;
   /** The target of an update. Approval also sets it on a create once the row exists. */
   id?: number;
+  /** Set once approval has applied and audited this change. */
+  applied?: boolean;
   baseUpdatedAt?: string;
   fields: Record<string, unknown>;
 };

@@ -119,10 +119,11 @@ describe("submission review", () => {
       .toEqual({ id: "sub", status: "approved", ids: result.ok ? result.ids : {} });
   });
 
-  it("keeps a failed approval queued with its error, and approving again doesn't repeat creates", async () => {
+  it("keeps a failed approval queued with its error, and approving again doesn't repeat creates or updates", async () => {
     queue("sub", {
       changes: [
         { ref: "c1", entity: "crag", op: "create", fields: { name: "New Crag" } },
+        { entity: "sector", op: "update", id: 10, fields: { name: "Updated Sector" } },
         { entity: "route", op: "update", id: 100, fields: { boltCount: 7 } },
       ],
     });
@@ -132,12 +133,20 @@ describe("submission review", () => {
     const queued = await db.selectFrom("submission").selectAll().executeTakeFirstOrThrow();
     expect(queued.error).toBe("Route is locked");
     const cragId = (await db.selectFrom("crag").select("id").where("name", "=", "New Crag").executeTakeFirstOrThrow()).id;
-    expect(JSON.parse(queued.payload).changes[0].id).toBe(cragId);
+    expect(JSON.parse(queued.payload).changes).toEqual([
+      expect.objectContaining({ ref: "c1", id: cragId, applied: true }),
+      expect.objectContaining({ entity: "sector", id: 10, applied: true }),
+      expect.not.objectContaining({ applied: true }),
+    ]);
 
     sqlite.exec("DROP TRIGGER block_route_update");
     expect(await approveSubmission(createContext(), { id: "sub", reviewer })).toEqual({ ok: true, ids: { c1: cragId } });
     expect(await db.selectFrom("crag").select("id").where("name", "=", "New Crag").execute()).toHaveLength(1);
-    expect((await auditRows()).map((row) => [row.entity, row.action])).toEqual([["crag", "create"], ["route", "update"]]);
+    expect((await auditRows()).map((row) => [row.entity, row.action])).toEqual([
+      ["crag", "create"],
+      ["sector", "update"],
+      ["route", "update"],
+    ]);
     expect(await db.selectFrom("submission").select("id").execute()).toEqual([]);
   });
 

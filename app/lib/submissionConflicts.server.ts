@@ -123,7 +123,7 @@ export async function findConflicts(
 ): Promise<Map<number, ChangeConflicts>> {
   const targets = new Map<SubmissionEntity, number[]>();
   submission.payload.changes.forEach((change) => {
-    if (change.op !== "update" || !change.id) return;
+    if (change.op !== "update" || !change.id || change.applied) return;
     targets.set(change.entity, [...(targets.get(change.entity) ?? []), change.id]);
   });
 
@@ -131,7 +131,7 @@ export async function findConflicts(
   const result = new Map<number, ChangeConflicts>();
 
   submission.payload.changes.forEach((change, index) => {
-    if (change.op !== "update" || !change.id) return;
+    if (change.op !== "update" || !change.id || change.applied) return;
 
     const baseMs = Number.isNaN(timestampMs(change.baseUpdatedAt))
       ? timestampMs(submission.createdAt)

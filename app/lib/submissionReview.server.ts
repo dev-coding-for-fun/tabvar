@@ -210,17 +210,12 @@ export async function approveSubmission(
 
   try {
     for (const change of submission.payload.changes) {
-      if (change.op === "create" && change.id) continue;
+      if (change.applied) continue;
 
       const applied = await applyChange(context, db, submission, change, refIds);
       if (change.op === "create") {
         change.id = applied.id;
         if (change.ref) refIds.set(change.ref, applied.id);
-        // Saved right away so a later failure can't lead to this record being created twice.
-        await db.updateTable("submission")
-          .set({ payload: toStoredJson(submission.payload) })
-          .where("id", "=", id)
-          .execute();
       }
 
       // Written even when nothing changed, so every approved change has a row and the
@@ -237,11 +232,15 @@ export async function approveSubmission(
         submissionId: id,
         ref: change.ref ?? null,
       }]);
+      change.applied = true;
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Approving submission ${id} failed:`, error);
-    await db.updateTable("submission").set({ error: message }).where("id", "=", id).execute();
+    await db.updateTable("submission")
+      .set({ payload: toStoredJson(submission.payload), error: message })
+      .where("id", "=", id)
+      .execute();
     return { ok: false, error: message };
   }
 
@@ -261,7 +260,7 @@ export async function rejectSubmission(
   }
 
   // Changes applied by an earlier, partly failed approval stay applied.
-  const remaining = submission.payload.changes.filter((change) => !(change.op === "create" && change.id));
+  const remaining = submission.payload.changes.filter((change) => !change.applied);
   const entries: AuditEntry[] = [];
   for (const change of remaining) {
     const current = change.op === "update"
