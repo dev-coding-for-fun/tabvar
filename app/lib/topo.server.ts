@@ -212,6 +212,11 @@ export function parseSaveRawTopoPayload(data: unknown): SaveRawTopoPayload {
 }
 
 
+function hashFromUrl(url: string | null): string | null {
+  const match = url?.match(/\/([0-9a-f]{40})(?:\.[a-z0-9]+)?$/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
 export async function saveRawTopo(
   context: AppLoadContext,
   { uid: _uid, backgroundFile, rasterFile, payload }: SaveRawTopoInput,
@@ -239,13 +244,20 @@ export async function saveRawTopo(
       .executeTakeFirst();
   }
 
+  const sameBackground = Boolean(
+    existing && !backgroundFile && (!payload.backgroundUrl || payload.backgroundUrl === existing.background_image_url),
+  );
+  const sameRaster = Boolean(
+    existing && !rasterFile && (!payload.rasterUrl || payload.rasterUrl === existing.raster_image_url),
+  );
+
   let backgroundUrl = payload.backgroundUrl ?? existing?.background_image_url ?? null;
-  let backgroundHash = existing?.background_image_hash ?? null;
+  let backgroundHash = sameBackground ? existing!.background_image_hash : hashFromUrl(backgroundUrl);
   let rasterUrl = payload.rasterUrl ?? existing?.raster_image_url ?? null;
-  let rasterHash = existing?.raster_image_hash ?? null;
-  let imageWidth = payload.imageWidth ?? existing?.image_width ?? null;
-  let imageHeight = payload.imageHeight ?? existing?.image_height ?? null;
-  let imageFileSize = payload.imageFileSize ?? existing?.image_file_size ?? null;
+  let rasterHash = sameRaster ? existing!.raster_image_hash : hashFromUrl(rasterUrl);
+  const imageWidth = payload.imageWidth ?? (sameBackground ? existing?.image_width : null) ?? null;
+  const imageHeight = payload.imageHeight ?? (sameBackground ? existing?.image_height : null) ?? null;
+  let imageFileSize = payload.imageFileSize ?? (sameBackground ? existing?.image_file_size : null) ?? null;
 
   // 1. Upload background file if provided
   if (backgroundFile && backgroundFile.size > 0) {

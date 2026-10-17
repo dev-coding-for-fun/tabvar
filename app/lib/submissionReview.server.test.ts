@@ -182,6 +182,42 @@ describe("submission review", () => {
       .toEqual({ id: "sub", status: "rejected", ids: {} });
   });
 
+  it("updates image hashes and clears stale dimensions when a submission replaces a topo's images", async () => {
+    const newBgHash = "a".repeat(40);
+    const newRasterHash = "b".repeat(40);
+    sqlite.exec(`
+      INSERT INTO topo (
+        id, uuid, name, background_image_url, background_image_hash,
+        raster_image_url, raster_image_hash, image_width, image_height, image_file_size
+      ) VALUES (
+        7, 'topo-7', 'Wall', 'https://topos.example.com/old-bg.jpg', 'old-bg-hash',
+        'https://topos.example.com/old-raster.png', 'old-raster-hash', 1920, 1080, 50000
+      );
+    `);
+    queue("sub", {
+      changes: [{
+        entity: "topo",
+        op: "update",
+        id: 7,
+        fields: {
+          background: `https://topos.example.com/submissions/sub/${newBgHash}.jpg`,
+          raster: `https://topos.example.com/submissions/sub/${newRasterHash}.png`,
+        },
+      }],
+    });
+
+    expect(await approveSubmission(createContext(), { id: "sub", reviewer })).toEqual({ ok: true, ids: {} });
+
+    const topo = await db.selectFrom("topo").selectAll().where("id", "=", 7).executeTakeFirstOrThrow();
+    expect(topo).toEqual(expect.objectContaining({
+      background_image_hash: newBgHash,
+      raster_image_hash: newRasterHash,
+      image_width: null,
+      image_height: null,
+      image_file_size: null,
+    }));
+  });
+
   it("refuses a submission that's already been decided", async () => {
     expect(await approveSubmission(createContext(), { id: "gone", reviewer }))
       .toEqual({ ok: false, error: "This submission has already been decided or doesn't exist." });
