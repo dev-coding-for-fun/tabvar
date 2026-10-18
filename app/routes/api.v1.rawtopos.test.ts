@@ -323,6 +323,30 @@ describe("api.v1.topos endpoint", () => {
       expect((await remove("id=999")).status).toBe(404);
     });
 
+    it("lists more topos than one D1 query allows, each with its routes", async () => {
+      const ids = Array.from({ length: 95 }, (_, index) => 1000 + index);
+      await db.insertInto("topo").values(ids.map((id) => ({
+        id,
+        uuid: `topo-${id}`,
+        name: `Topo ${id}`,
+        background_image_url: "https://topos.example.com/topos/raw/bg.jpg",
+        raster_image_url: "https://topos.example.com/topos/raster/r.jpg",
+      }))).execute();
+      for (const id of ids) {
+        await db.insertInto("route_topo").values({ topo_id: id, route_id: 101, label: "1", sort_order: 1 }).execute();
+      }
+
+      const response = await loader(createRouteArgs({
+        request: createGetRequest("https://example.com/api/v1/topos"),
+        context: createContext(),
+        params: {},
+      })) as Response;
+
+      const { topos } = await readJson(response);
+      expect(topos).toHaveLength(96);
+      expect(topos.every((topo: { routes: unknown[] }) => topo.routes.length === 1)).toBe(true);
+    });
+
     it("returns 204 on OPTIONS preflight", async () => {
       const response = await action(createRouteArgs({
         request: new Request("https://example.com/api/v1/topos", { method: "OPTIONS" }),
