@@ -101,5 +101,16 @@ module.exports = {
         node: true,
       },
     },
+
+    // Playwright: fixtures receive a `use` callback that is not a React hook.
+    {
+      files: ["e2e/**/*.ts", "playwright.config.ts"],
+      env: {
+        node: true,
+      },
+      rules: {
+        "react-hooks/rules-of-hooks": "off",
+      },
+    },
   ],
 };

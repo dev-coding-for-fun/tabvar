@@ -44,6 +44,7 @@ Repository guidance for **demofinder** (also known as **tabvar**).
 | **Storage** | Cloudflare R2 | S3-compatible bucket for topos and issue attachments |
 | **UI** | Mantine v9 | `@mantine/core`, `@mantine/dates`, `@mantine/tiptap`, Tabler Icons, Mapbox GL |
 | **Testing** | Vitest | `happy-dom` environment, fluent Kysely mocks in `app/test/helpers.ts` |
+| **E2E Testing** | Playwright | Persona-based auth via dev-only `POST /e2e/session`; see `docs/e2e-testing.md` |
 | **AI / Moderation** | Google Generative AI | `@google/generative-ai` for automated issue moderation (`moderation.server.ts`) |
 
 ---
@@ -190,6 +191,7 @@ Production migrations are automated in CI during Cloudflare Pages builds (`npm r
 | **Run All Tests** | `npm test` | Runs Vitest once |
 | **Run Specific Test** | `npx vitest run <path-to-test>` | E.g. `npx vitest run app/routes/api.issues.test.ts` |
 | **Run Tests in Watch Mode** | `npm run test:watch` | Vitest interactive watcher |
+| **Run E2E Tests** | `npm run test:e2e` | Playwright against the dev server (`npm run test:e2e:ui` for the UI runner) |
 | **Typecheck** | `npm run typecheck` | Runs `react-router typegen && tsc` |
 | **Lint** | `npm run lint` | ESLint |
 | **Database Codegen** | `npm run typegen` | Runs `wrangler types` and `kysely-codegen` |
@@ -229,6 +231,7 @@ demofinder/
 │   └── app.ts            # Cloudflare Workers entry point for React Router v8
 ├── docs/
 │   └── issue-sync-api.md # Comprehensive spec for the v1 mobile sync API
+├── e2e/                  # Playwright specs; personas and auth fixtures in e2e/support/
 ├── migrations/           # Sequentially numbered D1 SQL migrations (0001_...)
 ├── scripts/              # Build and production migration runners
 ├── mcp_config.example.json # Template for local MCP server definitions (mcp_config.json is gitignored)
@@ -243,6 +246,7 @@ demofinder/
 
 - `.agents/skills/rr7-route-creator/SKILL.md`: consult when adding or refactoring React Router routes, loaders/actions, error boundaries, or Mantine UI.
 - `.agents/skills/test-writing/SKILL.md` and `app/test/helpers.ts`: consult when adding or updating Vitest coverage.
+- `docs/e2e-testing.md`: consult when adding or updating Playwright e2e specs, personas, or permission checks.
 - `.agents/skills/d1-migration/SKILL.md` and existing `migrations/`: consult for D1 schema changes or database type generation.
 - `.agents/skills/issue-sync-api/SKILL.md` and `docs/issue-sync-api.md`: consult for mobile sync, TopoBuilder sync, attachments, or delta sync.
 - `app/routes/api.v1.issues.ts`, `app/routes/api.v1.issues.sync.ts`, and their corresponding `.test.ts` files: reference implementations and coverage for v1 issue sync endpoints.

@@ -18,3 +18,9 @@ sloperdata
 # Local MCP Configuration (may contain auth tokens or local paths)
 mcp_config.json
 .cursor/mcp.json
+
+# Playwright
+/e2e/.auth
+/test-results
+/playwright-report
+/blob-report

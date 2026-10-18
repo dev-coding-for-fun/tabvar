@@ -16,6 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "typegen": "wrangler types && kysely-codegen --out-file app/lib/db.d.ts",
     "verify": "npm run typecheck && npm test",
     "db:list:local": "wrangler d1 migrations list DB --local",
@@ -73,6 +75,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.62.3",
     "@cloudflare/workers-types": "^4.20260426.1",
+    "@playwright/test": "^1.64.1",
     "@react-router/dev": "^8.3.1",
     "@react-router/fs-routes": "^8.3.1",
     "@react-router/node": "^8.3.1",
