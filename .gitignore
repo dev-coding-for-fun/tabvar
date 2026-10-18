@@ -21,6 +21,7 @@ mcp_config.json
 
 # Playwright
 /e2e/.auth
+/.playwright-cli
 /test-results
 /playwright-report
 /blob-report

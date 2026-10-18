@@ -65,6 +65,7 @@ Add an entry to `personas` in `e2e/support/personas.ts`. Tags must already exist
 
 - **`e2e/support/test.ts`** automatically records `pageerror`, `console.error`, and HTTP `>= 500` responses on `page` and `pageAs` contexts, attaching them as `diagnostics` when a test fails.
 - **`e2e/support/agent-reporter.ts`** prints a single summary line when all tests pass, and on failure prints stripped assertion diffs, inline `diagnostics`, and paths to `error-context.md` (the page's ARIA tree snapshot) and `trace.zip` (inspectable via `npx playwright trace open <path>`).
+- **Self-directed browser checks (`npx playwright cli`):** Agents can verify UI changes or extract locators against the live dev server without writing a test by loading any persona's storage state (`npx playwright cli open http://127.0.0.1:5173`, `npx playwright cli state-load e2e/.auth/admin.json`, `npx playwright cli snapshot "main"`, `npx playwright cli close`). See `.agents/skills/e2e-testing/SKILL.md`.
 
 ## Notes
 

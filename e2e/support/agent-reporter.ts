@@ -173,17 +173,6 @@ export class AgentReporter implements Reporter {
       }
     }
 
-    for (const attachment of lastResult.attachments) {
-      if (attachment.name.startsWith("pageAs-") && attachment.body) {
-        const text = attachment.body.toString("utf8").trim();
-        if (text) {
-          const preview = text.split("\n").slice(0, 20).join("\n");
-          out.push(`  ${attachment.name}:`);
-          out.push(this.indent(preview, "    "));
-        }
-      }
-    }
-
     const errorContext = lastResult.attachments.find((a) => a.name === "error-context");
     if (errorContext?.path) {
       out.push(`  Error Context (DOM/ARIA): ${this.relativePath(errorContext.path)}`);

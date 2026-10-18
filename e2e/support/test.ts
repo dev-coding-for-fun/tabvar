@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-// eslint-disable-next-line no-restricted-imports
 import { test as base, expect, type BrowserContext, type Page } from "@playwright/test";
 import { storageStatePath, type Persona } from "./personas";
 
@@ -61,39 +60,20 @@ export const test = base.extend<PersonaFixtures>({
     await use(page);
   },
 
-  pageAs: async ({ browser, baseURL, _diagnostics }, use, testInfo) => {
-    const tracked: { persona: Persona; context: BrowserContext; page: Page }[] = [];
+  pageAs: async ({ browser, baseURL, _diagnostics }, use) => {
+    const contexts: BrowserContext[] = [];
     await use(async (persona) => {
       const context = await browser.newContext({
         baseURL,
         storageState: storageStatePath(persona),
       });
+      contexts.push(context);
       const newPage = await context.newPage();
       _diagnostics(newPage, `pageAs(${persona})`);
-      tracked.push({ persona, context, page: newPage });
       return newPage;
     });
 
-    // If the test failed while driving a `pageAs` page, capture its ARIA snapshot
-    // before closing the context so the failure context isn't lost.
-    if (testInfo.status !== testInfo.expectedStatus && tracked.length > 0) {
-      for (const { persona, page } of tracked) {
-        if (!page.isClosed() && page.url() !== "about:blank") {
-          const snapshot = await page
-            .locator("body")
-            .ariaSnapshot()
-            .catch(() => null);
-          if (snapshot) {
-            await testInfo.attach(`pageAs-${persona}-aria-snapshot`, {
-              body: `# pageAs("${persona}") URL: ${page.url()}\n\n\`\`\`yaml\n${snapshot}\n\`\`\`\n`,
-              contentType: "text/markdown",
-            });
-          }
-        }
-      }
-    }
-
-    await Promise.all(tracked.map(({ context }) => context.close()));
+    await Promise.all(contexts.map((context) => context.close()));
   },
 
   uniqueName: async ({}, use) => {
