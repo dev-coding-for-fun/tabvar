@@ -25,6 +25,7 @@ vi.mock("~/lib/s3.server", () => ({
 import {
   createSubmission,
   getSubmissionStatus,
+  listMySubmissions,
   parseSubmissionRequest,
   SubmissionValidationError,
 } from "./submission.server";
@@ -234,6 +235,60 @@ describe("submission intake", () => {
       expect(await getSubmissionStatus(createContext(), { uid: "submitter", id: "declined" }))
         .toEqual({ id: "declined", status: "rejected", ids: {} });
       expect(await getSubmissionStatus(createContext(), { uid: "someone-else", id: "done" })).toBeNull();
+    });
+  });
+
+  describe("my submissions", () => {
+    const change = { entity: "route", op: "update", id: 100, fields: { boltCount: 7 } };
+
+    beforeEach(() => {
+      sqlite.exec(`
+        INSERT INTO submission (id, uid, source, payload, created_at, error) VALUES
+          ('older', 'submitter', 'topobuilder', '${JSON.stringify({ changes: [change] })}', '2026-10-01 09:00:00', NULL),
+          ('newer', 'submitter', 'topobuilder', '${JSON.stringify({ changes: [change] })}', '2026-10-02 09:00:00', 'route 100 is gone'),
+          ('theirs', 'someone-else', 'topobuilder', '{"changes":[]}', '2026-10-02 09:00:00', NULL);
+        INSERT INTO audit_log (author_uid, reviewer_uid, decision, source, entity, entity_id, action, changes, submission_id, ref, created_at) VALUES
+          ('submitter', 'admin', 'approved', 'topobuilder', 'sector', 21, 'create', '{}', 'done', 's1', '2026-10-03 10:00:00'),
+          ('submitter', 'admin', 'approved', 'topobuilder', 'route', 301, 'create', '{}', 'done', 'r1', '2026-10-03 10:00:01'),
+          ('submitter', 'admin', 'rejected', 'topobuilder', 'route', NULL, 'create', '{}', 'declined', 'r1', '2026-10-04 10:00:00'),
+          ('submitter', 'admin', 'approved', 'topobuilder', 'crag', 5, 'create', '{}', 'newer', 'c1', '2026-10-02 10:00:00'),
+          ('someone-else', 'admin', 'approved', 'topobuilder', 'route', 9, 'create', '{}', 'other', 'r1', '2026-10-05 10:00:00');
+      `);
+    });
+
+    it("lists the caller's queued submissions with their changes, and decided ones from the audit log", async () => {
+      const list = await listMySubmissions(createContext(), { uid: "submitter", since: null });
+
+      expect(list.submissions).toEqual([
+        { id: "newer", submitterUid: "submitter", status: "pending", createdAt: "2026-10-02 09:00:00", error: "route 100 is gone", changes: [change] },
+        { id: "older", submitterUid: "submitter", status: "pending", createdAt: "2026-10-01 09:00:00", error: null, changes: [change] },
+        { id: "done", submitterUid: "submitter", status: "approved", decidedAt: "2026-10-03 10:00:01", ids: { s1: 21, r1: 301 } },
+        { id: "declined", submitterUid: "submitter", status: "rejected", decidedAt: "2026-10-04 10:00:00", ids: {} },
+      ]);
+      expect(list.serverTime).toBe("2026-10-04 10:00:00");
+    });
+
+    it("reports decisions since the cursor in full, and always every queued submission", async () => {
+      const list = await listMySubmissions(createContext(), { uid: "submitter", since: "2026-10-03 10:00:01" });
+
+      expect(list.submissions.map((submission) => [submission.id, submission.status])).toEqual([
+        ["newer", "pending"], ["older", "pending"], ["done", "approved"], ["declined", "rejected"],
+      ]);
+      // The cursor fell between this submission's audit rows; its ids are still complete.
+      expect(list.submissions.find((submission) => submission.id === "done")).toMatchObject({ ids: { s1: 21, r1: 301 } });
+    });
+
+    it("returns only queued submissions when nothing was decided since the cursor", async () => {
+      const list = await listMySubmissions(createContext(), { uid: "submitter", since: "2026-10-04 10:00:01" });
+
+      expect(list.submissions.map((submission) => submission.id)).toEqual(["newer", "older"]);
+      expect(list.serverTime).toBe("2026-10-04 10:00:01");
+    });
+
+    it("never includes other users' submissions", async () => {
+      const list = await listMySubmissions(createContext(), { uid: "someone-else", since: null });
+
+      expect(list.submissions.map((submission) => submission.id)).toEqual(["theirs", "other"]);
     });
   });
 });

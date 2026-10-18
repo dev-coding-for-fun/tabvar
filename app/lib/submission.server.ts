@@ -6,6 +6,7 @@ import { getDB } from "./db";
 import type { DB } from "./db.d";
 import { deleteFromR2, uploadFileToR2 } from "./s3.server";
 import { toStoredJson } from "./storedJson";
+import { formatSqliteTimestamp } from "./topoSync.server";
 
 /**
  * Submission intake. A submission is a queued list of proposed creates and edits
@@ -52,6 +53,31 @@ export type SubmissionStatus = {
   error?: string | null;
   /** New record ids by `ref`, once approved. */
   ids?: Record<string, number>;
+};
+
+/** One of the caller's submissions, as listed for the submitting app. */
+export type MySubmission =
+  | {
+    id: string;
+    submitterUid: string;
+    status: "pending";
+    createdAt: string;
+    /** Set when an approval attempt failed; the submission stays queued. */
+    error: string | null;
+    changes: SubmissionChange[];
+  }
+  | {
+    id: string;
+    submitterUid: string;
+    status: "approved" | "rejected";
+    decidedAt: string;
+    /** New record ids by `ref`, for changes that were applied. */
+    ids: Record<string, number>;
+  };
+
+export type MySubmissionList = {
+  submissions: MySubmission[];
+  serverTime: string;
 };
 
 type FieldKind =
@@ -529,7 +555,7 @@ export async function getSubmissionStatus(
   }
 
   const decided = await db.selectFrom("audit_log")
-    .select(["decision", "ref", "entity_id"])
+    .select(["decision", "ref", "entity_id", "created_at"])
     .where("submission_id", "=", id)
     .where("author_uid", "=", uid)
     .execute();
@@ -537,16 +563,90 @@ export async function getSubmissionStatus(
     return null;
   }
 
+  const { status, ids } = summarizeDecision(decided);
+  return { id, status, ids };
+}
+
+type DecisionRow = { decision: string | null; ref: string | null; entity_id: number | null; created_at: string };
+
+/** A decided submission's outcome, from its audit rows. */
+function summarizeDecision(rows: DecisionRow[]) {
   const ids: Record<string, number> = {};
-  for (const row of decided) {
+  let decidedAt = rows[0].created_at;
+  for (const row of rows) {
     if (row.decision === "approved" && row.ref && row.entity_id !== null) {
       ids[row.ref] = row.entity_id;
     }
+    if (row.created_at > decidedAt) decidedAt = row.created_at;
+  }
+  const status: "approved" | "rejected" = rows.some((row) => row.decision === "rejected") ? "rejected" : "approved";
+  return { status, ids, decidedAt };
+}
+
+/**
+ * Lists the caller's own submissions, whatever their role: every queued one with
+ * its changes, and those decided since `since` (all of them when omitted), read
+ * from the audit log. Pass serverTime back as `since` on the next call.
+ */
+export async function listMySubmissions(
+  context: AppLoadContext,
+  { uid, since }: { uid: string; since: string | null },
+): Promise<MySubmissionList> {
+  const db = getDB(context);
+
+  const queued = await db.selectFrom("submission")
+    .select(["id", "created_at", "error", "payload"])
+    .where("uid", "=", uid)
+    .orderBy("created_at", "desc")
+    .execute();
+  const pending: MySubmission[] = queued.map((row) => ({
+    id: row.id,
+    submitterUid: uid,
+    status: "pending",
+    createdAt: row.created_at,
+    error: row.error,
+    changes: (JSON.parse(row.payload) as SubmissionPayload).changes,
+  }));
+  const queuedIds = new Set(queued.map((row) => row.id));
+
+  // The cursor only picks which decisions to report. Each one is then read in full,
+  // so a poll that lands mid-approval can't leave its later report incomplete.
+  const recent = await db.selectFrom("audit_log")
+    .select(["submission_id", "created_at"])
+    .where("author_uid", "=", uid)
+    .where("submission_id", "is not", null)
+    .$if(since !== null, (qb) => qb.where("created_at", ">=", since!))
+    .execute();
+
+  let latest: string | null = null;
+  const decidedIds = new Set<string>();
+  for (const row of recent) {
+    if (!latest || row.created_at > latest) latest = row.created_at;
+    // A queued submission can have audit rows from a partly failed approval; it's still pending.
+    if (!queuedIds.has(row.submission_id!)) decidedIds.add(row.submission_id!);
   }
 
-  return {
+  const rowsBySubmission = new Map<string, DecisionRow[]>();
+  for (const idChunk of chunk([...decidedIds], MAX_IDS_PER_QUERY)) {
+    const rows = await db.selectFrom("audit_log")
+      .select(["submission_id", "decision", "ref", "entity_id", "created_at"])
+      .where("author_uid", "=", uid)
+      .where("submission_id", "in", idChunk)
+      .orderBy("id")
+      .execute();
+    for (const row of rows) {
+      rowsBySubmission.set(row.submission_id!, [...(rowsBySubmission.get(row.submission_id!) ?? []), row]);
+    }
+  }
+
+  const decided: MySubmission[] = [...rowsBySubmission].map(([id, decisionRows]) => ({
     id,
-    status: decided.some((row) => row.decision === "rejected") ? "rejected" : "approved",
-    ids,
+    submitterUid: uid,
+    ...summarizeDecision(decisionRows),
+  }));
+
+  return {
+    submissions: [...pending, ...decided],
+    serverTime: latest ?? since ?? formatSqliteTimestamp(),
   };
 }

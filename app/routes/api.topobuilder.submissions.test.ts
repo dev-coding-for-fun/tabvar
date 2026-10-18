@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   requireApiToken: vi.fn(),
   createSubmission: vi.fn(),
   getSubmissionStatus: vi.fn(),
+  listMySubmissions: vi.fn(),
   parseSubmissionRequest: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ vi.mock("~/lib/submission.server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/lib/submission.server")>()),
   createSubmission: mocks.createSubmission,
   getSubmissionStatus: mocks.getSubmissionStatus,
+  listMySubmissions: mocks.listMySubmissions,
   parseSubmissionRequest: mocks.parseSubmissionRequest,
 }));
 
@@ -94,13 +96,20 @@ describe("api.topobuilder.submissions", () => {
     expect(missing.status).toBe(404);
   });
 
-  it("requires an id to report status", async () => {
+  it("lists the caller's own submissions when no id is given", async () => {
+    const list = { submissions: [{ id: "s-1", status: "pending" }], serverTime: "2026-10-16 12:00:00" };
+    mocks.listMySubmissions.mockResolvedValue(list);
+
     const response = await loader(createRouteArgs({
-      request: createGetRequest("https://example.com/api/topobuilder/submissions"),
+      request: createGetRequest("https://example.com/api/topobuilder/submissions?since=2026-10-15%2000:00:00"),
       context: createContext(),
       params: {},
     }));
 
-    expect(response.status).toBe(400);
+    expect(await readJson(response)).toEqual(list);
+    expect(mocks.listMySubmissions).toHaveBeenCalledWith(expect.anything(), {
+      uid: "submitter",
+      since: "2026-10-15 00:00:00",
+    });
   });
 });

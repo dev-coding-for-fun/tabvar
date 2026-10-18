@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   createSubmission,
   getSubmissionStatus,
+  listMySubmissions,
   parseSubmissionRequest,
   SubmissionValidationError,
 } from "~/lib/submission.server";
@@ -14,13 +15,20 @@ import {
 
 const SOURCE = "topobuilder";
 
+/**
+ * GET without `id` lists the caller's own submissions (whatever their role);
+ * `since` limits decided ones to those since a previous serverTime.
+ * GET with `id` reports on one of the caller's submissions.
+ */
 export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const headers = corsHeaders(request, context);
   const tokenUser = await requireApiToken(request, context, headers);
 
-  const id = new URL(request.url).searchParams.get("id");
+  const params = new URL(request.url).searchParams;
+  const id = params.get("id");
   if (!id) {
-    return apiError("bad_request", 400, "Pass the submission id as ?id=.", headers);
+    const list = await listMySubmissions(context, { uid: tokenUser.uid, since: params.get("since") });
+    return jsonResponse(list, { headers });
   }
 
   const status = await getSubmissionStatus(context, { uid: tokenUser.uid, id });

@@ -215,3 +215,4 @@ All API endpoints return errors in a standardized JSON envelope:
 * [issue-sync-api.md](file:///x:/Documents/GitHub/tabvar/docs/issue-sync-api.md): Full specification for pulling and pushing issues and photo attachments.
 * [route-sync-api.md](file:///x:/Documents/GitHub/tabvar/docs/route-sync-api.md): Specification for pulling crag, sector, and route catalogs.
 * [topo-sync-api.md](file:///x:/Documents/GitHub/tabvar/docs/topo-sync-api.md): Specification for synchronizing visual topos and SVG annotations.
+* [submissions-api.md](file:///x:/Documents/GitHub/tabvar/docs/submissions-api.md): Proposing new and edited route data for review, and tracking your own submissions.

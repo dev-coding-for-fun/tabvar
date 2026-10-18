@@ -76,6 +76,8 @@ Bad input returns 400 with a message, and storage or DB failures return 500.
 - While its row exists, it returns `pending`, plus the error from any failed approval attempt.
 - After a decision, it reads the audit rows with that `submission_id` and `author_uid`. It returns `approved` or `rejected`, and on approval the ID created for each `ref`, so TopoBuilder can link its local records.
 
+`GET /api/topobuilder/submissions` without an `id` lists the caller's own submissions, for every role, so the app can show records as "in review": every queued submission with its changes, plus those decided since an optional `since` cursor, read from the audit log. An all-submissions view for admins isn't needed in the app; reviewing happens on the web. The client contract is in [submissions-api.md](submissions-api.md).
+
 `POST /api/v1/topos` lets any member publish topos and new routes directly, and soft-delete any topo. Restrict its writes to admin/super so member changes go through submissions. Admin and super edits in the crag editor stay direct and unchanged.
 
 ## Approve and reject
