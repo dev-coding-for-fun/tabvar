@@ -123,7 +123,7 @@ describe("api.v1.issues loader (pull)", () => {
 describe("api.v1.issues loader visibility (SQLite)", () => {
   let db: Kysely<DB>;
 
-  async function pull(role: string, uid: string, since?: string) {
+  async function pull(role: string | null, uid: string, since?: string) {
     mocks.requireApiTokenUser.mockResolvedValue(tokenUser({ role, uid }));
     const query = since ? `?since=${encodeURIComponent(since)}` : "";
     const response = (await loader(createRouteArgs({
@@ -163,11 +163,11 @@ describe("api.v1.issues loader visibility (SQLite)", () => {
     mocks.getDB.mockReturnValue(db);
   });
 
-  it.each(["admin", "super"])("gives %s every issue", async (role) => {
+  it.each(["member", "admin", "super"])("gives %s every issue", async (role) => {
     expect(ids(await pull(role, "reviewer"))).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  it.each(["member", "anonymous"])("hides archived issues and others' moderated issues from %s", async (role) => {
+  it.each(["anonymous", null])("hides archived issues and others' moderated issues from role %s", async (role) => {
     const body = await pull(role, "me");
 
     expect(ids(body)).toEqual([1, 2, 6]);
@@ -175,15 +175,15 @@ describe("api.v1.issues loader visibility (SQLite)", () => {
   });
 
   it("lists issues hidden from the caller on a delta pull and advances the cursor past them", async () => {
-    const body = await pull("member", "me", "2026-06-02 00:00:00");
+    const body = await pull("anonymous", "me", "2026-06-02 00:00:00");
 
     expect(ids(body)).toEqual([2, 6]);
     expect(body.hiddenIssueIds.sort()).toEqual([3, 4, 5]);
     expect(body.serverTime).toBe("2026-06-06 00:00:00");
   });
 
-  it("doesn't list hidden issues for reviewers, who get them all", async () => {
-    const body = await pull("admin", "reviewer", "2026-06-02 00:00:00");
+  it("doesn't list hidden issues for moderators, who get them all", async () => {
+    const body = await pull("member", "reviewer", "2026-06-02 00:00:00");
 
     expect(ids(body)).toEqual([2, 3, 4, 5, 6]);
     expect(body.hiddenIssueIds).toEqual([]);

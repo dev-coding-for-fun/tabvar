@@ -28,9 +28,9 @@ function formatSqliteTimestamp(date = new Date()) {
   return date.toISOString().replace("T", " ").replace(/\.\d+Z$/, "");
 }
 
-// Admins and supers see every issue. Everyone else sees no archived issues, and
-// in-moderation issues only if they reported them.
-const REVIEWER_ROLES = new Set(["admin", "super"]);
+// Moderators (members and above) see every issue. Everyone else sees no archived
+// issues, and in-moderation issues only if they reported them.
+const MODERATOR_ROLES = new Set(["member", "admin", "super"]);
 
 function visibleTo(uid: string) {
   return (eb: ExpressionBuilder<DB, "issue">) => eb.and([
@@ -50,7 +50,7 @@ function visibleTo(uid: string) {
  *          updated_at >= since (inclusive so boundary rows are never skipped;
  *          clients dedupe/upsert by id). Soft-deleted issues (status "Deleted")
  *          are included so clients can remove them locally.
- * Visibility: admins and supers get every issue. Other callers don't get
+ * Visibility: members, admins, and supers get every issue. Other callers don't get
  *   archived issues, or in-moderation issues reported by someone else. On a
  *   delta pull, issues that changed but are hidden from the caller are listed
  *   in hiddenIssueIds so clients can drop any copy they already have.
@@ -59,7 +59,7 @@ function visibleTo(uid: string) {
 export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const headers = corsHeaders(request, context);
   const tokenUser = await requireApiTokenUser(request, context, headers);
-  const seesHidden = REVIEWER_ROLES.has(tokenUser.role ?? "");
+  const seesHidden = MODERATOR_ROLES.has(tokenUser.role ?? "");
 
   const url = new URL(request.url);
   const since = url.searchParams.get("since");
