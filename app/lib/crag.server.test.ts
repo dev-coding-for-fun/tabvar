@@ -154,4 +154,53 @@ describe("loadCragBySlug", () => {
     expect(crag.sectors[0].routes[0].topos![0].uuid).toBe("topo-uuid-1");
     expect(crag.sectors[0].routes[0].topos![0].rasterImageUrl).toBe("https://example.com/raster.jpg");
   });
+
+  it("handles routes with null or missing sectorId without dropping other routes", async () => {
+    const db = createMockDb({
+      select: [
+        { executeTakeFirst: { id: 1, name: "Test Crag", slug: "test-crag" } },
+        { execute: [] }, // crag_attachment
+        { execute: [
+          { id: 1, name: "Sector One", cragId: 1, sortOrder: 1 },
+          { id: 2, name: "Sector Two", cragId: 1, sortOrder: 2 },
+        ] },
+        { execute: [] }, // sector_attachment
+        { execute: [
+          { id: 999, name: "Unassigned Route", sectorId: null },
+          { id: 101, name: "Route in Sector 1", sectorId: 1 },
+          { id: 201, name: "Route in Sector 2", sectorId: 2 },
+        ] },
+        { execute: [] }, // route_attachment
+        { execute: [] }, // issue
+        { execute: [] }, // route_topo
+      ],
+    });
+    mocks.getDB.mockReturnValue(db);
+
+    const crag = await loadCragBySlug(createContext(), "test-crag");
+    const s1 = crag.sectors.find(s => s.id === 1);
+    const s2 = crag.sectors.find(s => s.id === 2);
+
+    expect(s1?.routes).toHaveLength(1);
+    expect(s1?.routes[0].id).toBe(101);
+    expect(s2?.routes).toHaveLength(1);
+    expect(s2?.routes[0].id).toBe(201);
+  });
+
+  it("queries route attachments and route topos joined by crag_id", async () => {
+    const db = createCragDb();
+    mocks.getDB.mockReturnValue(db);
+
+    await loadCragBySlug(createContext(), "test-crag");
+
+    const routeAttachmentQueryIndex = db.selectFrom.mock.calls.findIndex(([table]) => table === "route_attachment");
+    const routeAttachmentQuery = db.__queries[routeAttachmentQueryIndex];
+    expect(routeAttachmentQuery.innerJoin).toHaveBeenCalledWith("route", "route.id", "route_attachment.route_id");
+    expect(routeAttachmentQuery.where).toHaveBeenCalledWith("route.crag_id", "=", 1);
+
+    const routeTopoQueryIndex = db.selectFrom.mock.calls.findIndex(([table]) => table === "route_topo");
+    const routeTopoQuery = db.__queries[routeTopoQueryIndex];
+    expect(routeTopoQuery.innerJoin).toHaveBeenCalledWith("route", "route.id", "route_topo.route_id");
+    expect(routeTopoQuery.where).toHaveBeenCalledWith("route.crag_id", "=", 1);
+  });
 });

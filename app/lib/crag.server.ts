@@ -20,22 +20,23 @@ function groupBy<T, K>(items: T[], getKey: (item: T) => K): Map<K, T[]> {
     return groups;
 }
 
-async function loadAttachmentsForIssues(db: ReturnType<typeof getDB>, issues: Issue[]): Promise<void> {
-    const issueIds = issues.map(issue => issue.id);
-    if (!issueIds.length) return;
+async function loadAttachmentsForIssues(db: ReturnType<typeof getDB>, crag: Crag, issues: Issue[]): Promise<void> {
+    if (!issues.length) return;
 
     const attachments = await db
         .selectFrom('issue_attachment')
-        .where('issue_id', 'in', issueIds)
+        .innerJoin('issue', 'issue.id', 'issue_attachment.issue_id')
+        .where('issue.crag_id', '=', crag.id)
+        .where(eb => eb(sql<string>`lower(issue.status)`, 'not in', HIDDEN_TOPO_ISSUE_STATUSES))
         .select([
-            'id',
-            'issue_id as issueId',
-            'name',
-            'type',
-            'url',
-            'created_at as createdAt'
+            'issue_attachment.id as id',
+            'issue_attachment.issue_id as issueId',
+            'issue_attachment.name as name',
+            'issue_attachment.type as type',
+            'issue_attachment.url as url',
+            'issue_attachment.created_at as createdAt'
         ])
-        .orderBy('id')
+        .orderBy('issue_attachment.id')
         .execute() as IssueAttachment[];
 
     const attachmentsByIssue = groupBy(attachments, attachment => attachment.issueId);
@@ -82,24 +83,23 @@ async function loadIssuesForCrag(db: ReturnType<typeof getDB>, crag: Crag): Prom
     });
 
     // Load attachments for all issues
-    await loadAttachmentsForIssues(db, issues);
+    await loadAttachmentsForIssues(db, crag, issues);
 }
 
-async function loadAttachmentsForRoutes(db: ReturnType<typeof getDB>, routes: Route[], attachmentMap: Map<number, TopoAttachment>): Promise<void> {
-    const routeIds = routes.map(route => route.id);
-    if (!routeIds.length) return;
+async function loadAttachmentsForRoutes(db: ReturnType<typeof getDB>, crag: Crag, routes: Route[], attachmentMap: Map<number, TopoAttachment>): Promise<void> {
+    if (!routes.length) return;
 
-    const routeIdWhereClause = 'route_id in (' + routeIds.join(',') + ')';
     const attachmentResult = await db
         .selectFrom('route_attachment')
         .innerJoin('topo_attachment', 'route_attachment.attachment_id', 'topo_attachment.id')
-        .where((eb) => sql.raw(`${routeIdWhereClause}`))
+        .innerJoin('route', 'route.id', 'route_attachment.route_id')
+        .where('route.crag_id', '=', crag.id)
         .select([
-            'topo_attachment.id',
+            'topo_attachment.id as id',
             'route_attachment.route_id as routeId',
-            'url',
-            'type',
-            'name',
+            'topo_attachment.url as url',
+            'topo_attachment.type as type',
+            'topo_attachment.name as name',
             'topo_attachment.created_at as createdAt'
         ])
         .execute();
@@ -135,20 +135,20 @@ async function loadAttachmentsForRoutes(db: ReturnType<typeof getDB>, routes: Ro
     });
 }
 
-async function loadAttachmentsForSectors(db: ReturnType<typeof getDB>, sectors: Sector[], attachments: TopoAttachment[]): Promise<Map<number, TopoAttachment>> {
-    const sectorIds = sectors.map(sector => sector.id);
-    if (!sectorIds.length) return new Map<number, TopoAttachment>();
+async function loadAttachmentsForSectors(db: ReturnType<typeof getDB>, crag: Crag, sectors: Sector[], attachments: TopoAttachment[]): Promise<Map<number, TopoAttachment>> {
+    if (!sectors.length) return new Map<number, TopoAttachment>();
 
     const attachmentResult = await db
         .selectFrom('sector_attachment')
         .innerJoin('topo_attachment', 'sector_attachment.attachment_id', 'topo_attachment.id')
-        .where('sector_id', 'in', sectorIds)
+        .innerJoin('sector', 'sector.id', 'sector_attachment.sector_id')
+        .where('sector.crag_id', '=', crag.id)
         .select([
-            'topo_attachment.id',
+            'topo_attachment.id as id',
             'sector_attachment.sector_id as sectorId',
-            'url',
-            'type',
-            'name',
+            'topo_attachment.url as url',
+            'topo_attachment.type as type',
+            'topo_attachment.name as name',
             'topo_attachment.created_at as createdAt'
         ])
         .execute();
@@ -241,6 +241,8 @@ async function loadRoutesForCrag(db: ReturnType<typeof getDB>, crag: Crag, attac
             'notes',
         ])
         .orderBy('sector_id')
+        .orderBy('sort_order')
+        .orderBy('id')
         .execute();
 
     // Map to Route objects and initialize attachments immediately
@@ -250,20 +252,17 @@ async function loadRoutesForCrag(db: ReturnType<typeof getDB>, crag: Crag, attac
         attachments: [], 
     }));
 
-    // Populate routes using sequential scan (no need to initialize attachments inside)
-    let routeIndex = 0;
-    // Create a copy of sectors sorted by ID for efficient route assignment
-    const sectorsSortedById = [...crag.sectors].sort((a, b) => a.id - b.id);
-    sectorsSortedById.forEach(sector => {
-        while (routeIndex < routes.length && routes[routeIndex].sectorId === sector.id) {
-            const route = routes[routeIndex];
+    // Group routes by sectorId safely without relying on pointer alignment
+    const routesBySector = groupBy(routes, route => route.sectorId);
+    crag.sectors.forEach(sector => {
+        const sectorRoutes = routesBySector.get(sector.id) ?? [];
+        sector.routes = sectorRoutes;
+        sectorRoutes.forEach(route => {
             route.sector = sector;
-            sector.routes.push(route);
-            routeIndex++;
-        }
+        });
     });
 
-    await loadAttachmentsForRoutes(db, routes, attachmentMap);
+    await loadAttachmentsForRoutes(db, crag, routes, attachmentMap);
 }
 
 async function loadSectorsForCrag(db: ReturnType<typeof getDB>, crag: Crag): Promise<void> {
@@ -293,7 +292,7 @@ async function loadSectorsForCrag(db: ReturnType<typeof getDB>, crag: Crag): Pro
     });
 
     // Load attachments for sectors
-    const attachmentMap = await loadAttachmentsForSectors(db, sectors, crag.attachments ?? []);
+    const attachmentMap = await loadAttachmentsForSectors(db, crag, sectors, crag.attachments ?? []);
     // Load routes for all sectors
     await loadRoutesForCrag(db, crag, attachmentMap);
 }
@@ -331,22 +330,22 @@ async function loadCrag(context: AppLoadContext, identifier: number | string, lo
 
 async function loadToposForCrag(db: ReturnType<typeof getDB>, crag: Crag): Promise<void> {
     const routes = crag.sectors.flatMap(sector => sector.routes);
-    const routeIds = routes.map(route => route.id);
     routes.forEach(route => { route.topos = []; });
 
-    if (routeIds.length === 0) return;
+    if (routes.length === 0) return;
 
     const routeTopoRows = await db
         .selectFrom('route_topo')
-        .where('route_id', 'in', routeIds)
+        .innerJoin('route', 'route.id', 'route_topo.route_id')
+        .where('route.crag_id', '=', crag.id)
         .select([
-            'topo_id as topoId',
-            'route_id as routeId',
-            'label',
-            'sort_order as sortOrder',
+            'route_topo.topo_id as topoId',
+            'route_topo.route_id as routeId',
+            'route_topo.label as label',
+            'route_topo.sort_order as sortOrder',
         ])
-        .orderBy('sort_order', 'asc')
-        .orderBy('topo_id', 'asc')
+        .orderBy('route_topo.sort_order', 'asc')
+        .orderBy('route_topo.topo_id', 'asc')
         .execute();
 
     if (routeTopoRows.length === 0) return;

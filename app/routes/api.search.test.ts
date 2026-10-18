@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createRouteArgs, createContext, createGetRequest, createMockDb, readJson } from "~/test/helpers";
+import { createRouteArgs, createContext, createGetRequest, createMockDb, readJson, getStatus } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
@@ -23,9 +23,8 @@ describe("api.search loader", () => {
       params: {},
     }));
 
-    expect(response).toBeInstanceOf(Response);
-    expect((response as Response).status).toBe(400);
-    await expect((response as Response).json()).resolves.toEqual({
+    expect(getStatus(response)).toBe(400);
+    expect(await readJson(response)).toEqual({
       error: "parameter <query> is required",
     });
     expect(mocks.getDB).not.toHaveBeenCalled();
@@ -40,9 +39,8 @@ describe("api.search loader", () => {
       params: {},
     }));
 
-    expect(response).toBeInstanceOf(Response);
-    expect((response as Response).status).toBe(400);
-    await expect((response as Response).json()).resolves.toEqual({
+    expect(getStatus(response)).toBe(400);
+    expect(await readJson(response)).toEqual({
       error: "optional parameter <searchMode> must be one of: allObjects, routesOnly, or global (default)",
     });
   });
@@ -79,6 +77,12 @@ describe("api.search loader", () => {
 
     expect(await readJson(response)).toEqual([row]);
     expect(db.selectFrom).toHaveBeenCalledTimes(expectedSelects);
+
+    if (_mode === "allObjects") {
+      expect(db.__queries[0].limit).toHaveBeenCalledWith(10);
+      expect(db.__queries[1].limit).toHaveBeenCalledWith(10);
+      expect(db.__queries[2].limit).toHaveBeenCalledWith(10);
+    }
   });
 
   it("strips unsupported query characters before searching", async () => {

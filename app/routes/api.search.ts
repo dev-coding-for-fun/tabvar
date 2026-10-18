@@ -1,20 +1,17 @@
-import { LoaderFunction } from 'react-router'; // assuming Remix is being used
+import type { LoaderFunctionArgs } from 'react-router';
+import { data } from 'react-router';
 import { sql } from 'kysely';
 import { getDB } from '~/lib/db';
-import { RouteSearchResults } from '~/lib/models';
+import type { RouteSearchResults } from '~/lib/models';
 
-export const loader: LoaderFunction = async ({ request, context }) => {
+export const loader = async ({ request, context }: LoaderFunctionArgs) => {
     const url = new URL(request.url);
     const searchMode = url.searchParams.get('searchMode') || 'global';
     const limit: number = Number(url.searchParams.get('limit')) || 10;
     const query = url.searchParams.get('query')?.replace(/[^a-zA-Z0-9\s]/g, '') || null;
     if (!query) {
-        return new Response(JSON.stringify({ error: 'parameter <query> is required' }), {
-            headers: { 'Content-Type': 'application/json' },
-            status: 400
-        });
+        return data({ error: 'parameter <query> is required' }, { status: 400 });
     }
-    console.log(query);
     const db = getDB(context);
 
     let results: RouteSearchResults[] = [];
@@ -37,6 +34,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                     sql<string>`NULL`.as('boltCount'),
                     sql<string>`NULL`.as('pitchCount')
                 ])
+                .limit(limit)
                 .unionAll(
                     db.selectFrom('route_search')
                         .distinct()
@@ -54,7 +52,9 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                             sql<string>`NULL`.as('gradeYds'),
                             sql<string>`NULL`.as('boltCount'),
                             sql<string>`NULL`.as('pitchCount')
-                        ]))
+                        ])
+                        .limit(limit)
+                )
                 .unionAll(
                     db.selectFrom('route_search')
                         .where(sql`route_search`, 'match', `name:${query}*`)
@@ -72,6 +72,7 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                             sql<string>`bolt_count`.as('boltCount'),
                             sql<string>`pitch_count`.as('pitchCount')
                         ])
+                        .limit(limit)
                 )
                 .limit(limit)
                 .execute();
@@ -120,9 +121,8 @@ export const loader: LoaderFunction = async ({ request, context }) => {
                 .execute();
             return results;
         default:
-            return new Response(JSON.stringify({ error: 'optional parameter <searchMode> must be one of: allObjects, routesOnly, or global (default)' }), {
-                headers: { 'Content-Type': 'application/json' },
+            return data({ error: 'optional parameter <searchMode> must be one of: allObjects, routesOnly, or global (default)' }, {
                 status: 400
             });
     }
-}
+};
