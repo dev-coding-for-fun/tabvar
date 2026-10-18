@@ -1,14 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test as setup } from "@playwright/test";
+import { GUEST_DISCLAIMER_ACK_KEY } from "../app/components/DisclaimerAcknowledgement";
 import {
   personaSessionRequest,
   signedInPersonas,
   storageStatePath,
 } from "./support/personas";
-
-// Mirrors GUEST_DISCLAIMER_ACK_KEY in app/components/DisclaimerAcknowledgement.tsx.
-const GUEST_DISCLAIMER_ACK_KEY = "tabvar.disclaimerAcknowledgedAt";
 
 for (const persona of signedInPersonas) {
   setup(`sign in ${persona}`, async ({ request }) => {

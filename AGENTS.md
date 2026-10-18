@@ -191,7 +191,7 @@ Production migrations are automated in CI during Cloudflare Pages builds (`npm r
 | **Run All Tests** | `npm test` | Runs Vitest once |
 | **Run Specific Test** | `npx vitest run <path-to-test>` | E.g. `npx vitest run app/routes/api.issues.test.ts` |
 | **Run Tests in Watch Mode** | `npm run test:watch` | Vitest interactive watcher |
-| **Run E2E Tests** | `npm run test:e2e` | Playwright against the dev server (`npm run test:e2e:ui` for the UI runner) |
+| **Run E2E Tests** | `npm run test:e2e:agent` | Compact agent E2E runner (`npm run test:e2e:fast -- <spec>` skips setup; `npm run test:e2e:ui` for UI) |
 | **Typecheck** | `npm run typecheck` | Runs `react-router typegen && tsc` |
 | **Lint** | `npm run lint` | ESLint |
 | **Database Codegen** | `npm run typegen` | Runs `wrangler types` and `kysely-codegen` |
@@ -207,7 +207,7 @@ Production migrations are automated in CI during Cloudflare Pages builds (`npm r
 ```
 demofinder/
 ├── .agents/
-│   └── skills/           # Repository skills (d1-migration, issue-sync-api, rr7-route-creator, test-writing)
+│   └── skills/           # Repository skills (d1-migration, e2e-testing, issue-sync-api, rr7-route-creator, test-writing)
 ├── app/
 │   ├── components/       # Mantine UI components (GlobalBanner, TopoGallery, etc.)
 │   ├── contexts/         # React contexts (e.g. search context)
@@ -246,7 +246,7 @@ demofinder/
 
 - `.agents/skills/rr7-route-creator/SKILL.md`: consult when adding or refactoring React Router routes, loaders/actions, error boundaries, or Mantine UI.
 - `.agents/skills/test-writing/SKILL.md` and `app/test/helpers.ts`: consult when adding or updating Vitest coverage.
-- `docs/e2e-testing.md`: consult when adding or updating Playwright e2e specs, personas, or permission checks.
+- `.agents/skills/e2e-testing/SKILL.md` and `docs/e2e-testing.md`: consult when running, debugging, or writing Playwright e2e specs, personas, or permission checks.
 - `.agents/skills/d1-migration/SKILL.md` and existing `migrations/`: consult for D1 schema changes or database type generation.
 - `.agents/skills/issue-sync-api/SKILL.md` and `docs/issue-sync-api.md`: consult for mobile sync, TopoBuilder sync, attachments, or delta sync.
 - `app/routes/api.v1.issues.ts`, `app/routes/api.v1.issues.sync.ts`, and their corresponding `.test.ts` files: reference implementations and coverage for v1 issue sync endpoints.

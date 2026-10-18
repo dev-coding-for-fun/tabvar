@@ -60,7 +60,7 @@ describe("admin.query route", () => {
   });
 
   describe("loader", () => {
-    it("returns the environment from context", async () => {
+    it("returns the environment from context for admins", async () => {
       const response = await loader(
         createRouteArgs({
           request: createGetRequest("https://example.com/admin/query"),
@@ -71,6 +71,22 @@ describe("admin.query route", () => {
 
       const body = await readJson(response);
       expect(body).toEqual({ environment: "staging" });
+    });
+
+    it("rejects non-admin users with 403", async () => {
+      mocks.requireUser.mockResolvedValue(createUser({ role: "member" }));
+
+      const response = await loader(
+        createRouteArgs({
+          request: createGetRequest("https://example.com/admin/query"),
+          context: createContext({ ENVIRONMENT: "staging" }),
+          params: {},
+        })
+      );
+
+      expect(getStatus(response)).toBe(403);
+      const body = await readJson(response);
+      expect(body.error).toBe(PERMISSION_ERROR);
     });
   });
 

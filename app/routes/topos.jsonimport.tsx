@@ -91,8 +91,16 @@ type LoaderData = {
     existingRoutes: SimpleRoute[];
 };
 
-export async function loader({ context }: LoaderFunctionArgs) {
-    const db = getDB(context);
+export async function loader(args: LoaderFunctionArgs) {
+    const user = await requireUser(args);
+    if (user.role !== "admin") {
+        return data<LoaderData>(
+            { existingCrags: [], existingSectors: [], existingRoutes: [] },
+            { status: 403 }
+        );
+    }
+
+    const db = getDB(args.context);
     const crags = await db
         .selectFrom("crag")
         .select([
@@ -150,7 +158,7 @@ export async function action(args: ActionFunctionArgs) {
     const user = await requireUser(args);
     const { request, context } = args;
     if (user.role !== 'admin') {
-        return data({ error: PERMISSION_ERROR });
+        return data({ error: PERMISSION_ERROR }, { status: 403 });
     }
 
     const formData = await request.formData();

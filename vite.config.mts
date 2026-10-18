@@ -44,7 +44,7 @@ const config = defineConfig(async (configEnv) => {
   test: {
     environment: "happy-dom",
     setupFiles: ["./vitest.setup.ts"],
-    include: ["app/**/*.test.{ts,tsx}"],
+    include: ["app/**/*.test.{ts,tsx}", "e2e/**/*.test.ts"],
     exclude: ["node_modules", "build", ".react-router", "dist"],
     coverage: {
       reporter: ["text", "html"],

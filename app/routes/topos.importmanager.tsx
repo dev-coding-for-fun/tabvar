@@ -27,7 +27,7 @@ export const action = async (args: ActionFunctionArgs) => {
     const user = await requireUser(args);
     const { request, context } = args;
     if (!user || user.role !== "admin") {
-        return data<ActionData>({ error: "Unauthorized" }, { status: 401 });
+        return data<ActionData>({ error: "Unauthorized" }, { status: 403 });
     }
 
     const formData = await request.formData();
@@ -141,7 +141,7 @@ export const loader = async (args: LoaderFunctionArgs) => {
     const user = await requireUser(args);
 
     if (user.role !== "admin") {
-        throw new Response("Unauthorized", { status: 401 });
+        throw new Response("Forbidden", { status: 403 });
     }
 
     const db = getDB(args.context);

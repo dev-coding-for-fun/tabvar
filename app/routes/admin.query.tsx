@@ -1,4 +1,4 @@
-import { type ActionFunctionArgs, data, LoaderFunction, type MetaFunction } from "react-router";
+import { type ActionFunctionArgs, data, type LoaderFunctionArgs, type MetaFunction } from "react-router";
 import { Form, useActionData, useSubmit, useLoaderData, useFetcher } from "react-router";
 import { Container, Stack, Title, Textarea, Button, Group, Alert, Table, Text, Code, FileButton, Space, LoadingOverlay, Badge } from "@mantine/core";
 import { IconAlertCircle, IconDownload, IconUpload, IconRefresh } from "@tabler/icons-react";
@@ -73,9 +73,13 @@ interface ActionData {
     hashStats?: HashRecalculateStats;
 }
 
-export const loader: LoaderFunction = async ({ context }) => {
-    const env = context.cloudflare.env as unknown as Env;
-    return data({ environment: env.ENVIRONMENT });
+export const loader = async (args: LoaderFunctionArgs) => {
+    const user = await requireUser(args);
+    const env = args.context.cloudflare.env as unknown as Env;
+    if (user.role !== 'admin') {
+        return data({ environment: env.ENVIRONMENT, error: PERMISSION_ERROR }, { status: 403 });
+    }
+    return { environment: env.ENVIRONMENT };
 };
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Database admin");

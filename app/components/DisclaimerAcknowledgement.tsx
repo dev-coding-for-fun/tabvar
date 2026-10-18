@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Button, Checkbox, Space, Text } from '@mantine/core';
 import { useUser } from '~/lib/hooks/useUser';
 
-const GUEST_DISCLAIMER_ACK_KEY = 'tabvar.disclaimerAcknowledgedAt';
+export const GUEST_DISCLAIMER_ACK_KEY = 'tabvar.disclaimerAcknowledgedAt';
 
 export const DISCLAIMER_TITLE = 'Important Safety Notice';
 export const DISCLAIMER_MESSAGE = "WARNING: CLIMBING IS INHERENTLY DANGEROUS. TABVAR and its volunteers work hard to fund and maintain fixed hardware in the Bow Valley, but due to the scale of the area and limited resources, we cannot guarantee the safety of any route. Fixed hardware degrades, rock is dynamic, and bolts can fail without warning. Route descriptions are user-submitted and not vetted. Your safety is entirely your own responsibility. By using this guide, you assume all risks of injury or death and explicitly release the author, TABVAR, and its volunteers from all liability, INCLUDING LIABILITY ARISING FROM THEIR NEGLIGENCE.";

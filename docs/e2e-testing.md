@@ -6,6 +6,8 @@ E2E specs live in `e2e/` and run against the local dev server (`npm run dev`, Cl
 npx playwright install chromium   # once per machine
 npm run test:e2e                  # starts the dev server unless one is already running on :5173
 npm run test:e2e:ui               # interactive runner
+npm run test:e2e:agent            # compact reporter for coding agents (1-line pass summary, fail-fast)
+npm run test:e2e:fast -- <spec>   # skips warmup/auth setup once e2e/.auth/*.json exist
 ```
 
 Apply local migrations first (`npm run db:migrate:local`): personas are written to the local D1 database.
@@ -26,7 +28,7 @@ Tests never drive Google OAuth or the email-code form. Instead:
 
 ## Writing specs
 
-Import `test`/`expect` from `./support/test`, not from `@playwright/test`:
+Import `test`/`expect` from `./support/test`, not from `@playwright/test` (enforced by ESLint):
 
 ```ts
 import { expect, test } from "./support/test";
@@ -51,12 +53,18 @@ test.describe("as admin", () => {
     const admin = await pageAs("admin");
   });
   ```
-- **Permission checks are data-driven.** For a role-gated page, add a row to `accessRules` in `e2e/access.spec.ts`. Every persona and the guest are checked against it automatically. Prefer `page.request.get(path, { maxRedirects: 0 })` for pure access checks: it asserts the server status without rendering.
+- **Parallel-safe mutations:** Use the `uniqueName(prefix)` fixture when creating DB records (`const name = uniqueName("Discount")`) and scope assertions to that unique name instead of global row counts.
+- **Permission checks are data-driven.** For a role-gated page, add a row to `accessRules` in `e2e/access.spec.ts`. Every persona and the guest are checked against it automatically. Prefer `request.get(path, { maxRedirects: 0 })` for pure access checks: it asserts the server status without launching a browser tab or rendering.
 - **Parametrize, don't copy.** Loop over personas (`signedInPersonas`, or a `Record<SignedInPersona, …>` of expectations as in `e2e/discount.spec.ts`) instead of duplicating tests per role. Using a `Record` keyed by `SignedInPersona` makes TypeScript flag specs that miss a newly added persona.
 
 ### Adding a persona
 
 Add an entry to `personas` in `e2e/support/personas.ts`. Tags must already exist in `user_tag` (created by migrations). Never change a shared persona's role or tags inside a test: workers run in parallel and share them. If a test needs a different state, declare a new persona.
+
+## Debugging Failures & Agent Diagnostics
+
+- **`e2e/support/test.ts`** automatically records `pageerror`, `console.error`, and HTTP `>= 500` responses on `page` and `pageAs` contexts, attaching them as `diagnostics` when a test fails.
+- **`e2e/support/agent-reporter.ts`** prints a single summary line when all tests pass, and on failure prints stripped assertion diffs, inline `diagnostics`, and paths to `error-context.md` (the page's ARIA tree snapshot) and `trace.zip` (inspectable via `npx playwright trace open <path>`).
 
 ## Notes
 

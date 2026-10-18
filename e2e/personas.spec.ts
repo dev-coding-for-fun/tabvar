@@ -6,10 +6,10 @@ for (const persona of signedInPersonas) {
   test.describe(`as ${persona}`, () => {
     test.use({ persona });
 
-    test("session resolves to the declared role and tags", async ({ page }) => {
+    test("session resolves to the declared role and tags", async ({ request }) => {
       const expected = personaSessionRequest(persona);
 
-      const response = await page.request.get("/api/whoami");
+      const response = await request.get("/api/whoami");
       expect(response.status()).toBe(200);
       const identity = await response.json();
 
@@ -19,8 +19,8 @@ for (const persona of signedInPersonas) {
   });
 }
 
-test("guest is signed out", async ({ page }) => {
-  const response = await page.request.get("/api/whoami");
+test("guest is signed out", async ({ request }) => {
+  const response = await request.get("/api/whoami");
   expect(response.status()).toBe(401);
 });
 

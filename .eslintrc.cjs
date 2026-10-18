@@ -110,6 +110,35 @@ module.exports = {
       },
       rules: {
         "react-hooks/rules-of-hooks": "off",
+        "no-empty-pattern": "off",
+      },
+    },
+    {
+      files: ["e2e/**/*.spec.ts"],
+      plugins: ["playwright"],
+      extends: ["plugin:playwright/recommended"],
+      rules: {
+        "playwright/no-wait-for-timeout": "error",
+        "playwright/no-networkidle": "error",
+        "playwright/prefer-web-first-assertions": "error",
+        "playwright/no-element-handle": "error",
+        "playwright/no-eval": "error",
+        "playwright/no-focused-test": "error",
+        "playwright/prefer-native-locators": "error",
+        "playwright/no-raw-locators": "warn",
+        "no-restricted-imports": [
+          "error",
+          {
+            paths: [
+              {
+                name: "@playwright/test",
+                importNames: ["test", "expect"],
+                message:
+                  "Import { test, expect } from './support/test' instead so persona and diagnostic fixtures are active.",
+              },
+            ],
+          },
+        ],
       },
     },
   ],
