@@ -1,5 +1,7 @@
+import { sql, type ExpressionBuilder } from "kysely";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { getDB } from "~/lib/db";
+import type { DB } from "~/lib/db.d";
 import {
   apiError,
   corsHeaders,
@@ -26,6 +28,20 @@ function formatSqliteTimestamp(date = new Date()) {
   return date.toISOString().replace("T", " ").replace(/\.\d+Z$/, "");
 }
 
+// Admins and supers see every issue. Everyone else sees no archived issues, and
+// in-moderation issues only if they reported them.
+const REVIEWER_ROLES = new Set(["admin", "super"]);
+
+function visibleTo(uid: string) {
+  return (eb: ExpressionBuilder<DB, "issue">) => eb.and([
+    eb(sql<string>`lower(issue.status)`, "!=", "archived"),
+    eb.or([
+      eb(sql<string>`lower(issue.status)`, "!=", "in moderation"),
+      eb("issue.reported_by_uid", "=", uid),
+    ]),
+  ]);
+}
+
 /**
  * GET /api/v1/issues — delta pull.
  *
@@ -34,11 +50,16 @@ function formatSqliteTimestamp(date = new Date()) {
  *          updated_at >= since (inclusive so boundary rows are never skipped;
  *          clients dedupe/upsert by id). Soft-deleted issues (status "Deleted")
  *          are included so clients can remove them locally.
- * Response: { issues, serverTime }. Pass serverTime back as `since` next time.
+ * Visibility: admins and supers get every issue. Other callers don't get
+ *   archived issues, or in-moderation issues reported by someone else. On a
+ *   delta pull, issues that changed but are hidden from the caller are listed
+ *   in hiddenIssueIds so clients can drop any copy they already have.
+ * Response: { issues, hiddenIssueIds, serverTime }. Pass serverTime back as `since` next time.
  */
 export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const headers = corsHeaders(request, context);
-  await requireApiTokenUser(request, context, headers);
+  const tokenUser = await requireApiTokenUser(request, context, headers);
+  const seesHidden = REVIEWER_ROLES.has(tokenUser.role ?? "");
 
   const url = new URL(request.url);
   const since = url.searchParams.get("since");
@@ -77,8 +98,20 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   if (since) {
     query = query.where("issue.updated_at", ">=", since);
   }
+  if (!seesHidden) {
+    query = query.where(visibleTo(tokenUser.uid));
+  }
 
   const rows = await query.execute();
+
+  const hidden = since && !seesHidden
+    ? await db
+      .selectFrom("issue")
+      .select(["issue.id as id", "issue.updated_at as updated_at"])
+      .where("issue.updated_at", ">=", since)
+      .where((eb) => eb.not(visibleTo(tokenUser.uid)(eb)))
+      .execute()
+    : [];
 
   const issuesMap = new Map<number, SyncIssue>();
   let maxUpdatedAt: string | null = null;
@@ -104,9 +137,20 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
     }
   }
 
+  // Hidden rows advance the cursor too, so they aren't reported again next pull.
+  for (const row of hidden) {
+    if (row.updated_at && (!maxUpdatedAt || row.updated_at > maxUpdatedAt)) {
+      maxUpdatedAt = row.updated_at;
+    }
+  }
+
   const serverTime = maxUpdatedAt ?? since ?? formatSqliteTimestamp();
 
-  return jsonResponse({ issues: Array.from(issuesMap.values()), serverTime }, { headers });
+  return jsonResponse({
+    issues: Array.from(issuesMap.values()),
+    hiddenIssueIds: hidden.map((row) => Number(row.id)),
+    serverTime,
+  }, { headers });
 };
 
 export const action = async ({ request, context }: ActionFunctionArgs) => {

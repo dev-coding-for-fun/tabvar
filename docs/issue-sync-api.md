@@ -50,6 +50,14 @@ GET /api/v1/issues?since=<cursor>
   dedupe/upsert by `id`.
 - Soft-deleted issues are returned with `status: "Deleted"` so clients can
   remove them locally.
+- **Visibility depends on the caller's role.** `admin` and `super` get every
+  issue. Everyone else doesn't get `Archived` issues, or `In Moderation` issues
+  reported by someone else; they do get their own `In Moderation` issues, so an
+  app can show a report as "in review".
+- On a delta pull (`since` set), `hiddenIssueIds` lists issues that changed
+  since the cursor but are hidden from the caller, for example one that was just
+  archived. Remove any local copy of them. It's always empty for `admin` and
+  `super`, and on a full pull.
 
 **Response `200`**
 
@@ -80,6 +88,7 @@ GET /api/v1/issues?since=<cursor>
       ]
     }
   ],
+  "hiddenIssueIds": [98],
   "serverTime": "2026-06-09 11:00:00"
 }
 ```
