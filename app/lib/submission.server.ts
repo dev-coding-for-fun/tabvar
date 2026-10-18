@@ -6,6 +6,7 @@ import { getDB } from "./db";
 import type { DB } from "./db.d";
 import { deleteFromR2, uploadFileToR2 } from "./s3.server";
 import { toStoredJson } from "./storedJson";
+import { TOPO_STATUSES, type TopoStatus } from "./topo.server";
 import { formatSqliteTimestamp } from "./topoSync.server";
 
 /**
@@ -82,6 +83,7 @@ export type MySubmissionList = {
 
 type FieldKind =
   | "requiredText"
+  | "topoStatus"
   | "text"
   | "number"
   | "integer"
@@ -144,7 +146,7 @@ export const SUBMISSION_FIELDS: Record<SubmissionEntity, Record<string, FieldSpe
     sectorId: { column: "sector_id", kind: "optionalParent", parent: "sector" },
     latitude: number("latitude"),
     longitude: number("longitude"),
-    status: { column: "status", kind: "requiredText" },
+    status: { column: "status", kind: "topoStatus" },
     annotations: { column: "annotations_json", kind: "annotations" },
     background: { column: "background_image_url", kind: "file" },
     raster: { column: "raster_image_url", kind: "file" },
@@ -260,6 +262,11 @@ function checkField(
     case "requiredText":
       if (typeof value !== "string" || value.trim().length === 0) {
         problems.add(`${path} must be a non-empty string`);
+      }
+      return;
+    case "topoStatus":
+      if (!TOPO_STATUSES.includes(value as TopoStatus)) {
+        problems.add(`${path} must be one of ${TOPO_STATUSES.join(", ")}`);
       }
       return;
     case "text":

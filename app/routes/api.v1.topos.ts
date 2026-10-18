@@ -5,15 +5,20 @@ import {
   jsonResponse,
   requireApiTokenUser,
 } from "~/lib/apiAuth.server";
-import { auditCreatedRows, auditedWrite } from "~/lib/audit.server";
+import { auditedWrite } from "~/lib/audit.server";
 import {
   deleteTopo,
   loadTopoById,
   loadTopos,
   parseSaveRawTopoPayload,
   saveRawTopo,
+  TopoNotFoundError,
   TopoValidationError,
 } from "~/lib/topo.server";
+
+// Admins and supers publish topos directly. Everyone else proposes changes
+// through the submissions API, where they wait for review.
+const PUBLISHER_ROLES = new Set(["admin", "super"]);
 
 export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const headers = corsHeaders(request, context);
@@ -50,9 +55,15 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   }
 
   const tokenUser = await requireApiTokenUser(request, context, headers);
+  const author = { uid: tokenUser.uid, displayName: tokenUser.displayName };
 
-  if (tokenUser.role === "anonymous") {
-    return apiError("forbidden", 403, "Anonymous users cannot create or modify topos.", headers);
+  if (!PUBLISHER_ROLES.has(tokenUser.role ?? "")) {
+    return apiError(
+      "forbidden",
+      403,
+      "Only admins and supers can change topos directly. Propose changes through /api/topobuilder/submissions.",
+      headers,
+    );
   }
 
   if (request.method === "DELETE") {
@@ -62,18 +73,21 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
       return apiError("bad_request", 400, "Topo id or uuid is required for deletion.", headers);
     }
     const existing = await loadTopoById(context, idOrUuid);
-    const success = await auditedWrite(context, {
-      author: tokenUser,
+    if (!existing) {
+      return apiError("not_found", 404, "Topo not found.", headers);
+    }
+    await auditedWrite(context, {
+      author,
       source: "api",
       entity: "topo",
-      ids: existing ? [existing.id] : [],
-      write: () => deleteTopo(context, idOrUuid),
+      ids: [existing.id],
+      write: () => deleteTopo(context, existing.id),
     });
-    return jsonResponse({ success }, { headers });
+    return jsonResponse({ success: true }, { headers });
   }
 
   if (request.method !== "POST") {
-    return apiError("method_not_allowed", 405, "Use GET or POST for topos.", headers);
+    return apiError("method_not_allowed", 405, "Use GET, POST, or DELETE for topos.", headers);
   }
 
   try {
@@ -129,10 +143,10 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
 
     const parsedPayload = parseSaveRawTopoPayload(payload);
 
-    // saveRawTopo matches an existing topo by id first, then uuid.
-    const existing = (parsedPayload.id !== undefined ? await loadTopoById(context, parsedPayload.id) : null)
-      ?? (parsedPayload.uuid ? await loadTopoById(context, parsedPayload.uuid) : null);
-    const author = { uid: tokenUser.uid, displayName: tokenUser.displayName };
+    // saveRawTopo matches an existing topo by id, or else by uuid.
+    const existing = parsedPayload.id !== undefined
+      ? await loadTopoById(context, parsedPayload.id)
+      : parsedPayload.uuid ? await loadTopoById(context, parsedPayload.uuid) : null;
 
     const topo = await auditedWrite(context, {
       author,
@@ -148,23 +162,15 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
       createdIds: (saved) => [saved.id],
     });
 
-    // Route entries without a routeId were created by saveRawTopo.
-    if (parsedPayload.routes) {
-      const linkedRouteIds = new Set(parsedPayload.routes.map((route) => route.routeId));
-      await auditCreatedRows(context, {
-        author,
-        source: "api",
-        entity: "route",
-        ids: topo.routes.map((route) => route.routeId).filter((routeId) => !linkedRouteIds.has(routeId)),
-      });
-    }
-
-    return jsonResponse({ topo }, { status: 201, headers });
+    return jsonResponse({ topo }, { status: existing ? 200 : 201, headers });
   } catch (error) {
+    if (error instanceof TopoNotFoundError) {
+      return apiError("not_found", 404, error.message, headers);
+    }
     if (error instanceof TopoValidationError) {
       return apiError("bad_request", 400, error.message, headers);
     }
     console.error("Error saving topo:", error);
-    return apiError("bad_request", 400, "Failed to save topo.", headers);
+    return apiError("server_error", 500, "Failed to save topo.", headers);
   }
 };

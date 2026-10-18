@@ -264,4 +264,4 @@ When integrating 3rd-party climbing apps (such as logging ticklists or importing
    ```http
    GET /api/search?q=Me+and+My+Shadow
    ```
-4. **Creating Missing Routes**: If an issue needs to be filed for an unlisted route, routes can be submitted through the Topo API ([topo-sync-api.md](file:///x:/Documents/GitHub/tabvar/docs/topo-sync-api.md#routes-array-existing-vs-new-routes)) by members with route-building permissions.
+4. **Creating Missing Routes**: If an issue needs to be filed for an unlisted route, propose the route through the Submissions API ([submissions-api.md](file:///x:/Documents/GitHub/tabvar/docs/submissions-api.md)). It's published once an admin approves it.

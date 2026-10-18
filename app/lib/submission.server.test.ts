@@ -134,7 +134,7 @@ describe("submission intake", () => {
     ["an unknown field", { changes: [{ entity: "route", op: "update", id: 100, fields: { grade: "5.9" } }] }, "changes[0].fields.grade is not an editable route field"],
     ["a wrongly typed field", { changes: [{ entity: "route", op: "update", id: 100, fields: { boltCount: "7" } }] }, "boltCount must be an integer or null"],
     ["clearing a required field", { changes: [{ entity: "route", op: "update", id: 100, fields: { name: null } }] }, "name must be a non-empty string"],
-    ["clearing a topo status", { changes: [{ entity: "topo", op: "update", id: 7, fields: { status: null } }] }, "status must be a non-empty string"],
+    ["clearing a topo status", { changes: [{ entity: "topo", op: "update", id: 7, fields: { status: null } }] }, "status must be one of Active, Deleted"],
     ["a create missing required fields", { changes: [{ entity: "route", op: "create", fields: { name: "Line" } }] }, "fields.sectorId is required to create a route"],
     ["an empty update", { changes: [{ entity: "route", op: "update", id: 100, fields: {} }] }, "must include at least one field to change"],
     ["a ref to a later create", { changes: [
@@ -159,6 +159,7 @@ describe("submission intake", () => {
       uuid: "topo-existing", name: "Again", background: "file:bg", raster: "file:raster",
     } }] }, '"topo-existing" belongs to an existing topo'],
     ["a topo uuid change", { changes: [{ entity: "topo", op: "update", id: 7, fields: { uuid: "other" } }] }, "fields.uuid can't be changed"],
+    ["an unknown topo status", { changes: [{ entity: "topo", op: "update", id: 7, fields: { status: "Retired" } }] }, "fields.status must be one of Active, Deleted"],
   ])("rejects %s", async (_label, payload, message) => {
     const attempt = createSubmission(createContext(), { uid: "submitter", source: "topobuilder", payload, files: files() });
 

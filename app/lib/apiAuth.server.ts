@@ -203,7 +203,7 @@ export function corsHeaders(request: Request, context: AppLoadContext) {
     headers.set("Vary", "Origin");
   }
 
-  headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   return headers;
 }

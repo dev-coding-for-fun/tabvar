@@ -19,7 +19,7 @@ import {
   type SubmissionPayload,
   type SubmissionTopoRoute,
 } from "./submission.server";
-import { saveRawTopo, type SaveRawTopoPayload } from "./topo.server";
+import { saveRawTopo, type SaveRawTopoPayload, type TopoStatus } from "./topo.server";
 
 /**
  * Approval and rejection of queued submissions. Each applied or rejected change
@@ -120,7 +120,7 @@ async function saveTopo(
     ...("sectorId" in fields ? { sectorId: columns.sector_id as number | null } : {}),
     ...("latitude" in fields ? { latitude: fields.latitude as number | null } : {}),
     ...("longitude" in fields ? { longitude: fields.longitude as number | null } : {}),
-    ...("status" in fields ? { status: fields.status as string } : {}),
+    ...("status" in fields ? { status: fields.status as TopoStatus } : {}),
     ...("background" in fields ? { backgroundUrl: fields.background as string } : {}),
     ...("raster" in fields ? { rasterUrl: fields.raster as string } : {}),
     ...("annotations" in fields ? { annotations: fields.annotations as SaveRawTopoPayload["annotations"] } : {}),

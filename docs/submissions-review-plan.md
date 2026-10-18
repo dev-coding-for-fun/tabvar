@@ -78,7 +78,7 @@ Bad input returns 400 with a message, and storage or DB failures return 500.
 
 `GET /api/topobuilder/submissions` without an `id` lists the caller's own submissions, for every role, so the app can show records as "in review": every queued submission with its changes, plus those decided since an optional `since` cursor, read from the audit log. An all-submissions view for admins isn't needed in the app; reviewing happens on the web. The client contract is in [submissions-api.md](submissions-api.md).
 
-`POST /api/v1/topos` lets any member publish topos and new routes directly, and soft-delete any topo. Restrict its writes to admin/super so member changes go through submissions. Admin and super edits in the crag editor stay direct and unchanged.
+`/api/v1/topos` writes (`POST`, `DELETE`) are limited to admin/super, so member changes go through submissions. It no longer creates routes as a side effect, and an update keeps the fields it leaves out. See [topo-sync-api.md](topo-sync-api.md). Admin and super edits in the crag editor stay direct and unchanged.
 
 ## Approve and reject
 
