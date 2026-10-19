@@ -18,7 +18,7 @@ const config = defineConfig(async (configEnv) => {
       watch: {
         ignored: [
           "**/.wrangler/**",
-          "**/e2e/.auth/**",
+          "**/e2e/**",
           "**/test-results/**",
           "**/.playwright-cli/**",
         ],

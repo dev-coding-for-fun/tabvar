@@ -9,6 +9,7 @@ const managementAccess: Record<SignedInPersona, boolean> = {
   member: false,
   anonymous: false,
   contributor: false,
+  editor: false,
 };
 
 for (const [persona, canManage] of Object.entries(managementAccess) as [SignedInPersona, boolean][]) {

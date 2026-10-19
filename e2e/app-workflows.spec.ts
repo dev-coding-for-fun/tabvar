@@ -22,8 +22,8 @@ test.describe("as the TopoBuilder app", () => {
     uniqueName,
   }) => {
     const app = topobuilderApi(page.request, await connectTopobuilder(page));
-    const member = await pageAs("member");
-    const memberApp = topobuilderApi(member.request, await connectTopobuilder(member));
+    const editor = await pageAs("editor");
+    const editorApp = topobuilderApi(editor.request, await connectTopobuilder(editor));
     const admin = await pageAs("admin");
     const crag = uniqueName("Crag");
     const { objects, refs } = newRouteObjects({ crag, route: uniqueName("Route") });
@@ -55,7 +55,7 @@ test.describe("as the TopoBuilder app", () => {
       expect.objectContaining({ state: "pending", fields: expect.objectContaining({ name: topoName, raster: expect.stringContaining("/submissions/") }) }),
     ]);
     expect(inReview.map((object) => object.ref)).toEqual(expect.arrayContaining([refs.crag, refs.sector, refs.route]));
-    expect((await memberApp.myObjects()).objects.map((object) => object.ref)).not.toContain(refs.crag);
+    expect((await editorApp.myObjects()).objects.map((object) => object.ref)).not.toContain(refs.crag);
 
     await reviewItem(admin, `New crag “${crag}”`, "Approve");
 
@@ -118,8 +118,8 @@ test.describe("as the TopoBuilder app", () => {
     uniqueName,
   }) => {
     const app = topobuilderApi(page.request, await connectTopobuilder(page));
-    const member = await pageAs("member");
-    const memberApp = topobuilderApi(member.request, await connectTopobuilder(member));
+    const editor = await pageAs("editor");
+    const editorApp = topobuilderApi(editor.request, await connectTopobuilder(editor));
     const admin = await pageAs("admin");
     const adminApp = topobuilderApi(admin.request, await connectTopobuilder(admin));
     const crag = uniqueName("Crag");
@@ -130,12 +130,12 @@ test.describe("as the TopoBuilder app", () => {
 
     const mine = await app.reportIssue(routeId);
     expect(mine.issue.status).toBe("In Moderation");
-    const someoneElses = await memberApp.reportIssue(routeId, { status: "In Moderation" });
+    const someoneElses = await editorApp.reportIssue(routeId, { status: "In Moderation" });
 
     const anonymousView = (await app.issues()).issues.map((issue) => issue.id);
     expect(anonymousView).toContain(mine.serverId);
     expect(anonymousView).not.toContain(someoneElses.serverId);
-    expect((await memberApp.issues()).issues.map((issue) => issue.id)).toEqual(
+    expect((await editorApp.issues()).issues.map((issue) => issue.id)).toEqual(
       expect.arrayContaining([mine.serverId, someoneElses.serverId]),
     );
 

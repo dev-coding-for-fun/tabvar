@@ -52,7 +52,7 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !isCI,
     timeout: 120_000,
-    stdout: "ignore",
+    stdout: "pipe",
     stderr: "pipe",
   },
 });

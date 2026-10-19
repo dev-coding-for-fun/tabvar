@@ -24,6 +24,7 @@ test.describe("submission review", () => {
     const admin = await pageAs("admin");
     await admin.goto("/admin/submissions");
     const item = admin.getByRole("link").filter({ hasText: `New crag “${crag}”` });
+    await expect(item).toBeVisible();
     await item.click();
     await expect(admin.getByText("New sector “Main Wall”").first()).toBeVisible();
     await expect(admin.getByText(`New route “${route}”`)).toBeVisible();
@@ -62,13 +63,17 @@ test.describe("submission review", () => {
 
     const title = `Edit route #${routeId}`;
     await admin.goto("/admin/submissions");
-    await admin.getByRole("link").filter({ hasText: title }).filter({ hasText: "E2E member" }).click();
+    const memberItem = admin.getByRole("link").filter({ hasText: title }).filter({ hasText: "E2E member" });
+    await expect(memberItem).toBeVisible();
+    await memberItem.click();
     const table = admin.getByRole("table");
     await expect(table.getByRole("cell", { name: "5.10a" })).toBeVisible();
     await expect(table.getByRole("cell", { name: "5.10b" })).toBeVisible();
     await expect(admin.getByRole("alert").filter({ hasText: "Conflicts" })).toContainText("Grade is also edited in");
 
-    await admin.getByRole("link", { name: "a submission from E2E anonymous" }).click();
+    const anonLink = admin.getByRole("link", { name: "a submission from E2E anonymous" });
+    await expect(anonLink).toBeVisible();
+    await anonLink.click();
     await expect(table.getByRole("cell", { name: "5.10c" })).toBeVisible();
     await admin.getByRole("button", { name: "Reject" }).click();
     await expect(table.getByRole("cell", { name: "5.10c" })).toBeHidden();
@@ -76,8 +81,8 @@ test.describe("submission review", () => {
 
     await reviewItem(admin, title, "Approve", "E2E member");
 
-    expect(await otherApi.object({ entity: "route", id: routeId })).toMatchObject({ state: "rejected" });
-    expect(await api.object({ ref: refs.route })).toMatchObject({ state: "published", id: routeId });
-    expect((await api.route(routeId)).gradeYds).toBe("5.10b");
+    await expect.poll(async () => (await otherApi.object({ entity: "route", id: routeId }))?.state).toBe("rejected");
+    await expect.poll(async () => (await api.object({ ref: refs.route }))?.state).toBe("published");
+    await expect.poll(async () => (await api.route(routeId)).gradeYds).toBe("5.10b");
   });
 });

@@ -43,6 +43,7 @@ export async function connectTopobuilder(page: Page): Promise<string> {
   const callback = page.waitForRequest(`${CALLBACK}**`);
   await page.goto(`/connect/topobuilder?return_to=${encodeURIComponent(CALLBACK)}`);
   const ticket = new URL((await callback).url()).searchParams.get("ticket");
+  expect(ticket).toBeTruthy();
 
   const response = await page.request.post("/api/topobuilder/connect/complete", { data: { ticket } });
   expect(response.status(), await response.text()).toBe(200);
@@ -128,11 +129,23 @@ export async function reviewItem(admin: Page, title: string, decision: "Approve"
   await admin.goto("/admin/submissions");
   let item = admin.getByRole("link").filter({ hasText: title });
   if (submitter) item = item.filter({ hasText: submitter });
+  await expect(item).toBeVisible();
+  const href = await item.getAttribute("href");
+  const itemId = href?.match(/[?&]item=(\d+)/)?.[1];
+
   await item.click();
-  await expect(admin).toHaveURL(/item=/);
-  const selected = admin.url();
-  await admin.getByRole("button", { name: decision }).click();
-  await expect(admin).not.toHaveURL(selected);
+  if (itemId) {
+    await expect(admin).toHaveURL(new RegExp(`[?&]item=${itemId}(?:&|$)`));
+    const form = admin.locator(`form:has(input[name="item"][value="${itemId}"])`);
+    await expect(form).toBeVisible();
+    await form.getByRole("button", { name: decision }).click();
+    await expect(form).toBeHidden();
+  } else {
+    await expect(admin).toHaveURL(/item=/);
+    const selected = admin.url();
+    await admin.getByRole("button", { name: decision }).click();
+    await expect(admin).not.toHaveURL(selected);
+  }
   await expect(item).toBeHidden();
 }
 
