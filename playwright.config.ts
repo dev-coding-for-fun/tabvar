@@ -24,6 +24,7 @@ export default defineConfig({
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
   maxFailures: isAgent ? 5 : undefined,
+  globalTeardown: "./e2e/support/teardown.ts",
   reporter: isCI
     ? [["github"], ["html", { open: "never" }]]
     : isAgent

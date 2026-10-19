@@ -8,6 +8,7 @@ npm run test:e2e                  # starts the dev server unless one is already 
 npm run test:e2e:ui               # interactive runner
 npm run test:e2e:agent            # compact reporter for coding agents (1-line pass summary, fail-fast)
 npm run test:e2e:fast -- <spec>   # skips warmup/auth setup once e2e/.auth/*.json exist
+npm run test:e2e:clean            # sweeps ephemeral E2E records from local D1 database
 ```
 
 Apply local migrations first (`npm run db:migrate:local`): personas are written to the local D1 database.
@@ -66,6 +67,17 @@ Add an entry to `personas` in `e2e/support/personas.ts`. Tags must already exist
 - **`e2e/support/test.ts`** automatically records `pageerror`, `console.error`, and HTTP `>= 500` responses on `page` and `pageAs` contexts, attaching them as `diagnostics` when a test fails.
 - **`e2e/support/agent-reporter.ts`** prints a single summary line when all tests pass, and on failure prints stripped assertion diffs, inline `diagnostics`, and paths to `error-context.md` (the page's ARIA tree snapshot) and `trace.zip` (inspectable via `npx playwright trace open <path>`).
 - **Self-directed browser checks (`npx playwright cli`):** Agents can verify UI changes or extract locators against the live dev server without writing a test by loading any persona's storage state (`npx playwright cli open http://127.0.0.1:5173`, `npx playwright cli state-load e2e/.auth/admin.json`, `npx playwright cli snapshot "main"`, `npx playwright cli close`). See `.agents/skills/e2e-testing/SKILL.md`.
+
+## Database Lifecycle & Cleanup
+
+E2E tests generate dynamic, parallel-safe data using `uniqueName` (`E2E Crag <uuid>-1`, `E2E Route <uuid>-2`). To keep the local Miniflare D1 database clean and prevent bloat across repeated runs:
+
+- **Automated Pre-Suite & Post-Suite Cleanup:**
+  - `e2e/warmup.setup.ts` automatically runs `cleanE2EData({ quiet: true })` before the suite to clear any stale records left by previously aborted or cancelled runs.
+  - `e2e/support/teardown.ts` runs automatically via `globalTeardown` in `playwright.config.ts`, leaving the database clean after test completion in ~20ms.
+- **Preserving Data for Debugging:** Set `KEEP_E2E_DATA=1` when running tests to skip post-suite cleanup and leave generated rows in the database for post-mortem inspection.
+- **Manual Cleanup:** Run `npm run test:e2e:clean` (or `node scripts/clean-e2e-data.mjs`) to sweep test records on demand. Add `--dry-run` to preview rows to be deleted, or `--users` to also remove persona accounts and reset `e2e/.auth/`.
+- **Targeted Scope:** Cleanup queries strictly target records prefixed with `E2E ` or authored by personas in the `@e2e.test` domain, never touching catalog routes, real crags, or seed data.
 
 ## Notes
 

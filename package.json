@@ -20,6 +20,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:agent": "playwright test --reporter=./e2e/support/agent-reporter.ts --max-failures=5",
     "test:e2e:fast": "playwright test --no-deps --reporter=./e2e/support/agent-reporter.ts -x",
+    "test:e2e:clean": "node ./scripts/clean-e2e-data.mjs",
     "typegen": "wrangler types && kysely-codegen --out-file app/lib/db.d.ts",
     "verify": "npm run typecheck && npm test",
     "db:list:local": "wrangler d1 migrations list DB --local",
