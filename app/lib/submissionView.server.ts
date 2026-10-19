@@ -1,17 +1,18 @@
 import type { Kysely } from "kysely";
-import { loadAuditRows, sameValue } from "./audit.server";
+import { loadAuditRows } from "./audit.server";
 import type { DB } from "./db.d";
 import {
+  recordFieldValue,
+  sameFieldValue,
   SUBMISSION_FIELDS,
-  type SubmissionChange,
   type SubmissionEntity,
-  type SubmissionPayload,
+  type SubmissionObject,
   type SubmissionTopoRoute,
 } from "./submission.server";
 
 /**
- * Builds what the review page shows for a queued submission. Current values are
- * read live from the main tables each time, so an edit always compares against
+ * Builds what the review page shows for a chain of pending objects. Current values
+ * are read live from the main tables each time, so an edit always compares against
  * what's published now.
  */
 
@@ -35,9 +36,10 @@ export type FieldView = {
 };
 
 export type ChangeView = {
-  index: number;
+  /** The object's id. */
+  key: number;
   entity: SubmissionEntity;
-  op: SubmissionChange["op"];
+  isNew: boolean;
   ref: string | null;
   id: number | null;
   title: string;
@@ -49,6 +51,8 @@ export type ChangeView = {
   unchangedCount: number;
   /** An edit whose record no longer exists. */
   missing: boolean;
+  /** Why approving this object last failed. */
+  error: string | null;
 };
 
 export type ChangeCounts = { creates: number; edits: number };
@@ -89,10 +93,10 @@ export function fieldLabel(field: string) {
 type Row = Record<string, unknown>;
 type Rows = Record<SubmissionEntity, Map<number, Row>>;
 
-export function countChanges(payload: SubmissionPayload): ChangeCounts {
+export function countChanges(objects: SubmissionObject[]): ChangeCounts {
   return {
-    creates: payload.changes.filter((change) => change.op === "create").length,
-    edits: payload.changes.filter((change) => change.op === "update").length,
+    creates: objects.filter((object) => object.targetId === null).length,
+    edits: objects.filter((object) => object.targetId !== null).length,
   };
 }
 
@@ -101,11 +105,11 @@ function rowName(row: Row | undefined) {
 }
 
 class ViewBuilder {
-  private readonly createsByRef = new Map<string, SubmissionChange>();
+  private readonly createsByRef = new Map<string, SubmissionObject>();
 
-  constructor(payload: SubmissionPayload, private readonly rows: Rows) {
-    for (const change of payload.changes) {
-      if (change.op === "create" && change.ref) this.createsByRef.set(change.ref, change);
+  constructor(objects: SubmissionObject[], private readonly rows: Rows) {
+    for (const object of objects) {
+      if (object.targetId === null && object.ref) this.createsByRef.set(object.ref, object);
     }
   }
 
@@ -146,26 +150,6 @@ class ViewBuilder {
     }
   }
 
-  /** The current value in the same shape as a proposed one. */
-  current(entity: SubmissionEntity, name: string, row: Row): unknown {
-    const spec = SUBMISSION_FIELDS[entity][name];
-    const value = row[spec.column];
-    if (spec.kind === "routes") {
-      return ((value as { route_id: number; label: string | null }[] | undefined) ?? [])
-        .map((link) => ({ routeId: link.route_id, label: link.label }));
-    }
-    if (spec.kind === "annotations" && typeof value === "string") {
-      return JSON.parse(value);
-    }
-    return value;
-  }
-
-  /** Route links compare by route and label; their order is the list order. */
-  comparable(entity: SubmissionEntity, name: string, value: unknown): unknown {
-    if (SUBMISSION_FIELDS[entity][name].kind !== "routes" || !Array.isArray(value)) return value;
-    return (value as SubmissionTopoRoute[]).map((link) => [link.routeId, link.label ?? null]);
-  }
-
   location(entity: SubmissionEntity, row: Row): string | null {
     if (entity === "route") {
       return [row.crag_name, row.sector_name].filter(Boolean).join(" › ") || null;
@@ -180,20 +164,27 @@ class ViewBuilder {
     return null;
   }
 
-  change(change: SubmissionChange, index: number): ChangeView {
-    const base = { index, entity: change.entity, op: change.op, ref: change.ref ?? null, id: change.id ?? null };
-    const fieldNames = Object.keys(change.fields);
+  change(object: SubmissionObject): ChangeView {
+    const base = {
+      key: object.id,
+      entity: object.entity,
+      isNew: object.targetId === null,
+      ref: object.ref,
+      id: object.targetId,
+      error: object.error,
+    };
+    const fieldNames = Object.keys(object.fields);
     const proposedFields = () => fieldNames.map((field) => ({
       name: field,
       label: fieldLabel(field),
-      proposed: this.display(change.entity, field, change.fields[field]),
+      proposed: this.display(object.entity, field, object.fields[field]),
     }));
 
-    if (change.op === "create") {
-      const name = change.fields.name;
+    if (object.targetId === null) {
+      const name = object.fields.name;
       return {
         ...base,
-        title: `New ${change.entity}${typeof name === "string" ? ` “${name}”` : ""}`,
+        title: `New ${object.entity}${typeof name === "string" ? ` “${name}”` : ""}`,
         location: null,
         fields: proposedFields(),
         unchangedCount: 0,
@@ -201,11 +192,11 @@ class ViewBuilder {
       };
     }
 
-    const row = this.rows[change.entity].get(change.id!);
+    const row = this.rows[object.entity].get(object.targetId);
     if (!row) {
       return {
         ...base,
-        title: `Edit ${change.entity} ${change.id}`,
+        title: `Edit ${object.entity} ${object.targetId}`,
         location: null,
         fields: proposedFields(),
         unchangedCount: 0,
@@ -216,24 +207,24 @@ class ViewBuilder {
     const fields: FieldView[] = [];
     let unchangedCount = 0;
     for (const field of fieldNames) {
-      const current = this.current(change.entity, field, row);
-      const proposed = change.fields[field];
-      if (sameValue(this.comparable(change.entity, field, current), this.comparable(change.entity, field, proposed))) {
+      const current = recordFieldValue(object.entity, field, row);
+      const proposed = object.fields[field];
+      if (sameFieldValue(object.entity, field, current, proposed)) {
         unchangedCount += 1;
         continue;
       }
       fields.push({
         name: field,
         label: fieldLabel(field),
-        current: this.display(change.entity, field, current),
-        proposed: this.display(change.entity, field, proposed),
+        current: this.display(object.entity, field, current),
+        proposed: this.display(object.entity, field, proposed),
       });
     }
 
     return {
       ...base,
-      title: `Edit ${change.entity} “${rowName(row) ?? change.id}”`,
-      location: this.location(change.entity, row),
+      title: `Edit ${object.entity} “${rowName(row) ?? object.targetId}”`,
+      location: this.location(object.entity, row),
       fields,
       unchangedCount,
       missing: false,
@@ -241,14 +232,14 @@ class ViewBuilder {
   }
 }
 
-function collectIds(payload: SubmissionPayload): Record<SubmissionEntity, Set<number>> {
+function collectIds(objects: SubmissionObject[]): Record<SubmissionEntity, Set<number>> {
   const ids: Record<SubmissionEntity, Set<number>> = {
     crag: new Set(), sector: new Set(), route: new Set(), topo: new Set(),
   };
-  for (const change of payload.changes) {
-    if (change.op === "update" && change.id) ids[change.entity].add(change.id);
-    for (const [name, value] of Object.entries(change.fields)) {
-      const spec = SUBMISSION_FIELDS[change.entity][name];
+  for (const object of objects) {
+    if (object.targetId !== null) ids[object.entity].add(object.targetId);
+    for (const [name, value] of Object.entries(object.fields)) {
+      const spec = SUBMISSION_FIELDS[object.entity][name];
       if (spec?.parent && typeof value === "number") ids[spec.parent].add(value);
       if (spec?.kind === "routes" && Array.isArray(value)) {
         for (const link of value as SubmissionTopoRoute[]) {
@@ -260,9 +251,9 @@ function collectIds(payload: SubmissionPayload): Record<SubmissionEntity, Set<nu
   return ids;
 }
 
-/** Describes each change in a submission for review, against the current records. */
-export async function describeSubmissionChanges(db: Kysely<DB>, payload: SubmissionPayload): Promise<ChangeView[]> {
-  const ids = collectIds(payload);
+/** Describes each object in a chain for review, against the current records. */
+export async function describeObjects(db: Kysely<DB>, objects: SubmissionObject[]): Promise<ChangeView[]> {
+  const ids = collectIds(objects);
   const addIds = (entity: SubmissionEntity, rowsToRead: Map<number, Row>, column: string) => {
     for (const row of rowsToRead.values()) {
       if (typeof row[column] === "number") ids[entity].add(row[column] as number);
@@ -283,6 +274,6 @@ export async function describeSubmissionChanges(db: Kysely<DB>, payload: Submiss
   addIds("crag", rows.sector, "crag_id");
   rows.crag = await loadAuditRows(db, "crag", [...ids.crag]);
 
-  const builder = new ViewBuilder(payload, rows);
-  return payload.changes.map((change, index) => builder.change(change, index));
+  const builder = new ViewBuilder(objects, rows);
+  return objects.map((object) => builder.change(object));
 }

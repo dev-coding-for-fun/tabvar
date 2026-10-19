@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { Kysely, SqliteDialect, type SqliteDatabase } from "kysely";
 import type { DB } from "~/lib/db.d";
-import type { SubmissionPayload } from "./submission.server";
-import { countChanges, describeSubmissionChanges } from "./submissionView.server";
+import { createSubmissionObject as object } from "~/test/helpers";
+import { countChanges, describeObjects } from "./submissionView.server";
 
 const Sqlite = createRequire(import.meta.url)("better-sqlite3") as new (path: string) =>
   SqliteDatabase & Pick<DatabaseSync, "exec">;
@@ -40,17 +40,23 @@ describe("submission review view", () => {
   });
 
   it("shows an edit as current and proposed values for the fields that would change", async () => {
-    const payload: SubmissionPayload = {
-      changes: [{ entity: "route", op: "update", id: 100, fields: { gradeYds: "5.10c", boltCount: 6, sectorId: 11, notes: "<p>New</p>" } }],
-    };
+    const edit = object({
+      entity: "route",
+      targetId: 100,
+      fields: { gradeYds: "5.10c", boltCount: 6, sectorId: 11, notes: "<p>New</p>" },
+      error: "Route 100 is locked",
+    });
 
-    const [change] = await describeSubmissionChanges(db, payload);
+    const [change] = await describeObjects(db, [edit]);
 
     expect(change).toEqual(expect.objectContaining({
+      key: edit.id,
+      isNew: false,
       title: "Edit route “Me & My Shadow”",
       location: "Grassi Lakes › Golf Course",
       unchangedCount: 1,
       missing: false,
+      error: "Route 100 is locked",
     }));
     expect(change.fields).toEqual([
       { name: "gradeYds", label: "Grade", current: { kind: "text", text: "5.10b" }, proposed: { kind: "text", text: "5.10c" } },
@@ -65,45 +71,39 @@ describe("submission review view", () => {
   });
 
   it("reads current values live, so an edit that's since been applied shows nothing to change", async () => {
-    const payload: SubmissionPayload = { changes: [{ entity: "route", op: "update", id: 100, fields: { gradeYds: "5.10c" } }] };
     sqlite.exec("UPDATE route SET grade_yds = '5.10c' WHERE id = 100");
 
-    const [change] = await describeSubmissionChanges(db, payload);
+    const [change] = await describeObjects(db, [object({ entity: "route", targetId: 100, fields: { gradeYds: "5.10c" } })]);
 
     expect(change.fields).toEqual([]);
     expect(change.unchangedCount).toBe(1);
   });
 
-  it("names new parents by the records created earlier in the submission", async () => {
-    const payload: SubmissionPayload = {
-      changes: [
-        { ref: "s1", entity: "sector", op: "create", fields: { name: "Main Wall", cragId: 1 } },
-        { ref: "r1", entity: "route", op: "create", fields: { name: "New Line", sectorId: "s1" } },
-      ],
-    };
+  it("names new parents by the other objects in the chain", async () => {
+    const objects = [
+      object({ entity: "sector", ref: "s1", fields: { name: "Main Wall", cragId: 1 } }),
+      object({ entity: "route", ref: "r1", fields: { name: "New Line", sectorId: "s1" } }),
+    ];
 
-    const [sector, route] = await describeSubmissionChanges(db, payload);
+    const [sector, route] = await describeObjects(db, objects);
 
-    expect(sector.title).toBe("New sector “Main Wall”");
+    expect(sector).toMatchObject({ title: "New sector “Main Wall”", isNew: true, ref: "s1" });
     expect(sector.fields[1].proposed).toEqual({ kind: "record", record: { entity: "crag", id: 1, label: "Grassi Lakes", isNew: false } });
     expect(route.fields[1].proposed).toEqual({ kind: "record", record: { entity: "sector", id: null, label: "Main Wall", isNew: true } });
-    expect(countChanges(payload)).toEqual({ creates: 2, edits: 0 });
+    expect(countChanges(objects)).toEqual({ creates: 2, edits: 0 });
   });
 
   it("shows a topo's images and linked routes, with the current links by name", async () => {
-    const payload: SubmissionPayload = {
-      changes: [
-        { ref: "r1", entity: "route", op: "create", fields: { name: "New Line", sectorId: 10 } },
-        {
-          entity: "topo",
-          op: "update",
-          id: 7,
-          fields: { raster: "raster-new.jpg", routes: [{ routeId: 100, label: "1" }, { routeId: "r1", label: "2" }] },
-        },
-      ],
-    };
+    const objects = [
+      object({ entity: "route", ref: "r1", fields: { name: "New Line", sectorId: 10 } }),
+      object({
+        entity: "topo",
+        targetId: 7,
+        fields: { raster: "raster-new.jpg", routes: [{ routeId: 100, label: "1" }, { routeId: "r1", label: "2" }] },
+      }),
+    ];
 
-    const [, topo] = await describeSubmissionChanges(db, payload);
+    const [, topo] = await describeObjects(db, objects);
 
     expect(topo.location).toBe("Grassi Lakes › Golf Course");
     expect(topo.fields).toEqual([
@@ -124,9 +124,7 @@ describe("submission review view", () => {
   });
 
   it("flags an edit whose record no longer exists", async () => {
-    const [change] = await describeSubmissionChanges(db, {
-      changes: [{ entity: "route", op: "update", id: 999, fields: { name: "Gone" } }],
-    });
+    const [change] = await describeObjects(db, [object({ entity: "route", targetId: 999, fields: { name: "Gone" } })]);
 
     expect(change).toEqual(expect.objectContaining({ title: "Edit route 999", missing: true }));
   });

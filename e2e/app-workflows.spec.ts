@@ -1,79 +1,75 @@
 import crypto from "node:crypto";
 import { expect, test } from "./support/test";
 import {
-  approveSubmission,
   connectTopobuilder,
-  findSubmission,
-  newRouteChanges,
+  newRouteObjects,
   pngUpload,
+  reviewItem,
   topobuilderApi,
 } from "./support/topobuilder";
 
 // The TopoBuilder app's workflows against the real API, with the test playing the
-// app: it connects an account, submits, polls its submissions, and pulls the catalog.
-// Topo images are uploaded to the remote -dev R2 bucket (see docs/e2e-testing.md).
+// app: it connects an account, proposes objects, reads their state, and pulls the
+// catalog. Topo images are uploaded to the remote -dev R2 bucket (see docs/e2e-testing.md).
 
 test.describe("as the TopoBuilder app", () => {
   test.use({ persona: "anonymous" });
 
-  test("an anonymous contributor's topo shows as in review, then the app adopts the published ids", async ({
+  test("an anonymous contributor's objects show as in review, then publish under new ids", async ({
     page,
     pageAs,
     uniqueName,
   }) => {
     const app = topobuilderApi(page.request, await connectTopobuilder(page));
-    const memberApp = topobuilderApi((await pageAs("member")).request, await connectTopobuilder(await pageAs("member")));
+    const member = await pageAs("member");
+    const memberApp = topobuilderApi(member.request, await connectTopobuilder(member));
     const admin = await pageAs("admin");
-    const route = uniqueName("Route");
-    const topoUuid = crypto.randomUUID();
     const crag = uniqueName("Crag");
-    const changesFor = (topoName: string) => [
-      ...newRouteChanges({ crag, route }),
-      {
-        ref: "t1",
-        entity: "topo",
-        op: "create",
-        fields: {
-          uuid: topoUuid,
-          name: topoName,
-          sectorId: "s1",
-          background: "file:bg",
-          raster: "file:raster",
-          annotations: { version: 1, items: [{ id: "line-1", kind: "climbLine", routeId: "r1", points: [] }] },
-          routes: [{ routeId: "r1", label: "1" }],
-        },
+    const { objects, refs } = newRouteObjects({ crag, route: uniqueName("Route") });
+    const topoRef = `topo-${crypto.randomUUID()}`;
+    const topoUuid = crypto.randomUUID();
+    const topo = (name: string) => ({
+      entity: "topo",
+      ref: topoRef,
+      fields: {
+        uuid: topoUuid,
+        name,
+        sectorId: refs.sector,
+        background: "file:bg",
+        raster: "file:raster",
+        annotations: { version: 1, items: [{ id: "line-1", kind: "climbLine", routeId: refs.route, points: [] }] },
+        routes: [{ routeId: refs.route, label: "1" }],
       },
-    ];
+    });
     const images = { bg: pngUpload("bg.png"), raster: pngUpload("raster.png") };
 
-    const { serverTime: before } = await app.mySubmissions();
-    const submissionId = await app.submit(changesFor(uniqueName("Topo")), images);
-
-    // The user edits the topo before review; resubmitting replaces the pending submission.
+    const { serverTime: before } = await app.myObjects();
+    await app.submit([...objects, topo(uniqueName("Topo"))], images);
+    // Sending the topo again, renamed, updates its one proposal rather than queuing another.
     const topoName = uniqueName("Topo");
-    expect(await app.resubmit(submissionId, changesFor(topoName), images)).toBe(submissionId);
+    expect(await app.submit([topo(topoName)], images)).toEqual([{ entity: "topo", ref: topoRef, id: null, state: "pending" }]);
 
-    // In review: the app sees its pending changes, with uploaded images stored for review.
-    const pending = findSubmission(await app.mySubmissions(before), submissionId, "pending");
-    expect(pending.error).toBeNull();
-    const topoChange = pending.changes.find((change) => change.entity === "topo");
-    expect(topoChange?.fields).toMatchObject({ name: topoName, raster: expect.stringContaining(`/submissions/${submissionId}/`) });
-    expect((await app.mySubmissions(before)).submissions.filter((submission) => submission.status === "pending"
-      && submission.changes.some((change) => change.fields.uuid === topoUuid))).toHaveLength(1);
-    expect((await memberApp.mySubmissions()).submissions.map((submission) => submission.id)).not.toContain(submissionId);
+    const inReview = (await app.myObjects(before)).objects;
+    expect(inReview.filter((object) => object.ref === topoRef)).toEqual([
+      expect.objectContaining({ state: "pending", fields: expect.objectContaining({ name: topoName, raster: expect.stringContaining("/submissions/") }) }),
+    ]);
+    expect(inReview.map((object) => object.ref)).toEqual(expect.arrayContaining([refs.crag, refs.sector, refs.route]));
+    expect((await memberApp.myObjects()).objects.map((object) => object.ref)).not.toContain(refs.crag);
 
-    await approveSubmission(admin, submissionId);
+    await reviewItem(admin, `New crag “${crag}”`, "Approve");
 
-    // Published: polling from the same cursor reports the decision and the new ids.
-    const { ids } = findSubmission(await app.mySubmissions(before), submissionId, "approved");
-    expect(ids).toEqual({ c1: expect.any(Number), s1: expect.any(Number), r1: expect.any(Number), t1: expect.any(Number) });
+    const published = new Map((await app.myObjects(before)).objects.map((object) => [object.ref, object]));
+    for (const ref of [refs.crag, refs.sector, refs.route, topoRef]) {
+      expect(published.get(ref)).toMatchObject({ state: "published", id: expect.any(Number) });
+    }
+    const routeId = published.get(refs.route)!.id;
 
-    // The catalog pulls return the published records under those ids.
-    expect(await app.route(ids.r1)).toMatchObject({ id: ids.r1, sectorId: ids.s1 });
-    const topo = await app.topo(topoUuid);
-    expect(topo).toMatchObject({ id: ids.t1, name: topoName, status: "Active" });
-    expect(topo.routes).toEqual([expect.objectContaining({ routeId: ids.r1, label: "1" })]);
-    expect(topo.annotations.items).toEqual([expect.objectContaining({ id: "line-1", routeId: ids.r1 })]);
+    // The catalog pulls return the published records under those ids, linked by id.
+    expect(await app.route(routeId!)).toMatchObject({ sectorId: published.get(refs.sector)!.id });
+    const pulled = await app.topo(topoUuid);
+    expect(pulled).toMatchObject({ id: published.get(topoRef)!.id, name: topoName, status: "Active" });
+    expect(pulled.routes).toEqual([expect.objectContaining({ routeId, label: "1" })]);
+    expect(pulled.annotations.items).toEqual([expect.objectContaining({ id: "line-1", routeId })]);
   });
 
   test("only admins publish topos directly, and their edits keep what they leave out", async ({
@@ -84,9 +80,12 @@ test.describe("as the TopoBuilder app", () => {
     const app = topobuilderApi(page.request, await connectTopobuilder(page));
     const admin = await pageAs("admin");
     const adminApp = topobuilderApi(admin.request, await connectTopobuilder(admin));
-    const created = await app.submit(newRouteChanges({ crag: uniqueName("Crag"), route: uniqueName("Route") }));
-    await approveSubmission(admin, created);
-    const { s1: sectorId, r1: routeId } = (await app.status(created)).ids!;
+    const crag = uniqueName("Crag");
+    const { objects, refs } = newRouteObjects({ crag, route: uniqueName("Route") });
+    await app.submit(objects);
+    await reviewItem(admin, `New crag “${crag}”`, "Approve");
+    const sectorId = (await app.object({ ref: refs.sector }))!.id;
+    const routeId = (await app.object({ ref: refs.route }))!.id;
     const topoUuid = crypto.randomUUID();
     const name = uniqueName("Topo");
 
@@ -122,9 +121,11 @@ test.describe("as the TopoBuilder app", () => {
     const memberApp = topobuilderApi(member.request, await connectTopobuilder(member));
     const admin = await pageAs("admin");
     const adminApp = topobuilderApi(admin.request, await connectTopobuilder(admin));
-    const created = await app.submit(newRouteChanges({ crag: uniqueName("Crag"), route: uniqueName("Route") }));
-    await approveSubmission(admin, created);
-    const routeId = (await app.status(created)).ids!.r1;
+    const crag = uniqueName("Crag");
+    const { objects, refs } = newRouteObjects({ crag, route: uniqueName("Route") });
+    await app.submit(objects);
+    await reviewItem(admin, `New crag “${crag}”`, "Approve");
+    const routeId = (await app.object({ ref: refs.route }))!.id!;
 
     const mine = await app.reportIssue(routeId);
     expect(mine.issue.status).toBe("In Moderation");

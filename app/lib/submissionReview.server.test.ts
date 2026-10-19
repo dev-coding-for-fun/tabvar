@@ -15,49 +15,43 @@ vi.mock("~/lib/db", () => ({
   getDB: mocks.getDB,
 }));
 
-import { getSubmissionStatus } from "./submission.server";
-import { approveSubmission, rejectSubmission } from "./submissionReview.server";
+import { approveChain, groupIntoChains, loadChain, loadPendingChains, rejectChain } from "./submissionReview.server";
 
 const Sqlite = createRequire(import.meta.url)("better-sqlite3") as new (path: string) =>
   SqliteDatabase & Pick<DatabaseSync, "exec">;
 
 const reviewer = { uid: "admin", displayName: "Admin" };
 
-const multiLevel = {
-  changes: [
-    { ref: "c1", entity: "crag", op: "create", fields: { name: "New Crag" } },
-    { ref: "s1", entity: "sector", op: "create", fields: { name: "Main Wall", cragId: "c1" } },
-    { ref: "r1", entity: "route", op: "create", fields: { name: "New Line", sectorId: "s1", gradeYds: "5.11a" } },
-    { entity: "route", op: "update", id: 100, fields: { boltCount: 7 } },
-    {
-      ref: "t1",
-      entity: "topo",
-      op: "create",
-      fields: {
-        uuid: "topo-new",
-        name: "Main Wall Left",
-        sectorId: "s1",
-        background: "https://topos.example.com/submissions/sub/bg.jpg",
-        raster: "https://topos.example.com/submissions/sub/raster.png",
-        annotations: { version: 1, items: [{ id: "line-1", routeId: 100 }, { id: "line-2", kind: "climbLine", routeId: "r1" }, { id: "walkoff-1" }] },
-        routes: [{ routeId: 100, label: "1" }, { routeId: "r1", label: "2" }],
-      },
-    },
-  ],
-};
-
 describe("submission review", () => {
   let sqlite: InstanceType<typeof Sqlite>;
   let db: Kysely<DB>;
 
-  function queue(id: string, payload: unknown) {
-    sqlite.exec(`INSERT INTO submission (id, uid, source, payload) VALUES ('${id}', 'submitter', 'topobuilder', '${JSON.stringify(payload)}')`);
+  /** Stores a pending proposal directly, as intake would have. Returns its id. */
+  async function propose(
+    entity: string,
+    fields: Record<string, unknown>,
+    options: { ref?: string; targetId?: number; uid?: string; state?: string } = {},
+  ) {
+    const row = await db.insertInto("submission").values({
+      uid: options.uid ?? "submitter",
+      source: "topobuilder",
+      entity,
+      ref: options.ref ?? null,
+      target_id: options.targetId ?? null,
+      fields: JSON.stringify(fields),
+      state: options.state ?? "pending",
+      received_at: "2026-10-01 00:00:00",
+      updated_at: "2026-10-01 00:00:00",
+    }).returning("id").executeTakeFirstOrThrow();
+    return row.id;
   }
 
   async function auditRows() {
     const rows = await db.selectFrom("audit_log").selectAll().orderBy("id").execute();
     return rows.map((row) => ({ ...row, changes: JSON.parse(row.changes) }));
   }
+
+  const objectRow = (id: number) => db.selectFrom("submission").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,12 +61,12 @@ describe("submission review", () => {
     sqlite.exec("ALTER TABLE route ADD COLUMN updated_at TIMESTAMP");
     sqlite.exec("ALTER TABLE crag ADD COLUMN slug TEXT");
     for (const migration of [
-      "0062_add_raw_topos.sql", "0063_add_topo_coordinates.sql", "0070_add_audit_log.sql", "0071_replace_topo_submission.sql",
+      "0062_add_raw_topos.sql", "0063_add_topo_coordinates.sql", "0070_add_audit_log.sql", "0072_submission_per_object.sql",
     ]) {
       sqlite.exec(readFileSync(resolve("migrations", migration), "utf8"));
     }
     sqlite.exec(`
-      INSERT INTO user (uid, display_name) VALUES ('submitter', 'Submitter'), ('admin', 'Admin');
+      INSERT INTO user (uid, display_name) VALUES ('submitter', 'Submitter'), ('someone-else', 'Other'), ('admin', 'Admin');
       INSERT INTO crag (id, name, slug) VALUES (1, 'Crag', 'crag');
       INSERT INTO sector (id, name, crag_id) VALUES (10, 'Sector', 1);
       INSERT INTO route (id, name, sector_id, bolt_count) VALUES (100, 'Route', 10, 6);
@@ -80,186 +74,119 @@ describe("submission review", () => {
     mocks.getDB.mockReturnValue(db);
   });
 
-  it("approves a multi-level submission, logs each change, and removes it from the queue", async () => {
-    queue("sub", multiLevel);
+  it("groups an account's pending objects into chains linked by refs", async () => {
+    const crag = await propose("crag", { name: "New Crag" }, { ref: "c1" });
+    const sector = await propose("sector", { name: "Main Wall", cragId: "c1" }, { ref: "s1" });
+    const route = await propose("route", { name: "New Line", sectorId: "s1" }, { ref: "r1" });
+    const edit = await propose("route", { boltCount: 7 }, { targetId: 100 });
+    const theirs = await propose("crag", { name: "Their Crag" }, { ref: "c1", uid: "someone-else" });
 
-    const result = await approveSubmission(createContext(), { id: "sub", reviewer });
+    const chains = await loadPendingChains(db);
 
-    const crag = await db.selectFrom("crag").selectAll().where("name", "=", "New Crag").executeTakeFirstOrThrow();
-    const sector = await db.selectFrom("sector").selectAll().where("name", "=", "Main Wall").executeTakeFirstOrThrow();
-    const route = await db.selectFrom("route").selectAll().where("name", "=", "New Line").executeTakeFirstOrThrow();
-    const topo = await db.selectFrom("topo").selectAll().where("uuid", "=", "topo-new").executeTakeFirstOrThrow();
-    expect(result).toEqual({ ok: true, ids: { c1: crag.id, s1: sector.id, r1: route.id, t1: topo.id } });
-    expect(crag.slug).toBe("new-crag");
-    expect(sector.crag_id).toBe(crag.id);
-    expect(route).toEqual(expect.objectContaining({ sector_id: sector.id, grade_yds: "5.11a" }));
-    expect(topo).toEqual(expect.objectContaining({ sector_id: sector.id, raster_image_url: "https://topos.example.com/submissions/sub/raster.png" }));
-    // Annotations drawn for a new route point at its published id, not the submission's ref.
-    expect(JSON.parse(topo.annotations_json)).toEqual({
-      version: 1,
-      items: [{ id: "line-1", routeId: 100 }, { id: "line-2", kind: "climbLine", routeId: route.id }, { id: "walkoff-1" }],
-    });
+    expect(chains.map((chain) => chain.objects.map((object) => object.id)).sort()).toEqual(
+      [[crag, sector, route], [edit], [theirs]].sort(),
+    );
+    expect(chains.find((chain) => chain.key === crag)?.author).toEqual({ uid: "submitter", displayName: "Submitter" });
+    expect((await loadChain(db, route))?.key).toBe(crag);
+    expect(groupIntoChains([])).toEqual([]);
+  });
+
+  it("approves a chain parents first, publishing each object with its record id", async () => {
+    const route = await propose("route", { name: "New Line", sectorId: "s1", gradeYds: "5.11a" }, { ref: "r1" });
+    const topo = await propose("topo", {
+      uuid: "topo-new",
+      name: "Main Wall Left",
+      sectorId: "s1",
+      background: "https://topos.example.com/submissions/submitter/bg.jpg",
+      raster: "https://topos.example.com/submissions/submitter/raster.png",
+      annotations: { version: 1, items: [{ id: "line-1", routeId: "r1" }, { id: "line-2", routeId: 100 }] },
+      routes: [{ routeId: 100, label: "1" }, { routeId: "r1", label: "2" }],
+    }, { ref: "t1" });
+    const sector = await propose("sector", { name: "Main Wall", cragId: "c1" }, { ref: "s1" });
+    const crag = await propose("crag", { name: "New Crag" }, { ref: "c1" });
+
+    expect(await approveChain(createContext(), { item: route, reviewer })).toEqual({ ok: true });
+
+    const newCrag = await db.selectFrom("crag").selectAll().where("name", "=", "New Crag").executeTakeFirstOrThrow();
+    const newSector = await db.selectFrom("sector").selectAll().where("name", "=", "Main Wall").executeTakeFirstOrThrow();
+    const newRoute = await db.selectFrom("route").selectAll().where("name", "=", "New Line").executeTakeFirstOrThrow();
+    const newTopo = await db.selectFrom("topo").selectAll().where("uuid", "=", "topo-new").executeTakeFirstOrThrow();
+    expect(newCrag.slug).toBe("new-crag");
+    expect(newSector.crag_id).toBe(newCrag.id);
+    expect(newRoute).toMatchObject({ sector_id: newSector.id, grade_yds: "5.11a" });
+    expect(JSON.parse(newTopo.annotations_json).items).toEqual([
+      { id: "line-1", routeId: newRoute.id },
+      { id: "line-2", routeId: 100 },
+    ]);
     expect(await db.selectFrom("route_topo").select(["route_id", "label"]).orderBy("sort_order").execute())
-      .toEqual([{ route_id: 100, label: "1" }, { route_id: route.id, label: "2" }]);
-    expect(await db.selectFrom("route").select("bolt_count").where("id", "=", 100).executeTakeFirst()).toEqual({ bolt_count: 7 });
+      .toEqual([{ route_id: 100, label: "1" }, { route_id: newRoute.id, label: "2" }]);
 
+    for (const [id, targetId] of [[crag, newCrag.id], [sector, newSector.id], [route, newRoute.id], [topo, newTopo.id]]) {
+      expect(await objectRow(id)).toMatchObject({ state: "published", target_id: targetId, error: null });
+    }
     const rows = await auditRows();
     expect(rows.map((row) => [row.entity, row.action, row.ref])).toEqual([
-      ["crag", "create", "c1"], ["sector", "create", "s1"], ["route", "create", "r1"], ["route", "update", null], ["topo", "create", "t1"],
+      ["crag", "create", "c1"], ["sector", "create", "s1"], ["route", "create", "r1"], ["topo", "create", "t1"],
     ]);
     for (const row of rows) {
-      expect(row).toEqual(expect.objectContaining({
-        author_uid: "submitter", author_name: "Submitter", reviewer_uid: "admin", reviewer_name: "Admin",
-        decision: "approved", source: "topobuilder", submission_id: "sub",
-      }));
+      expect(row).toMatchObject({ author_uid: "submitter", reviewer_uid: "admin", decision: "approved", source: "topobuilder" });
     }
-    expect(rows[3]).toEqual(expect.objectContaining({ entity_id: 100, changes: { bolt_count: [6, 7] } }));
-    expect(await db.selectFrom("submission").select("id").execute()).toEqual([]);
-
-    expect(await getSubmissionStatus(createContext(), { uid: "submitter", id: "sub" }))
-      .toEqual({ id: "sub", status: "approved", ids: result.ok ? result.ids : {} });
   });
 
-  it("keeps a failed approval queued with its error, and approving again doesn't repeat creates or updates", async () => {
-    queue("sub", {
-      changes: [
-        { ref: "c1", entity: "crag", op: "create", fields: { name: "New Crag" } },
-        { entity: "sector", op: "update", id: 10, fields: { name: "Updated Sector" } },
-        { entity: "route", op: "update", id: 100, fields: { boltCount: 7 } },
-      ],
-    });
-    sqlite.exec(`CREATE TRIGGER block_route_update BEFORE UPDATE ON route BEGIN SELECT RAISE(ABORT, 'Route is locked'); END;`);
+  it("resumes after a failed approval without repeating what was published", async () => {
+    const crag = await propose("crag", { name: "New Crag" }, { ref: "c1" });
+    const sector = await propose("sector", { name: "Main Wall", cragId: "c1" }, { ref: "s1" });
+    const route = await propose("route", { name: "New Line", sectorId: "s1" }, { ref: "r1" });
+    sqlite.exec(`CREATE TRIGGER block_routes BEFORE INSERT ON route BEGIN SELECT RAISE(ABORT, 'Routes are locked'); END;`);
 
-    expect(await approveSubmission(createContext(), { id: "sub", reviewer })).toEqual({ ok: false, error: "Route is locked" });
-    const queued = await db.selectFrom("submission").selectAll().executeTakeFirstOrThrow();
-    expect(queued.error).toBe("Route is locked");
-    const cragId = (await db.selectFrom("crag").select("id").where("name", "=", "New Crag").executeTakeFirstOrThrow()).id;
-    expect(JSON.parse(queued.payload).changes).toEqual([
-      expect.objectContaining({ ref: "c1", id: cragId, applied: true }),
-      expect.objectContaining({ entity: "sector", id: 10, applied: true }),
-      expect.not.objectContaining({ applied: true }),
-    ]);
+    expect(await approveChain(createContext(), { item: crag, reviewer })).toEqual({ ok: false, error: "Routes are locked" });
+    expect(await objectRow(crag)).toMatchObject({ state: "published" });
+    expect(await objectRow(sector)).toMatchObject({ state: "published" });
+    expect(await objectRow(route)).toMatchObject({ state: "pending", error: "Routes are locked" });
 
-    sqlite.exec("DROP TRIGGER block_route_update");
-    expect(await approveSubmission(createContext(), { id: "sub", reviewer })).toEqual({ ok: true, ids: { c1: cragId } });
+    sqlite.exec("DROP TRIGGER block_routes");
+    // The published parents have left the chain; the route alone remains and still finds its sector.
+    expect(await approveChain(createContext(), { item: route, reviewer })).toEqual({ ok: true });
+    const newSector = await db.selectFrom("sector").select("id").where("name", "=", "Main Wall").execute();
     expect(await db.selectFrom("crag").select("id").where("name", "=", "New Crag").execute()).toHaveLength(1);
-    expect((await auditRows()).map((row) => [row.entity, row.action])).toEqual([
-      ["crag", "create"],
-      ["sector", "update"],
-      ["route", "update"],
-    ]);
-    expect(await db.selectFrom("submission").select("id").execute()).toEqual([]);
+    expect(newSector).toHaveLength(1);
+    expect(await db.selectFrom("route").select("sector_id").where("name", "=", "New Line").execute())
+      .toEqual([{ sector_id: newSector[0].id }]);
   });
 
-  it("resumes without repeating creates after a crash that skipped the error save", async () => {
-    queue("sub", {
-      changes: [
-        { ref: "c1", entity: "crag", op: "create", fields: { name: "New Crag" } },
-        { ref: "s1", entity: "sector", op: "create", fields: { name: "Main Wall", cragId: "c1" } },
-        { entity: "route", op: "update", id: 100, fields: { boltCount: 7 } },
-      ],
-    });
-    // The last change fails, and saving the error fails too, as if the worker died
-    // mid-approval: only the progress saved after each change survives.
-    sqlite.exec(`
-      CREATE TRIGGER block_route_update BEFORE UPDATE ON route BEGIN SELECT RAISE(ABORT, 'Route is locked'); END;
-      CREATE TRIGGER block_error_save BEFORE UPDATE ON submission WHEN NEW.error IS NOT NULL
-        BEGIN SELECT RAISE(ABORT, 'Worker stopped'); END;
-    `);
+  it("applies an edit to a published object and fails clearly when the record is gone", async () => {
+    const edit = await propose("route", { boltCount: 7 }, { ref: "r1", targetId: 100 });
 
-    await expect(approveSubmission(createContext(), { id: "sub", reviewer })).rejects.toThrow("Worker stopped");
-    const queued = await db.selectFrom("submission").selectAll().executeTakeFirstOrThrow();
-    expect(queued.error).toBeNull();
-    expect(JSON.parse(queued.payload).changes.map((change: { applied?: boolean }) => change.applied ?? false))
-      .toEqual([true, true, false]);
+    expect(await approveChain(createContext(), { item: edit, reviewer })).toEqual({ ok: true });
+    expect(await db.selectFrom("route").select("bolt_count").where("id", "=", 100).executeTakeFirst()).toEqual({ bolt_count: 7 });
+    expect((await auditRows())[0]).toMatchObject({ action: "update", entity_id: 100, changes: { bolt_count: [6, 7] } });
 
-    sqlite.exec("DROP TRIGGER block_route_update; DROP TRIGGER block_error_save;");
-    const result = await approveSubmission(createContext(), { id: "sub", reviewer });
-
-    const crags = await db.selectFrom("crag").select("id").where("name", "=", "New Crag").execute();
-    const sectors = await db.selectFrom("sector").select(["id", "crag_id"]).where("name", "=", "Main Wall").execute();
-    expect(crags).toHaveLength(1);
-    expect(sectors).toEqual([{ id: expect.any(Number), crag_id: crags[0].id }]);
-    expect(result).toEqual({ ok: true, ids: { c1: crags[0].id, s1: sectors[0].id } });
-    expect((await auditRows()).map((row) => [row.entity, row.action])).toEqual([
-      ["crag", "create"],
-      ["sector", "create"],
-      ["route", "update"],
-    ]);
+    const stale = await propose("route", { name: "Ghost" }, { targetId: 999 });
+    expect(await approveChain(createContext(), { item: stale, reviewer })).toEqual({ ok: false, error: "route 999 no longer exists." });
   });
 
-  it("fails clearly when an edited record was removed after the submission arrived", async () => {
-    queue("sub", { changes: [{ entity: "route", op: "update", id: 100, fields: { boltCount: 7 } }] });
-    sqlite.exec("DELETE FROM route WHERE id = 100");
+  it("rejects a whole chain, recording each proposal against current values", async () => {
+    const crag = await propose("crag", { name: "Spam Crag" }, { ref: "c1" });
+    const sector = await propose("sector", { name: "Spam Wall", cragId: "c1" }, { ref: "s1" });
 
-    expect(await approveSubmission(createContext(), { id: "sub", reviewer }))
-      .toEqual({ ok: false, error: "route 100 no longer exists." });
-    expect(await auditRows()).toEqual([]);
-  });
-
-  it("rejects a submission by logging each proposed change against current values", async () => {
-    queue("sub", multiLevel);
-
-    expect(await rejectSubmission(createContext(), { id: "sub", reviewer })).toEqual({ ok: true, ids: {} });
+    expect(await rejectChain(createContext(), { item: sector, reviewer })).toEqual({ ok: true });
 
     expect(await db.selectFrom("crag").select("id").execute()).toEqual([{ id: 1 }]);
-    expect(await db.selectFrom("route").select("bolt_count").where("id", "=", 100).executeTakeFirst()).toEqual({ bolt_count: 6 });
-    expect(await db.selectFrom("submission").select("id").execute()).toEqual([]);
-
-    const rows = await auditRows();
-    expect(rows).toHaveLength(5);
-    for (const row of rows) {
-      expect(row).toEqual(expect.objectContaining({ decision: "rejected", author_uid: "submitter", reviewer_uid: "admin", submission_id: "sub" }));
+    for (const id of [crag, sector]) {
+      expect(await objectRow(id)).toMatchObject({ state: "rejected", target_id: null });
     }
-    expect(rows[1]).toEqual(expect.objectContaining({
-      entity: "sector", entity_id: null, action: "create", ref: "s1",
-      changes: { name: [null, "Main Wall"], crag_id: [null, "c1"] },
-    }));
-    expect(rows[3]).toEqual(expect.objectContaining({ entity_id: 100, action: "update", changes: { bolt_count: [6, 7] } }));
-    expect(await getSubmissionStatus(createContext(), { uid: "submitter", id: "sub" }))
-      .toEqual({ id: "sub", status: "rejected", ids: {} });
+    expect(await auditRows()).toEqual([
+      expect.objectContaining({ entity: "crag", decision: "rejected", entity_id: null, ref: "c1", changes: { name: [null, "Spam Crag"] } }),
+      expect.objectContaining({ entity: "sector", decision: "rejected", ref: "s1", changes: { name: [null, "Spam Wall"], crag_id: [null, "c1"] } }),
+    ]);
   });
 
-  it("updates image hashes and clears stale dimensions when a submission replaces a topo's images", async () => {
-    const newBgHash = "a".repeat(40);
-    const newRasterHash = "b".repeat(40);
-    sqlite.exec(`
-      INSERT INTO topo (
-        id, uuid, name, background_image_url, background_image_hash,
-        raster_image_url, raster_image_hash, image_width, image_height, image_file_size
-      ) VALUES (
-        7, 'topo-7', 'Wall', 'https://topos.example.com/old-bg.jpg', 'old-bg-hash',
-        'https://topos.example.com/old-raster.png', 'old-raster-hash', 1920, 1080, 50000
-      );
-    `);
-    queue("sub", {
-      changes: [{
-        entity: "topo",
-        op: "update",
-        id: 7,
-        fields: {
-          background: `https://topos.example.com/submissions/sub/${newBgHash}.jpg`,
-          raster: `https://topos.example.com/submissions/sub/${newRasterHash}.png`,
-        },
-      }],
-    });
+  it("refuses an item that's already been decided", async () => {
+    const published = await propose("crag", { name: "Done" }, { ref: "c1", targetId: 1, state: "published" });
 
-    expect(await approveSubmission(createContext(), { id: "sub", reviewer })).toEqual({ ok: true, ids: {} });
-
-    const topo = await db.selectFrom("topo").selectAll().where("id", "=", 7).executeTakeFirstOrThrow();
-    expect(topo).toEqual(expect.objectContaining({
-      background_image_hash: newBgHash,
-      raster_image_hash: newRasterHash,
-      image_width: null,
-      image_height: null,
-      image_file_size: null,
-    }));
-  });
-
-  it("refuses a submission that's already been decided", async () => {
-    expect(await approveSubmission(createContext(), { id: "gone", reviewer }))
-      .toEqual({ ok: false, error: "This submission has already been decided or doesn't exist." });
-    expect(await rejectSubmission(createContext(), { id: "gone", reviewer }))
-      .toEqual({ ok: false, error: "This submission has already been decided or doesn't exist." });
+    for (const review of [approveChain, rejectChain]) {
+      expect(await review(createContext(), { item: published, reviewer }))
+        .toEqual({ ok: false, error: "This has already been decided or doesn't exist." });
+    }
   });
 });

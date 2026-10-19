@@ -2,6 +2,7 @@ import { type ActionFunctionArgs, type LoaderFunctionArgs, RouterContextProvider
 import type { AppLoadContext } from "~/../load-context";
 import { vi, type Mock } from "vitest";
 import type { User } from "~/lib/models";
+import type { SubmissionObject } from "~/lib/submission.server";
 
 type QueryResult = {
   execute?: unknown;
@@ -49,6 +50,28 @@ export function createUser(overrides: Partial<User> = {}): User {
     emailVerified: true,
     providerId: "google",
     role: "member",
+    ...overrides,
+  };
+}
+
+let nextSubmissionObjectId = 1;
+
+/** A pending submission object: a new object with a `ref`, or an edit with a `targetId`. */
+export function createSubmissionObject(
+  overrides: Partial<SubmissionObject> & Pick<SubmissionObject, "entity" | "fields">,
+): SubmissionObject {
+  return {
+    id: nextSubmissionObjectId++,
+    uid: "submitter",
+    source: "topobuilder",
+    ref: null,
+    targetId: null,
+    baseUpdatedAt: null,
+    state: "pending",
+    error: null,
+    receivedAt: "2026-10-01 00:00:00",
+    decidedAt: null,
+    updatedAt: "2026-10-01 00:00:00",
     ...overrides,
   };
 }

@@ -1,29 +1,30 @@
-import type { Kysely } from "kysely";
+import type { Kysely, Selectable } from "kysely";
 import type { AppLoadContext } from "react-router";
-import { chunk, MAX_IDS_PER_QUERY, type AuditEntity } from "./audit.server";
+import { chunk, loadAuditRows, MAX_IDS_PER_QUERY, sameValue, type AuditEntity } from "./audit.server";
 import { IMAGE_TYPES } from "./constants";
 import { getDB } from "./db";
-import type { DB } from "./db.d";
+import type { DB, Submission } from "./db.d";
 import { deleteFromR2, uploadFileToR2 } from "./s3.server";
 import { toStoredJson } from "./storedJson";
 import { TOPO_STATUSES, type TopoStatus } from "./topo.server";
 import { formatSqliteTimestamp } from "./topoSync.server";
 
 /**
- * Submission intake. A submission is a queued list of proposed creates and edits
- * to crags, sectors, routes, and topos. Its row exists only until an admin
- * approves or rejects it; decisions are kept in audit_log.
- * See docs/submissions-review-plan.md.
+ * Submissions are per object. Each row of `submission` is one account's latest
+ * proposal for one crag, sector, route, or topo, and stays afterwards as the link
+ * between the app's own id for the object (`ref`) and the TABVAR record
+ * (`target_id`). A row is a new object while `target_id` is null, and an edit
+ * once it's set. See docs/submissions-review-plan.md.
  */
 
-const MAX_CHANGES = 500;
+const MAX_OBJECTS = 500;
 const MAX_TOPO_ROUTES = 200;
 const MAX_REPORTED_ERRORS = 10;
 const FILE_PLACEHOLDER_PREFIX = "file:";
 
 export type SubmissionEntity = AuditEntity;
-export type SubmissionOp = "create" | "update";
-/** An existing numeric id, or the `ref` of an earlier create in the same submission. */
+export type SubmissionState = "pending" | "published" | "rejected";
+/** An existing record's numeric id, or the app's `ref` for one of its own objects. */
 export type SubmissionRef = number | string;
 
 export type SubmissionTopoRoute = {
@@ -32,54 +33,47 @@ export type SubmissionTopoRoute = {
   sortOrder?: number;
 };
 
-export type SubmissionChange = {
-  ref?: string;
+/** One account's proposal for one object. */
+export type SubmissionObject = {
+  id: number;
+  uid: string;
+  source: string;
   entity: SubmissionEntity;
-  op: SubmissionOp;
-  /** The target of an update. Approval also sets it on a create once the row exists. */
-  id?: number;
-  /** Set once approval has applied and audited this change. */
-  applied?: boolean;
-  baseUpdatedAt?: string;
+  ref: string | null;
+  targetId: number | null;
   fields: Record<string, unknown>;
+  baseUpdatedAt: string | null;
+  state: SubmissionState;
+  error: string | null;
+  receivedAt: string;
+  decidedAt: string | null;
+  updatedAt: string;
 };
 
-export type SubmissionPayload = {
-  changes: SubmissionChange[];
-};
+/** Parents come before children: objects only reference entities earlier in this list. */
+export const ENTITY_ORDER: SubmissionEntity[] = ["crag", "sector", "route", "topo"];
 
-export type SubmissionStatus = {
-  id: string;
-  status: "pending" | "approved" | "rejected";
-  error?: string | null;
-  /** New record ids by `ref`, once approved. */
-  ids?: Record<string, number>;
-};
-
-/** One of the caller's submissions, as listed for the submitting app. */
-export type MySubmission =
-  | {
-    id: string;
-    submitterUid: string;
-    status: "pending";
-    createdAt: string;
-    /** Set when an approval attempt failed; the submission stays queued. */
-    error: string | null;
-    changes: SubmissionChange[];
-  }
-  | {
-    id: string;
-    submitterUid: string;
-    status: "approved" | "rejected";
-    decidedAt: string;
-    /** New record ids by `ref`, for changes that were applied. */
-    ids: Record<string, number>;
+export function toSubmissionObject(row: Selectable<Submission>): SubmissionObject {
+  return {
+    id: row.id,
+    uid: row.uid,
+    source: row.source,
+    entity: row.entity as SubmissionEntity,
+    ref: row.ref,
+    targetId: row.target_id,
+    fields: JSON.parse(row.fields) as Record<string, unknown>,
+    baseUpdatedAt: row.base_updated_at,
+    state: row.state as SubmissionState,
+    error: row.error,
+    receivedAt: row.received_at,
+    decidedAt: row.decided_at,
+    updatedAt: row.updated_at,
   };
+}
 
-export type MySubmissionList = {
-  submissions: MySubmission[];
-  serverTime: string;
-};
+export function sortParentsFirst<T extends { entity: SubmissionEntity }>(objects: T[]): T[] {
+  return [...objects].sort((a, b) => ENTITY_ORDER.indexOf(a.entity) - ENTITY_ORDER.indexOf(b.entity));
+}
 
 type FieldKind =
   | "requiredText"
@@ -161,20 +155,10 @@ const REQUIRED_ON_CREATE: Record<SubmissionEntity, string[]> = {
   topo: ["name", "background", "raster"],
 };
 
-const ENTITIES = Object.keys(SUBMISSION_FIELDS) as SubmissionEntity[];
-
 export class SubmissionValidationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "SubmissionValidationError";
-  }
-}
-
-/** The submission to replace can't be replaced in its current state. */
-export class SubmissionConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SubmissionConflictError";
   }
 }
 
@@ -221,7 +205,62 @@ export function annotationItems(value: unknown): unknown[] {
   return isRecord(value) && Array.isArray(value.items) ? value.items : [];
 }
 
-type ExistenceCheck = { entity: SubmissionEntity; id: number; path: string };
+/**
+ * Rewrites every reference in an object's fields: parent fields, a topo's route
+ * links, and annotation items' `routeId`. `replace` gets each value with the
+ * entity it must point to and a path for messages; other fields are copied as is.
+ */
+export function mapReferences(
+  entity: SubmissionEntity,
+  fields: Record<string, unknown>,
+  replace: (value: SubmissionRef, target: SubmissionEntity, path: string) => SubmissionRef,
+): Record<string, unknown> {
+  const mapped: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(fields)) {
+    const spec = SUBMISSION_FIELDS[entity][name];
+    const path = `fields.${name}`;
+    if ((spec?.kind === "parent" || spec?.kind === "optionalParent") && (typeof value === "string" || typeof value === "number")) {
+      mapped[name] = replace(value, spec.parent!, path);
+    } else if (spec?.kind === "routes" && Array.isArray(value)) {
+      mapped[name] = (value as SubmissionTopoRoute[]).map((link, index) => ({
+        ...link,
+        routeId: replace(link.routeId, "route", `${path}[${index}].routeId`),
+      }));
+    } else if (spec?.kind === "annotations" && (Array.isArray(value) || isRecord(value))) {
+      const items = annotationItems(value).map((item, index) =>
+        isRecord(item) && (typeof item.routeId === "string" || typeof item.routeId === "number")
+          ? { ...item, routeId: replace(item.routeId, "route", `${path}.items[${index}].routeId`) }
+          : item);
+      mapped[name] = Array.isArray(value) ? items : { ...value, items };
+    } else {
+      mapped[name] = value;
+    }
+  }
+  return mapped;
+}
+
+/** A record's current value for a field, in the same shape as a proposed value. */
+export function recordFieldValue(entity: SubmissionEntity, field: string, row: Record<string, unknown>): unknown {
+  const spec = SUBMISSION_FIELDS[entity][field];
+  const value = row[spec.column];
+  if (spec.kind === "routes") {
+    return ((value as { route_id: number; label: string | null }[] | undefined) ?? [])
+      .map((link) => ({ routeId: link.route_id, label: link.label }));
+  }
+  if (spec.kind === "annotations" && typeof value === "string") {
+    return JSON.parse(value);
+  }
+  return value;
+}
+
+/** Whether a proposed value equals a record's current one. Route links compare by route and label. */
+export function sameFieldValue(entity: SubmissionEntity, field: string, current: unknown, proposed: unknown) {
+  const comparable = (value: unknown) =>
+    SUBMISSION_FIELDS[entity][field].kind === "routes" && Array.isArray(value)
+      ? (value as SubmissionTopoRoute[]).map((link) => [link.routeId, link.label ?? null])
+      : value;
+  return sameValue(comparable(current), comparable(proposed));
+}
 
 class Problems {
   readonly messages: string[] = [];
@@ -238,39 +277,25 @@ class Problems {
   }
 }
 
-function checkParent(
-  value: unknown,
-  path: string,
-  parent: SubmissionEntity,
-  refs: Map<string, SubmissionEntity>,
-  checks: ExistenceCheck[],
-  problems: Problems,
-) {
-  if (isPositiveInteger(value)) {
-    checks.push({ entity: parent, id: value, path });
-  } else if (typeof value === "string") {
-    if (refs.get(value) !== parent) {
-      problems.add(`${path} refers to "${value}", which is not the ref of an earlier ${parent} create`);
-    }
-  } else {
-    problems.add(`${path} must be an existing ${parent} id or the ref of an earlier ${parent} create`);
-  }
-}
-
-function checkField(
+/** Checks a field's value against its kind. References are only checked for type here. */
+function checkFieldValue(
   entity: SubmissionEntity,
   name: string,
   value: unknown,
   path: string,
-  context: { refs: Map<string, SubmissionEntity>; checks: ExistenceCheck[]; files: Map<string, File>; problems: Problems },
+  files: Map<string, File>,
+  problems: Problems,
 ) {
   const spec = SUBMISSION_FIELDS[entity][name];
-  const { refs, checks, files, problems } = context;
-
   if (!spec) {
     problems.add(`${path} is not an editable ${entity} field`);
     return;
   }
+  const reference = (target: unknown, at: string, of: SubmissionEntity) => {
+    if (!isPositiveInteger(target) && (typeof target !== "string" || target.length === 0)) {
+      problems.add(`${at} must be an existing ${of} id or your ref for one`);
+    }
+  };
 
   switch (spec.kind) {
     case "requiredText":
@@ -299,11 +324,10 @@ function checkField(
       }
       return;
     case "optionalParent":
-      if (value === null) return;
-      checkParent(value, path, spec.parent!, refs, checks, problems);
+      if (value !== null) reference(value, path, spec.parent!);
       return;
     case "parent":
-      checkParent(value, path, spec.parent!, refs, checks, problems);
+      reference(value, path, spec.parent!);
       return;
     case "file": {
       const fileName = typeof value === "string" && value.startsWith(FILE_PLACEHOLDER_PREFIX)
@@ -319,19 +343,17 @@ function checkField(
       }
       return;
     }
-    case "annotations": {
+    case "annotations":
       if (!Array.isArray(value) && !(isRecord(value) && Array.isArray(value.items))) {
         problems.add(`${path} must be an annotation document`);
         return;
       }
-      // An annotation drawn for a route names it like a topo route link does.
       annotationItems(value).forEach((item, index) => {
         if (isRecord(item) && item.routeId !== undefined && item.routeId !== null) {
-          checkParent(item.routeId, `${path}.items[${index}].routeId`, "route", refs, checks, problems);
+          reference(item.routeId, `${path}.items[${index}].routeId`, "route");
         }
       });
       return;
-    }
     case "routes":
       if (!Array.isArray(value)) {
         problems.add(`${path} must be an array`);
@@ -347,7 +369,7 @@ function checkField(
           problems.add(`${linkPath} must be an object`);
           return;
         }
-        checkParent(link.routeId, `${linkPath}.routeId`, "route", refs, checks, problems);
+        reference(link.routeId, `${linkPath}.routeId`, "route");
         if (link.label !== undefined && link.label !== null && typeof link.label !== "string") {
           problems.add(`${linkPath}.label must be a string or null`);
         }
@@ -364,206 +386,344 @@ function checkField(
   }
 }
 
-async function findMissingIds(db: Kysely<DB>, checks: ExistenceCheck[]): Promise<ExistenceCheck[]> {
-  const missing: ExistenceCheck[] = [];
-  for (const entity of ENTITIES) {
-    const entityChecks = checks.filter((check) => check.entity === entity);
-    const ids = [...new Set(entityChecks.map((check) => check.id))];
-    const found = new Set<number>();
-    for (const idChunk of chunk(ids, MAX_IDS_PER_QUERY)) {
-      const rows = await db.selectFrom(entity).select("id").where("id", "in", idChunk).execute();
-      rows.forEach((row) => found.add(Number(row.id)));
-    }
-    missing.push(...entityChecks.filter((check) => !found.has(check.id)));
-  }
-  return missing;
-}
+/** One object from a request: a proposal for the app's own object (`ref`) or a record (`id`), or a withdrawal. */
+type IncomingObject = {
+  path: string;
+  entity: SubmissionEntity;
+  ref: string | null;
+  id: number | null;
+  withdraw: boolean;
+  baseUpdatedAt: string | null;
+  fields: Record<string, unknown>;
+};
 
-/**
- * Checks a submission's shape, fields, refs, files, and targets, and returns it
- * as a typed payload. Throws SubmissionValidationError describing every problem.
- */
-export async function validateSubmission(
-  db: Kysely<DB>,
-  payload: unknown,
-  files: Map<string, File>,
-): Promise<SubmissionPayload> {
+function parseObjects(payload: unknown, files: Map<string, File>): IncomingObject[] {
+  if (!isRecord(payload) || !Array.isArray(payload.objects)) {
+    throw new SubmissionValidationError("The submission must be an object with an `objects` array.");
+  }
+  if (payload.objects.length === 0) {
+    throw new SubmissionValidationError("The submission must include at least one object.");
+  }
+  if (payload.objects.length > MAX_OBJECTS) {
+    throw new SubmissionValidationError(`A submission can include at most ${MAX_OBJECTS} objects.`);
+  }
+
   const problems = new Problems();
+  const seen = new Set<string>();
+  const objects: IncomingObject[] = [];
 
-  if (!isRecord(payload) || !Array.isArray(payload.changes)) {
-    throw new SubmissionValidationError("The submission must be an object with a `changes` array.");
-  }
-  if (payload.changes.length === 0) {
-    throw new SubmissionValidationError("The submission must include at least one change.");
-  }
-  if (payload.changes.length > MAX_CHANGES) {
-    throw new SubmissionValidationError(`A submission can include at most ${MAX_CHANGES} changes.`);
-  }
-
-  const refs = new Map<string, SubmissionEntity>();
-  const checks: ExistenceCheck[] = [];
-  const topoUuids = new Map<string, string>();
-  const changes: SubmissionChange[] = [];
-
-  payload.changes.forEach((rawChange, index) => {
-    const path = `changes[${index}]`;
-    if (!isRecord(rawChange)) {
+  payload.objects.forEach((raw, index) => {
+    const path = `objects[${index}]`;
+    if (!isRecord(raw)) {
       problems.add(`${path} must be an object`);
       return;
     }
-
-    const { ref, entity, op, id, baseUpdatedAt, fields } = rawChange;
-    for (const key of Object.keys(rawChange)) {
-      if (!["ref", "entity", "op", "id", "baseUpdatedAt", "fields"].includes(key)) {
-        problems.add(`${path}.${key} is not a change field`);
+    for (const key of Object.keys(raw)) {
+      if (!["entity", "ref", "id", "withdraw", "baseUpdatedAt", "fields"].includes(key)) {
+        problems.add(`${path}.${key} is not an object field`);
       }
     }
-    if (typeof entity !== "string" || !ENTITIES.includes(entity as SubmissionEntity)) {
-      problems.add(`${path}.entity must be one of ${ENTITIES.join(", ")}`);
+    const { entity, ref, id, withdraw, baseUpdatedAt, fields } = raw;
+    if (typeof entity !== "string" || !ENTITY_ORDER.includes(entity as SubmissionEntity)) {
+      problems.add(`${path}.entity must be one of ${ENTITY_ORDER.join(", ")}`);
       return;
     }
-    if (op !== "create" && op !== "update") {
-      problems.add(`${path}.op must be create or update`);
+    if ((ref === undefined) === (id === undefined)) {
+      problems.add(`${path} needs either a ref (your id for the object) or an id (an existing record), not both`);
       return;
     }
-    if (!isRecord(fields)) {
-      problems.add(`${path}.fields must be an object`);
+    if (ref !== undefined && (typeof ref !== "string" || ref.length === 0)) {
+      problems.add(`${path}.ref must be a non-empty string`);
       return;
     }
-
-    const changeEntity = entity as SubmissionEntity;
-    const fieldContext = { refs, checks, files, problems };
-    for (const [name, value] of Object.entries(fields)) {
-      checkField(changeEntity, name, value, `${path}.fields.${name}`, fieldContext);
+    if (id !== undefined && !isPositiveInteger(id)) {
+      problems.add(`${path}.id must be the id of an existing ${entity}`);
+      return;
+    }
+    const key = ref !== undefined ? `ref:${ref}` : `${entity}:${id}`;
+    if (seen.has(key)) {
+      problems.add(`${path} repeats an object already in this submission`);
+      return;
+    }
+    seen.add(key);
+    if (withdraw !== undefined && withdraw !== true) {
+      problems.add(`${path}.withdraw must be true when present`);
+    }
+    if (baseUpdatedAt !== undefined && typeof baseUpdatedAt !== "string") {
+      problems.add(`${path}.baseUpdatedAt must be a timestamp string`);
     }
 
-    if (op === "create") {
-      if (id !== undefined) problems.add(`${path}.id is only allowed on an update`);
-      if (baseUpdatedAt !== undefined) problems.add(`${path}.baseUpdatedAt is only allowed on an update`);
-      for (const required of REQUIRED_ON_CREATE[changeEntity]) {
-        if (fields[required] === undefined || fields[required] === null) {
-          problems.add(`${path}.fields.${required} is required to create a ${changeEntity}`);
-        }
-      }
-      if (ref !== undefined) {
-        if (typeof ref !== "string" || ref.length === 0) {
-          problems.add(`${path}.ref must be a non-empty string`);
-        } else if (refs.has(ref)) {
-          problems.add(`${path}.ref "${ref}" is already used by an earlier change`);
-        } else {
-          refs.set(ref, changeEntity);
-        }
-      }
-      if (changeEntity === "topo" && typeof fields.uuid === "string") {
-        if (topoUuids.has(fields.uuid)) {
-          problems.add(`${path}.fields.uuid repeats ${topoUuids.get(fields.uuid)}`);
-        }
-        topoUuids.set(fields.uuid, `${path}.fields.uuid`);
-      }
+    if (withdraw === true) {
+      if (fields !== undefined) problems.add(`${path}.fields isn't allowed when withdrawing`);
+    } else if (!isRecord(fields) || Object.keys(fields).length === 0) {
+      problems.add(`${path}.fields must be an object with at least one field`);
+      return;
     } else {
-      if (ref !== undefined) problems.add(`${path}.ref is only allowed on a create`);
-      if (!isPositiveInteger(id)) {
-        problems.add(`${path}.id must be the id of an existing ${changeEntity}`);
-      } else {
-        checks.push({ entity: changeEntity, id, path: `${path}.id` });
-      }
-      if (baseUpdatedAt !== undefined && typeof baseUpdatedAt !== "string") {
-        problems.add(`${path}.baseUpdatedAt must be a timestamp string`);
-      }
-      if (Object.keys(fields).length === 0) {
-        problems.add(`${path}.fields must include at least one field to change`);
-      }
-      if (fields.uuid !== undefined) {
-        problems.add(`${path}.fields.uuid can't be changed`);
+      for (const [name, value] of Object.entries(fields)) {
+        checkFieldValue(entity as SubmissionEntity, name, value, `${path}.fields.${name}`, files, problems);
       }
     }
 
-    changes.push({
-      ...(typeof ref === "string" ? { ref } : {}),
-      entity: changeEntity,
-      op,
-      ...(isPositiveInteger(id) ? { id } : {}),
-      ...(typeof baseUpdatedAt === "string" ? { baseUpdatedAt } : {}),
+    objects.push({
+      path,
+      entity: entity as SubmissionEntity,
+      ref: typeof ref === "string" ? ref : null,
+      id: isPositiveInteger(id) ? id : null,
+      withdraw: withdraw === true,
+      baseUpdatedAt: typeof baseUpdatedAt === "string" ? baseUpdatedAt : null,
       // Copied so storing files can replace placeholders without changing the caller's object.
-      fields: { ...fields },
+      fields: isRecord(fields) ? { ...fields } : {},
     });
   });
 
   problems.throwIfAny();
+  return objects;
+}
 
-  for (const missing of await findMissingIds(db, checks)) {
-    problems.add(`${missing.path} refers to ${missing.entity} ${missing.id}, which doesn't exist`);
+/** An account's object while a request is applied to it; `original` is the stored row, if any. */
+type Working = {
+  original: SubmissionObject | null;
+  entity: SubmissionEntity;
+  ref: string | null;
+  targetId: number | null;
+  fields: Record<string, unknown>;
+  baseUpdatedAt: string | null;
+  state: SubmissionState;
+  deleted: boolean;
+  /** Proposed in this request. */
+  received: boolean;
+};
+
+function fromRow(row: SubmissionObject): Working {
+  return {
+    original: row,
+    entity: row.entity,
+    ref: row.ref,
+    targetId: row.targetId,
+    fields: row.fields,
+    baseUpdatedAt: row.baseUpdatedAt,
+    state: row.state,
+    deleted: false,
+    received: false,
+  };
+}
+
+/** Takes an object out of review: a published object stays published; anything else is removed. */
+function withdrawWorking(working: Working) {
+  if (working.ref !== null && working.targetId !== null) {
+    working.state = "published";
+  } else {
+    working.deleted = true;
+  }
+  working.received = false;
+}
+
+function isLive(working: Working) {
+  return !working.deleted && (working.state === "pending" || working.targetId !== null);
+}
+
+async function loadAccountObjects(db: Kysely<DB>, uid: string, refs: string[], targets: Map<SubmissionEntity, number[]>) {
+  const rows = new Map<number, SubmissionObject>();
+  const add = (found: Selectable<Submission>[]) => found.forEach((row) => rows.set(row.id, toSubmissionObject(row)));
+
+  add(await db.selectFrom("submission").selectAll().where("uid", "=", uid).where("state", "=", "pending").execute());
+  for (const refChunk of chunk([...new Set(refs)], MAX_IDS_PER_QUERY)) {
+    add(await db.selectFrom("submission").selectAll().where("uid", "=", uid).where("ref", "in", refChunk).execute());
+  }
+  for (const [entity, ids] of targets) {
+    for (const idChunk of chunk([...new Set(ids)], MAX_IDS_PER_QUERY)) {
+      add(await db.selectFrom("submission").selectAll()
+        .where("uid", "=", uid)
+        .where("entity", "=", entity)
+        .where("target_id", "in", idChunk)
+        .execute());
+    }
+  }
+  return [...rows.values()];
+}
+
+export type ReceivedObject = {
+  entity: SubmissionEntity;
+  ref: string | null;
+  id: number | null;
+  /** pending: in review; unchanged: matches the published record, so nothing is queued; withdrawn: nothing in review. */
+  state: "pending" | "unchanged" | "withdrawn";
+};
+
+/**
+ * Applies a request's objects to the account's proposals: each one is merged
+ * field by field into that object's pending proposal (newest value wins), or
+ * starts one. An object the account already published becomes an edit of its
+ * record; a proposal that matches the record is dropped; `withdraw` takes an
+ * object out of review. Referenced files are stored under `submissions/<uid>/`.
+ */
+export async function receiveObjects(
+  context: AppLoadContext,
+  { uid, source, payload, files }: { uid: string; source: string; payload: unknown; files: Map<string, File> },
+): Promise<ReceivedObject[]> {
+  const db = getDB(context);
+  const env = context.cloudflare.env as unknown as Env;
+  const incoming = parseObjects(payload, files);
+  const problems = new Problems();
+
+  // Everything the request names, and everything it references, by ref or by record.
+  const refs = incoming.flatMap((object) => (object.ref ? [object.ref] : []));
+  const targets = new Map<SubmissionEntity, number[]>();
+  const addTarget = (entity: SubmissionEntity, id: number) => targets.set(entity, [...(targets.get(entity) ?? []), id]);
+  for (const object of incoming) {
+    if (object.id) addTarget(object.entity, object.id);
+    mapReferences(object.entity, object.fields, (value, target) => {
+      if (typeof value === "string") refs.push(value);
+      else addTarget(target, value);
+      return value;
+    });
+  }
+
+  const workings = (await loadAccountObjects(db, uid, refs, targets)).map(fromRow);
+  const byRef = new Map(workings.filter((w) => w.ref !== null).map((w) => [w.ref!, w]));
+  const byTarget = new Map(workings.filter((w) => w.targetId !== null).map((w) => [`${w.entity}:${w.targetId}`, w]));
+  const results: { object: IncomingObject; working: Working | null }[] = [];
+
+  for (const object of incoming) {
+    let working = object.ref !== null ? byRef.get(object.ref) : byTarget.get(`${object.entity}:${object.id}`);
+    if (working && working.entity !== object.entity) {
+      problems.add(`${object.path}.ref "${object.ref}" is your ${working.entity}, not a ${object.entity}`);
+      continue;
+    }
+
+    if (object.withdraw) {
+      if (working?.state === "pending" && !working.deleted) withdrawWorking(working);
+      results.push({ object, working: working ?? null });
+      continue;
+    }
+
+    if (!working) {
+      working = {
+        original: null,
+        entity: object.entity,
+        ref: object.ref,
+        targetId: object.id,
+        fields: {},
+        baseUpdatedAt: null,
+        state: "pending",
+        deleted: false,
+        received: false,
+      };
+      workings.push(working);
+      if (working.ref !== null) byRef.set(working.ref, working);
+      if (working.targetId !== null) byTarget.set(`${working.entity}:${working.targetId}`, working);
+    }
+    const stillPending = working.state === "pending" && !working.deleted;
+    working.fields = stillPending ? { ...working.fields, ...object.fields } : { ...object.fields };
+    working.baseUpdatedAt = object.baseUpdatedAt ?? (stillPending ? working.baseUpdatedAt : null);
+    working.state = "pending";
+    working.deleted = false;
+    working.received = true;
+    results.push({ object, working });
+  }
+  problems.throwIfAny();
+
+  // References to the account's objects become record ids once those are published.
+  const resolve = (value: SubmissionRef, target: SubmissionEntity, path: string): SubmissionRef => {
+    if (typeof value === "number") return value;
+    const referenced = byRef.get(value);
+    if (!referenced || !isLive(referenced)) {
+      problems.add(`${path} refers to "${value}", which isn't a ${target} you've proposed`);
+      return value;
+    }
+    if (referenced.entity !== target) {
+      problems.add(`${path} refers to "${value}", which is your ${referenced.entity}, not a ${target}`);
+      return value;
+    }
+    return referenced.targetId ?? value;
+  };
+  for (const working of workings.filter((w) => w.received)) {
+    const path = results.find((result) => result.working === working)!.object.path;
+    working.fields = mapReferences(working.entity, working.fields, (value, target, at) => resolve(value, target, `${path}.${at}`));
+  }
+  // Untouched proposals still need their references, which a withdrawal can remove.
+  for (const working of workings.filter((w) => !w.received && w.state === "pending" && !w.deleted)) {
+    mapReferences(working.entity, working.fields, (value, target, at) =>
+      resolve(value, target, `your pending ${working.entity} "${working.ref ?? working.targetId}" ${at}`));
+  }
+  problems.throwIfAny();
+
+  // Edits: the record must exist; a proposal that matches it is dropped.
+  const edits = workings.filter((w) => w.received && w.targetId !== null);
+  const records = new Map<string, Record<string, unknown>>();
+  for (const entity of ENTITY_ORDER) {
+    const ids = edits.filter((w) => w.entity === entity).map((w) => w.targetId!);
+    for (const [id, row] of await loadAuditRows(db, entity, ids)) records.set(`${entity}:${id}`, row);
+  }
+  for (const working of edits) {
+    const path = results.find((result) => result.working === working)!.object.path;
+    const record = records.get(`${working.entity}:${working.targetId}`);
+    if (!record) {
+      problems.add(`${path} refers to ${working.entity} ${working.targetId}, which doesn't exist`);
+      continue;
+    }
+    if ("uuid" in working.fields && working.fields.uuid !== record.uuid) {
+      problems.add(`${path}.fields.uuid can't be changed`);
+    }
+    const unchanged = Object.entries(working.fields).every(([field, value]) =>
+      sameFieldValue(working.entity, field, recordFieldValue(working.entity, field, record), value));
+    if (unchanged) {
+      const original = working.original;
+      if (original?.state === "pending") {
+        withdrawWorking(working);
+      } else if (original) {
+        Object.assign(working, fromRow(original));
+      } else {
+        working.deleted = true;
+      }
+      working.received = false;
+    }
+  }
+
+  // New objects: required fields, records they point to, and topo uuids.
+  const existence = new Map<SubmissionEntity, Map<number, string>>();
+  const topoUuids = new Map<string, string>();
+  for (const working of workings.filter((w) => w.received)) {
+    const path = results.find((result) => result.working === working)!.object.path;
+    mapReferences(working.entity, working.fields, (value, target, at) => {
+      if (typeof value === "number") {
+        existence.set(target, (existence.get(target) ?? new Map()).set(value, `${path}.${at}`));
+      }
+      return value;
+    });
+    if (working.targetId !== null) continue;
+    for (const required of REQUIRED_ON_CREATE[working.entity]) {
+      if (working.fields[required] === undefined || working.fields[required] === null) {
+        problems.add(`${path}.fields.${required} is required for a new ${working.entity}`);
+      }
+    }
+    if (working.entity === "topo" && typeof working.fields.uuid === "string") {
+      topoUuids.set(working.fields.uuid, `${path}.fields.uuid`);
+    }
+  }
+  for (const [entity, ids] of existence) {
+    for (const idChunk of chunk([...ids.keys()], MAX_IDS_PER_QUERY)) {
+      const found = new Set((await db.selectFrom(entity).select("id").where("id", "in", idChunk).execute()).map((row) => Number(row.id)));
+      idChunk.filter((id) => !found.has(id)).forEach((id) => problems.add(`${ids.get(id)} refers to ${entity} ${id}, which doesn't exist`));
+    }
   }
   for (const uuidChunk of chunk([...topoUuids.keys()], MAX_IDS_PER_QUERY)) {
-    const existing = await db.selectFrom("topo").select("uuid").where("uuid", "in", uuidChunk).execute();
-    for (const { uuid } of existing) {
-      problems.add(`${topoUuids.get(uuid)} "${uuid}" belongs to an existing topo; send an update instead`);
+    for (const { uuid, id } of await db.selectFrom("topo").select(["uuid", "id"]).where("uuid", "in", uuidChunk).execute()) {
+      problems.add(`${topoUuids.get(uuid)} "${uuid}" belongs to topo ${id}; propose it with that id instead`);
     }
   }
   problems.throwIfAny();
 
-  return { changes };
-}
-
-function fileFieldNames(entity: SubmissionEntity) {
-  return Object.entries(SUBMISSION_FIELDS[entity])
-    .filter(([, spec]) => spec.kind === "file")
-    .map(([name]) => name);
-}
-
-function fileUrls(payload: SubmissionPayload) {
-  return new Set(payload.changes.flatMap((change) => fileFieldNames(change.entity)
-    .map((field) => change.fields[field])
-    .filter((value): value is string => typeof value === "string")));
-}
-
-/**
- * Validates and queues a submission. Referenced files are stored in R2 under
- * `submissions/<id>/`, and their placeholders are replaced with the stored URLs.
- *
- * With `replace`, the caller's pending submission with that id is overwritten in
- * place (same id, and its time becomes now). If there's no such submission, for
- * example because it was already decided, a new one is created instead.
- */
-export async function createSubmission(
-  context: AppLoadContext,
-  { uid, source, payload, files, replace }: {
-    uid: string;
-    source: string;
-    payload: unknown;
-    files: Map<string, File>;
-    replace?: string | null;
-  },
-): Promise<SubmissionStatus & { replaced: boolean }> {
-  const db = getDB(context);
-  const env = context.cloudflare.env as unknown as Env;
-  const submission = await validateSubmission(db, payload, files);
-
-  const existing = replace
-    ? await db.selectFrom("submission")
-      .select(["id", "error", "payload"])
-      .where("id", "=", replace)
-      .where("uid", "=", uid)
-      .executeTakeFirst()
-    : undefined;
-  if (existing?.error) {
-    throw new SubmissionConflictError(
-      "This submission is partly applied after a failed approval, so it can't be replaced. Wait for it to be reviewed.",
-    );
-  }
-  const id = existing?.id ?? crypto.randomUUID();
-  // Files are content-addressed, so a replacement can reuse one the current version
-  // already references; those must survive a failed replacement.
-  const keep = existing ? fileUrls(JSON.parse(existing.payload) as SubmissionPayload) : new Set<string>();
+  // Store files, then the proposals. Files are content-addressed per account, so a
+  // failed request only removes files no stored proposal uses.
   const uploaded = new Map<string, { url: string; key: string }>();
-
+  const now = formatSqliteTimestamp();
   try {
-    for (const change of submission.changes) {
-      for (const field of fileFieldNames(change.entity)) {
-        const placeholder = change.fields[field];
-        if (typeof placeholder !== "string") continue;
-
-        const fileName = placeholder.slice(FILE_PLACEHOLDER_PREFIX.length);
+    for (const working of workings.filter((w) => w.received)) {
+      for (const [field, value] of Object.entries(working.fields)) {
+        if (SUBMISSION_FIELDS[working.entity][field].kind !== "file" || typeof value !== "string") continue;
+        if (!value.startsWith(FILE_PLACEHOLDER_PREFIX)) continue;
+        const fileName = value.slice(FILE_PLACEHOLDER_PREFIX.length);
         let stored = uploaded.get(fileName);
         if (!stored) {
           const result = await uploadFileToR2(
@@ -571,29 +731,42 @@ export async function createSubmission(
             files.get(fileName)!,
             env.TOPOS_BUCKET_NAME,
             env.TOPOS_BUCKET_DOMAIN,
-            { keyPrefix: `submissions/${id}`, useContentHash: true },
+            { keyPrefix: `submissions/${uid}`, useContentHash: true },
           );
           stored = { url: result.url, key: result.name };
           uploaded.set(fileName, stored);
         }
-        change.fields[field] = stored.url;
+        working.fields[field] = stored.url;
       }
     }
 
-    if (existing) {
-      await db.updateTable("submission")
-        .set({ payload: toStoredJson(submission), created_at: formatSqliteTimestamp() })
-        .where("id", "=", id)
-        .execute();
-    } else {
-      await db.insertInto("submission")
-        .values({ id, uid, source, payload: toStoredJson(submission) })
-        .execute();
+    for (const working of workings) {
+      const { original } = working;
+      if (working.deleted) {
+        if (original) await db.deleteFrom("submission").where("id", "=", original.id).execute();
+        continue;
+      }
+      const values = {
+        fields: toStoredJson(working.fields),
+        base_updated_at: working.baseUpdatedAt,
+        state: working.state,
+        error: null,
+        updated_at: now,
+        ...(working.received ? { received_at: now, decided_at: null } : {}),
+      };
+      if (!original) {
+        await db.insertInto("submission")
+          .values({ ...values, uid, source, entity: working.entity, ref: working.ref, target_id: working.targetId, received_at: now })
+          .execute();
+      } else if (working.received || working.state !== original.state) {
+        await db.updateTable("submission").set({ ...values, source }).where("id", "=", original.id).execute();
+      }
     }
   } catch (error) {
+    const inUse = new Set(workings.flatMap((w) => Object.values(w.original?.fields ?? {}).filter((v) => typeof v === "string")));
     const cleanup = await Promise.allSettled(
       [...uploaded.values()]
-        .filter((stored) => !keep.has(stored.url))
+        .filter((stored) => !inUse.has(stored.url))
         .map((stored) => deleteFromR2(context, env.TOPOS_BUCKET_NAME, stored.key)),
     );
     cleanup
@@ -602,121 +775,59 @@ export async function createSubmission(
     throw error;
   }
 
-  return { id, status: "pending", replaced: Boolean(existing) };
+  return results.map(({ object, working }) => ({
+    entity: object.entity,
+    ref: object.ref,
+    id: working?.targetId ?? object.id,
+    state: working && !working.deleted && working.state === "pending"
+      ? "pending"
+      : object.withdraw ? "withdrawn" : "unchanged",
+  }));
 }
+
+/** One of the caller's objects, as reported to the submitting app. */
+export type MyObject = {
+  entity: SubmissionEntity;
+  ref: string | null;
+  /** The TABVAR record, once there is one. */
+  id: number | null;
+  state: SubmissionState;
+  /** The latest proposed fields. */
+  fields: Record<string, unknown>;
+  /** Set when approving this object failed; it stays in review. */
+  error: string | null;
+  receivedAt: string;
+  decidedAt: string | null;
+};
 
 /**
- * Reports on one of the caller's submissions: pending while queued, then the
- * decision and created ids recorded in audit_log. Null if the caller has none by this id.
+ * Lists the caller's objects, whatever their role, changed since `since` (all
+ * of them when omitted). Pass serverTime back as `since` on the next call.
  */
-export async function getSubmissionStatus(
-  context: AppLoadContext,
-  { uid, id }: { uid: string; id: string },
-): Promise<SubmissionStatus | null> {
-  const db = getDB(context);
-
-  const queued = await db.selectFrom("submission")
-    .select(["id", "error"])
-    .where("id", "=", id)
-    .where("uid", "=", uid)
-    .executeTakeFirst();
-  if (queued) {
-    return { id, status: "pending", error: queued.error };
-  }
-
-  const decided = await db.selectFrom("audit_log")
-    .select(["decision", "ref", "entity_id", "created_at"])
-    .where("submission_id", "=", id)
-    .where("author_uid", "=", uid)
-    .execute();
-  if (decided.length === 0) {
-    return null;
-  }
-
-  const { status, ids } = summarizeDecision(decided);
-  return { id, status, ids };
-}
-
-type DecisionRow = { decision: string | null; ref: string | null; entity_id: number | null; created_at: string };
-
-/** A decided submission's outcome, from its audit rows. */
-function summarizeDecision(rows: DecisionRow[]) {
-  const ids: Record<string, number> = {};
-  let decidedAt = rows[0].created_at;
-  for (const row of rows) {
-    if (row.decision === "approved" && row.ref && row.entity_id !== null) {
-      ids[row.ref] = row.entity_id;
-    }
-    if (row.created_at > decidedAt) decidedAt = row.created_at;
-  }
-  const status: "approved" | "rejected" = rows.some((row) => row.decision === "rejected") ? "rejected" : "approved";
-  return { status, ids, decidedAt };
-}
-
-/**
- * Lists the caller's own submissions, whatever their role: every queued one with
- * its changes, and those decided since `since` (all of them when omitted), read
- * from the audit log. Pass serverTime back as `since` on the next call.
- */
-export async function listMySubmissions(
+export async function listMyObjects(
   context: AppLoadContext,
   { uid, since }: { uid: string; since: string | null },
-): Promise<MySubmissionList> {
+): Promise<{ objects: MyObject[]; serverTime: string }> {
   const db = getDB(context);
-
-  const queued = await db.selectFrom("submission")
-    .select(["id", "created_at", "error", "payload"])
+  const rows = await db.selectFrom("submission")
+    .selectAll()
     .where("uid", "=", uid)
-    .orderBy("created_at", "desc")
+    .$if(since !== null, (qb) => qb.where("updated_at", ">=", since!))
+    .orderBy("updated_at")
+    .orderBy("id")
     .execute();
-  const pending: MySubmission[] = queued.map((row) => ({
-    id: row.id,
-    submitterUid: uid,
-    status: "pending",
-    createdAt: row.created_at,
-    error: row.error,
-    changes: (JSON.parse(row.payload) as SubmissionPayload).changes,
-  }));
-  const queuedIds = new Set(queued.map((row) => row.id));
-
-  // The cursor only picks which decisions to report. Each one is then read in full,
-  // so a poll that lands mid-approval can't leave its later report incomplete.
-  const recent = await db.selectFrom("audit_log")
-    .select(["submission_id", "created_at"])
-    .where("author_uid", "=", uid)
-    .where("submission_id", "is not", null)
-    .$if(since !== null, (qb) => qb.where("created_at", ">=", since!))
-    .execute();
-
-  let latest: string | null = null;
-  const decidedIds = new Set<string>();
-  for (const row of recent) {
-    if (!latest || row.created_at > latest) latest = row.created_at;
-    // A queued submission can have audit rows from a partly failed approval; it's still pending.
-    if (!queuedIds.has(row.submission_id!)) decidedIds.add(row.submission_id!);
-  }
-
-  const rowsBySubmission = new Map<string, DecisionRow[]>();
-  for (const idChunk of chunk([...decidedIds], MAX_IDS_PER_QUERY)) {
-    const rows = await db.selectFrom("audit_log")
-      .select(["submission_id", "decision", "ref", "entity_id", "created_at"])
-      .where("author_uid", "=", uid)
-      .where("submission_id", "in", idChunk)
-      .orderBy("id")
-      .execute();
-    for (const row of rows) {
-      rowsBySubmission.set(row.submission_id!, [...(rowsBySubmission.get(row.submission_id!) ?? []), row]);
-    }
-  }
-
-  const decided: MySubmission[] = [...rowsBySubmission].map(([id, decisionRows]) => ({
-    id,
-    submitterUid: uid,
-    ...summarizeDecision(decisionRows),
-  }));
 
   return {
-    submissions: [...pending, ...decided],
-    serverTime: latest ?? since ?? formatSqliteTimestamp(),
+    objects: rows.map(toSubmissionObject).map((object) => ({
+      entity: object.entity,
+      ref: object.ref,
+      id: object.targetId,
+      state: object.state,
+      fields: object.fields,
+      error: object.error,
+      receivedAt: object.receivedAt,
+      decidedAt: object.decidedAt,
+    })),
+    serverTime: rows.at(-1)?.updated_at ?? since ?? formatSqliteTimestamp(),
   };
 }

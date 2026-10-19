@@ -1,124 +1,139 @@
 # Submissions review plan
 
-Status: proposed. No application changes yet.
+Status: steps 1–6, 8 and 10 are built. TopoBuilder (step 7) and the issues tab (step 9) remain.
 
 ## The idea
 
-Proposed data changes wait in a queue table until an admin decides on them. Approval writes them to the main tables.
+Proposed data changes wait in a table until an admin decides on them. Approval writes them to the main tables.
 
-1. **In:** a client posts a submission, which is a list of creates and edits to crags, sectors, routes, and topos.
-2. **Wait:** it's stored as one row in `submission`. Nothing is published.
-3. **Review:** `/admin/submissions` shows each change. Edits show current → proposed, and conflicts found in the audit log are flagged.
-4. **Approve:** the changes are written to the main tables in order, each one writes an audit row, and the submission row is deleted. **Reject:** the changes are recorded in the audit log as rejected, and the submission row is deleted.
+1. **In:** a client proposes objects: new crags, sectors, routes, and topos under its own IDs, and edits to existing records.
+2. **Wait:** each object is one row in `submission`, holding the account's latest proposal for it. Nothing is published.
+3. **Review:** `/admin/submissions` shows an account's linked objects together as one item. Edits show current → proposed, and conflicts found in the audit log are flagged.
+4. **Approve:** each object is written to the main tables, parents first, its row is marked `published` with the record's ID, and an audit row is written. **Reject:** each object is recorded in the audit log as rejected, and its row is marked `rejected`.
 
-The `submission` table is only a queue. The [audit log](#audit-log) is the only history.
+A row keeps only the account's latest proposal and, once published, the link from the client's ID to the record. The [audit log](#audit-log) is the history of what was decided.
 
 Issue reports keep their existing moderation (`In Moderation` status). They'll get a tab on the same page later, but they don't use the submission table.
 
-## Table
+## Why per object
 
-`topo_submission` is empty and unused. Replace it with `submission`. A row exists only while the submission is waiting for a decision.
+Users will send the same things more than once, in any shape: a whole crag, then each of its sectors; single routes; retries after a lost response; a resubmit after approval because the app never adopted the new IDs. Every one of those should just work, with no duplicate records and nothing lost, whether or not the app tracks what it sent.
+
+Each object already carries its relationships (`cragId`, `sectorId`, a topo's `routes`), so the unit of identity is the **object**, not a set of changes. One row per account and object gives that directly:
+
+- sending an object again updates its row, whatever else is in the request;
+- a published object's row remembers its record, so it's never created twice;
+- a partly failed approval leaves each object either published or pending, with nothing to resume by hand.
+
+## Table
 
 | Column | Notes |
 | :--- | :--- |
-| `id` | TEXT uuid |
-| `uid` | Submitter |
+| `id` | INTEGER autoincrement |
+| `uid` | The proposing account |
 | `source` | e.g. `topobuilder` |
-| `payload` | JSON; format below |
+| `entity` | `crag`, `sector`, `route`, or `topo` |
+| `ref` | The client's own ID for an object it proposed; `null` for an edit of someone else's record |
+| `target_id` | The record: `null` for a new object until it's published |
+| `fields` | JSON; the proposed fields, in the format below |
+| `base_updated_at` | The record's `updatedAt` as the submitter last saw it (edits) |
+| `state` | `pending`, `published`, or `rejected` |
 | `error` | Set when an approval attempt failed |
-| `created_at` | |
+| `received_at` | When the latest version of the proposal arrived |
+| `decided_at` | When it was approved or rejected |
+| `updated_at` | Any change to the row; the cursor for "my objects" |
 
-## Payload
+Unique indexes on `(uid, ref)` and `(uid, entity, target_id)` keep one row per account and object. Rows belong to the account and are deleted with it; the audit log keeps the decisions.
 
-An ordered list of changes. Each change creates or edits one record.
+## Request
 
 ```json
 {
-  "changes": [
-    { "ref": "c1", "entity": "crag", "op": "create", "fields": { "name": "New Crag" } },
-    { "ref": "s1", "entity": "sector", "op": "create", "fields": { "name": "Main Wall", "cragId": "c1" } },
-    { "ref": "r1", "entity": "route", "op": "create", "fields": { "name": "New Line", "sectorId": "s1", "gradeYds": "5.11a" } },
-    { "entity": "route", "op": "update", "id": 456, "baseUpdatedAt": "2026-06-09 10:00:00", "fields": { "boltCount": 7 } },
-    { "entity": "topo", "op": "create", "fields": {
+  "objects": [
+    { "entity": "crag", "ref": "c1", "fields": { "name": "New Crag" } },
+    { "entity": "sector", "ref": "s1", "fields": { "name": "Main Wall", "cragId": "c1" } },
+    { "entity": "route", "ref": "r1", "fields": { "name": "New Line", "sectorId": "s1", "gradeYds": "5.11a" } },
+    { "entity": "route", "id": 456, "baseUpdatedAt": "2026-06-09 10:00:00", "fields": { "boltCount": 7 } },
+    { "entity": "topo", "ref": "t1", "fields": {
       "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "name": "Main Wall Left", "sectorId": "s1",
       "background": "file:bg", "raster": "file:raster", "annotations": { "version": 1, "items": [] },
       "routes": [{ "routeId": 456, "label": "1" }, { "routeId": "r1", "label": "2" }]
-    } }
+    } },
+    { "entity": "route", "ref": "r9", "withdraw": true }
   ]
 }
 ```
 
+- **Identity:** an object is either the client's own (`ref`, stable and unique within the account) or an existing record (`id`). Identity is per account: two accounts' objects never merge, and when they edit the same record, the conflict checks flag it.
 - **Fields** use the sync API's camelCase names. Each entity has a fixed list of editable fields, and intake rejects anything else:
   - crag: `name`, `notes`, `latitude`, `longitude`
   - sector: `name`, `cragId`, `notes`, `latitude`, `longitude`, `sortOrder`
   - route: `name`, `altNames`, `sectorId`, `gradeYds`, `climbStyle`, `boltCount`, `pitchCount`, `routeLength`, `firstAscentBy`, `firstAscentDate`, `routeBuiltDate`, `year`, `status`, `notes`, `sortOrder`, `latitude`, `longitude`
   - topo: `uuid`, `name`, `description`, `cragId`, `sectorId`, `latitude`, `longitude`, `status`, `annotations`, `background`, `raster`, `routes`
-- **Edits** carry only the fields being changed. `null` clears a field.
-- **Parent IDs** (`cragId`, `sectorId`, `routeId`) are either an existing numeric ID or the `ref` of an earlier create in the same submission.
-- **`baseUpdatedAt`** is the record's `updatedAt` as the submitter last saw it. It's optional and used only for [conflict checks](#conflicts).
-- **Files** are multipart parts referenced as `file:<part name>`. Intake stores them in R2 under `submissions/<id>/` and replaces each placeholder with the stored file's URL before saving the payload. From then on, the payload and any audit rows point at real files.
+- **Only changed fields** are sent. `null` clears a field.
+- **References** (`cragId`, `sectorId`, a topo's `routes[].routeId`, annotation items' `routeId`) are an existing numeric ID or the `ref` of one of the account's objects.
+- **Files** are multipart parts referenced as `file:<part name>`. Intake stores them in R2 under `submissions/<uid>/`, content-hashed, and saves the stored URL in place of each placeholder. From then on, rows and audit rows point at real files.
 - **No deletes:** retire a route or topo by setting `status`. Moves and reordering are ordinary edits to `cragId`, `sectorId`, or `sortOrder`. Existing DB triggers keep denormalized names, search, and issue crag IDs in sync.
 
 ## Intake
 
-Keep `POST /api/topobuilder/submissions` and change it to the new payload. It checks:
+`POST /api/topobuilder/submissions` handles each object in the request against the account's row for it:
 
-- the entity and op are known;
-- every field is on the entity's list;
-- each edit target exists;
-- each `ref` points to an earlier create;
-- every referenced file is present and is an image.
+1. **Check the shape:** entity, `ref` or `id` (not both), known fields, files present and images.
+2. **Merge.** A new version is merged into the pending proposal **field by field, and the newest value wins**; omitted fields keep the earlier value. A pending row's `received_at` becomes now. A published or rejected row starts a fresh proposal.
+3. **Published objects become edits.** A `ref` whose row is published proposes an edit of its record. If none of its fields differ from the record, nothing is queued and it's reported as `unchanged`; including an unchanged published parent is free.
+4. **Withdraw.** `withdraw: true` takes the object out of review: a new object's row is deleted, and a published object's row goes back to `published`. This is the only way to remove something.
+5. **Resolve published refs.** References to the account's published objects are stored as their record IDs.
+6. **Validate the result**, including the account's other pending objects that point at what changed:
+   - every `ref` reference names a pending or published object of the right entity;
+   - edit targets exist;
+   - new objects have their required fields;
+   - a topo `uuid` that belongs to another topo is refused, with the ID to edit instead;
+   - an object appears at most once per request.
 
-Bad input returns 400 with a message, and storage or DB failures return 500.
+Bad input returns 400 with up to 10 problems, and nothing is stored. Storage or DB failures return 500. Success returns 200 with each object's `ref`, `id`, and `state` (`pending`, `unchanged`, or `withdrawn`).
 
-`GET /api/topobuilder/submissions?id=` reports on one of the caller's own submissions:
+`GET /api/topobuilder/submissions?since=` lists the caller's own objects changed since the cursor, for every role, so the app can show what's in review and adopt record IDs. An all-objects view for admins isn't needed in the app; reviewing happens on the web. The client contract is in [submissions-api.md](submissions-api.md).
 
-- While its row exists, it returns `pending`, plus the error from any failed approval attempt.
-- After a decision, it reads the audit rows with that `submission_id` and `author_uid`. It returns `approved` or `rejected`, and on approval the ID created for each `ref`, so TopoBuilder can link its local records.
-
-`POST /api/topobuilder/submissions?replace=<id>` overwrites the caller's pending submission with that ID instead of queuing another one; its time becomes the resubmit time, which is what the conflict checks use. It's refused with `409` if a failed approval left the submission partly applied. If there's no such pending submission, a new one is created.
-
-`GET /api/topobuilder/submissions` without an `id` lists the caller's own submissions, for every role, so the app can show records as "in review": every queued submission with its changes, plus those decided since an optional `since` cursor, read from the audit log. An all-submissions view for admins isn't needed in the app; reviewing happens on the web. The client contract is in [submissions-api.md](submissions-api.md).
-
-`/api/v1/topos` writes (`POST`, `DELETE`) are limited to admin/super, so member changes go through submissions. It no longer creates routes as a side effect, and an update keeps the fields it leaves out. See [topo-sync-api.md](topo-sync-api.md). Admin and super edits in the crag editor stay direct and unchanged.
+`/api/v1/topos` writes (`POST`, `DELETE`) are limited to admin/super, so member changes go through submissions. It doesn't create routes as a side effect, and an update keeps the fields it leaves out. See [topo-sync-api.md](topo-sync-api.md). Admin and super edits in the crag editor stay direct and unchanged.
 
 ## Approve and reject
 
-Approve runs through the changes in order:
+The review page groups an account's pending objects into **items**: objects linked by refs, such as a new crag with its new sectors, routes, and topos, form one item; an unrelated edit is an item on its own. An item is approved or rejected as a whole.
 
-- **create:** insert the row, then write its new ID onto the change (`"id": 789`) so later changes can resolve the `ref`. New crags get a slug from `slugifyUnique`, the same as the crag page does.
-- **update:** set only the fields in the change.
-- **topo:** call the existing `saveRawTopo` with the stored image URLs and the resolved route IDs.
+Approve runs through the item's objects parents first (crag, sector, route, topo). Objects only reference higher levels, so this order is all the dependency handling there is. For each object:
 
-Each applied change writes an audit row as soon as it succeeds, then the payload is saved with that change marked `applied` (and, for a create, its new ID). When every change has succeeded, delete the submission row.
+- references to the account's refs are resolved to record IDs, including annotation `routeId`s;
+- a new object is inserted (new crags get a slug from `slugifyUnique`, the same as the crag page does); an edit sets only its fields; topos go through the existing `saveRawTopo`;
+- the row is marked `published` with its `target_id`, then the audit row is written.
 
-If a change fails, stop, set `error`, and keep the row in the queue. Approving again skips changes already marked `applied` and doesn't write their audit rows a second time. Because progress is saved after every change, this also holds after a crash or timeout that never reached the error handler; at most the one change in flight at that moment can be repeated. Rejecting at that point doesn't undo the changes that were already applied.
+If an object fails, its row's `error` is set and approval stops. The objects before it are published, and the rest stay pending; approving again continues with them. A crash between a record's insert and its row update can repeat at most that one object.
 
-Reject writes one audit row per remaining change with `decision = 'rejected'`, then deletes the row. It doesn't touch the main tables. Uploaded files stay in R2, so rejected audit rows still point at them.
+Reject writes one audit row per object with `decision = 'rejected'` and marks the rows `rejected`. It doesn't touch the main tables. Uploaded files stay in R2, so rejected audit rows still point at them.
 
-Each submission is approved or rejected as a whole. To accept part of one, reject it and make the edit by hand in the crag editor.
+To accept part of an item, reject it and make the edit by hand in the crag editor.
 
 ## Conflicts
 
-These are checked for each `update` when a submission is opened. Creates have no existing record, so they aren't checked.
+These are checked for each pending edit when an item is opened. New objects have no existing record, so they aren't checked.
 
-The **base time** is the change's `baseUpdatedAt` (when the submitter last saw the record), or the submission's `created_at` if no `baseUpdatedAt` was sent.
+The **base time** is the object's `base_updated_at` (when the submitter last saw the record), or its `received_at` if none was sent.
 
-1. **Field conflict:** the audit log has a change to this record after the base time, and that change touched a field this submission edits. Only applied changes count, meaning direct edits and approved changes. Rejected rows don't count, and neither do rows from this same submission (left by an earlier, partly failed approval). The conflict shows the field, who changed it, when, and its before → after values.
-2. **Overlap:** another queued submission edits the same field on the same record. The conflict links to that submission. Only fields are compared, not values: two submissions proposing the same value are rare and get no special handling.
-3. **Record changed since submitted** (a warning, not a conflict): the record changed after the base time, but not on any field this submission edits. This covers two cases:
+1. **Field conflict:** the audit log has a change to this record after the base time, and that change touched a field this object edits. Only applied changes count, meaning direct edits and approvals; rejected rows don't. The conflict shows the field, who changed it, when, and its before → after values.
+2. **Overlap:** another account's pending edit changes the same field on the same record. The conflict links to that item. Only fields are compared, not values: two proposals with the same value are rare and get no special handling.
+3. **Record changed since submitted** (a warning, not a conflict): the record changed after the base time, but not on any field this object edits. This covers two cases:
    - The audit log shows changes only to other fields. The warning lists them.
    - `updated_at` is later than the base time with no audit row to explain it. That can come from the bulk JSON import, Sloper sync, changes made before the audit log existed, or triggers bumping `updated_at` when a photo or topo link changes. The warning says the cause isn't recorded.
 
-   Either way, a record moving underneath a submission is unusual and worth a closer look.
+   Either way, a record moving underneath a proposal is unusual and worth a closer look.
 
-Conflicts and the warning appear together in a conflict section on the affected change's card. Conflicts are marked as conflicts, the warning in a lighter style, and the submission's list entry shows a count. They never block approval and nothing resolves them automatically; the reviewer decides. The live current → proposed diff still shows the values that would actually be replaced.
+Conflicts and the warning appear together in a conflict section on the affected object's card. Conflicts are marked as conflicts, the warning in a lighter style, and the item's list entry shows a count. They never block approval and nothing resolves them automatically; the reviewer decides. The live current → proposed diff still shows the values that would actually be replaced.
 
 Compare timestamps in one format, UTC `YYYY-MM-DD HH:MM:SS`. Most rows use that, but some write paths store ISO strings, and `baseUpdatedAt` comes from the sync API. An audit row is written just after the change it records, so its `created_at` can be a second or two later than the `updated_at` the submitter saw. Only count audit rows more than a few seconds after the base time, so the submitter's own starting point isn't flagged.
 
 ## Audit log
 
-The audit log is one table for manual investigation and tracing, and it's the only history of route-data changes. App code writes a row for every crag, sector, route, or topo change, and for every change in a rejected submission. It has no UI; read it with SQL on `/admin/query`.
+The audit log is one table for manual investigation and tracing, and it's the history of route-data changes. App code writes a row for every crag, sector, route, or topo change, and for every rejected object. It has no UI; read it with SQL on `/admin/query`.
 
 | Column | Notes |
 | :--- | :--- |
@@ -129,29 +144,29 @@ The audit log is one table for manual investigation and tracing, and it's the on
 | `decision` | `approved`, `rejected`, or `null` for a direct edit |
 | `source` | The submission's source (e.g. `topobuilder`). For a direct edit, `web` or `api`. |
 | `entity` | `crag`, `sector`, `route`, or `topo` |
-| `entity_id` | `null` for a rejected create |
+| `entity_id` | `null` for a rejected new object |
 | `action` | `create`, `update`, or `delete` |
-| `changes` | JSON `{ "column": [before, after] }` for the changed columns only. Creates have `null` before values. Deletes store the whole row as the before value. For a rejected change, `after` is the proposed value, which was never applied. |
-| `submission_id` | Set when the change came from a submission. It groups that submission's rows after the submission row is deleted. |
-| `ref` | The change's `ref` for a create from a submission. Lets the status GET map refs to new IDs. |
+| `changes` | JSON `{ "column": [before, after] }` for the changed columns only. Creates have `null` before values. Deletes store the whole row as the before value. For a rejected object, `after` is the proposed value, which was never applied. |
+| `submission_id` | The `submission` row's ID, when the change came from a proposal |
+| `ref` | The object's `ref`, when it has one |
 
-Each row stores everything worth keeping about a change, because a decided submission row is deleted. The uid and name columns have no foreign key, so rows survive account deletion, the same as `issue_audit_log`. A submission's time of arrival isn't kept; `created_at` is the time of the decision.
+Each row stores everything worth keeping about a decision: a row in `submission` holds only the latest proposal, and it's deleted with the account. The uid and name columns have no foreign key, so audit rows survive account deletion, the same as `issue_audit_log`.
 
 Index `(entity, entity_id)`, `(author_uid)`, and `(submission_id)`.
 
 ```sql
 SELECT * FROM audit_log WHERE entity = 'route' AND entity_id = 456 ORDER BY id DESC;
 SELECT * FROM audit_log WHERE author_uid = 'abc123' ORDER BY id DESC;
-SELECT * FROM audit_log WHERE submission_id = '…' ORDER BY id;
+SELECT * FROM audit_log WHERE submission_id = '42' ORDER BY id;
 ```
 
 A single `writeAudit` helper in `app/lib/audit.server.ts` inserts the rows. It's called from:
 
-- **Approval and rejection:** one row per change. The author is the submission's `uid` and the reviewer is the admin who decided. Before values come from the same read the review diff uses.
-- **The crag editor action (`topos.$crag.tsx`) and the crag create and position actions (`topos._index.tsx`):** the author is the signed-in editor, with source `web`. Read the row before each update or delete.
-- **`/api/v1/topos` writes:** the author is the token's user, with source `api`. `saveRawTopo` already receives this `uid` but ignores it today; pass it through to `writeAudit`.
+- **Approval and rejection:** one row per object. The author is the row's `uid` and the reviewer is the admin who decided. Before values come from the same read the review diff uses.
+- **The crag editor action (`topos.$crag.tsx`) and the crag create and position actions (`topos._index.tsx`):** the author is the signed-in editor, with source `web`. The row is read before each update or delete.
+- **`/api/v1/topos` writes:** the author is the token's user, with source `api`.
 
-The submitter is already recorded for submissions: intake stores the API token's user as `uid`. Direct writes record no author anywhere today, because crags, sectors, routes, and topos have no creator column. The audit log fills that gap from now on without adding columns to the main tables. Changes made before it exists stay unattributed.
+Crags, sectors, routes, and topos have no creator column, so the audit log is where authorship lives, without adding columns to the main tables. Changes made before it existed stay unattributed.
 
 These aren't logged:
 
@@ -164,64 +179,78 @@ Logging lives in app code rather than SQLite triggers for two reasons: triggers 
 
 ## Review page
 
-Rebuild `/admin/submissions`. Access stays admin/super.
+`/admin/submissions`, admin/super only.
 
-- **Route data tab:** queued submissions, newest first, showing submitter, source, time, and counts of creates and edits. To see past decisions, query the audit log.
-- **Detail:** one card per change.
-  - Creates list their fields.
-  - Edits show current → proposed for the changed fields only, read live from the main tables.
+- **List:** pending items, most recently received first, each titled by its first object (`New crag “…”` or `Edit route #…`), with the submitter and counts of new objects and edits, and conflict counts. To see past decisions, query the audit log.
+- **Detail:** one card per object.
+  - New objects list their fields.
+  - Edits show current → proposed for the changed fields only, read live from the main tables, plus how many proposed fields already match.
   - Topos show the raster image and the routes they link.
   - Conflicts and the record-changed warning appear in a conflict section on the affected card.
-- **Actions:** Approve and Reject. If an approval failed, show its error.
+  - An object whose approval failed shows the error.
+- **Actions:** Approve and Reject. After a decision, the next item opens.
 - **Issues tab (later):** `In Moderation` issues, using the existing actions and components from `/issues/manage`.
+
+## Scenarios
+
+| What the user does | Result |
+| :--- | :--- |
+| A crag, then each of its sectors | One proposal per object; the sectors join the crag's review item. |
+| Each sector, then the whole crag | The same. |
+| A retry after a lost response | Each object's row is updated in place; nothing is duplicated. |
+| A resubmit after approval, with IDs never adopted | Changed fields become edits of the published records; unchanged objects are reported `unchanged`. |
+| Two unrelated crags | No links between them, so they're separate review items. |
+| A route deleted locally | The app withdraws it, and any pending objects that point at it. |
+| A rejected object sent again | A fresh proposal. |
+
+### Edge cases accepted
+
+- **Concurrent requests:** two overlapping requests at the same instant from one account can race on the same rows. The app sends them one at a time.
+- **Unseen changes:** an admin who has an item open may approve it after the submitter sent a newer version.
+- **Other accounts:** duplicates across accounts, such as the same new route proposed by two users, still need the future name matching.
 
 ## Left out
 
 These are left out on purpose:
 
-- per-change tables;
-- keeping decided submissions, or any history outside the audit log;
+- keeping each version of a proposal, or any history outside the audit log;
 - an audit log viewer or retention policy;
-- partial approval or field merging;
+- partial approval of an item, or the reviewer editing a proposal;
 - bulk approve;
 - deletes;
 - photo attachments from `api.attachments`, which stay as they are;
 - an AI producer;
-- detecting duplicate creates, such as two submissions adding the same route (see [Future: name matching](#future-name-matching)).
+- detecting duplicate new objects across accounts, such as two users adding the same route (see [Future: name matching](#future-name-matching)).
 
 Add any of these only when they're actually needed.
 
 ## Future: name matching
 
-Phase after this plan: fuzzy name matching to catch creates that duplicate an existing or queued record, such as "Me and My Shadow" vs. "Me & My Shadow" in the same sector. It would flag likely duplicates on the review page. It's deliberately not part of the conflict checks above, so don't add name comparisons there in the meantime.
+Per-object identity prevents duplicates within one account. This phase is for duplicates across accounts, and for objects created outside submissions.
+
+Phase after this plan: fuzzy name matching to catch new objects that duplicate an existing or pending record, such as "Me and My Shadow" vs. "Me & My Shadow" in the same sector. It would flag likely duplicates on the review page. It's deliberately not part of the conflict checks above, so don't add name comparisons there in the meantime.
 
 ## Steps
 
-1. Audit log: a migration (next free number) that creates `audit_log`, then `npm run typegen`, the `writeAudit` helper, and calls from the crag editor, the crag create and position actions, and `/api/v1/topos`. It doesn't depend on submissions, so it's useful for admin edits right away.
-2. Migration that drops `topo_submission` and creates `submission`. Apply it locally, run `npm run typegen`, and update user deletion in `users._index.tsx` and its test so it deletes only the user's queued submissions.
-3. Payload validation, the intake endpoint (including the swap from file placeholders to URLs), and the status GET.
-4. Approve and reject, including audit rows and deleting the decided row.
-5. Review page.
-6. Conflict checks against the audit log and other queued submissions, shown on the review page.
-7. TopoBuilder (`../topobuilder`): send the new payload and read back the created IDs. The payload includes linked routes by ID, edits as changed fields only, `baseUpdatedAt`, and topo images and annotations. Ship this together with step 3.
-8. Restrict `/api/v1/topos` writes to admin/super, and update `docs/topo-sync-api.md` and `docs/route-sync-api.md`.
+1. ✅ Audit log: `audit_log`, the `writeAudit` helper, and calls from the crag editor, the crag create and position actions, and `/api/v1/topos`.
+2. ✅ The `submission` table, and deleting an account's rows with the account.
+3. ✅ Intake and "my objects".
+4. ✅ Approve and reject.
+5. ✅ Review page.
+6. ✅ Conflict checks against the audit log and other accounts' pending edits.
+7. TopoBuilder (`../topobuilder`): send objects under local IDs, withdraw removed ones, and read "my objects". See [topobuilder-integration.md](topobuilder-integration.md).
+8. ✅ Restrict `/api/v1/topos` writes to admin/super.
 9. Issues tab.
+10. ✅ Per-object proposals: one row per account and object (migration `0072`), replacing per-set submissions.
 
 ## Tests
 
-Focused Vitest tests using `app/test/helpers.ts`:
+Focused Vitest tests use `app/test/helpers.ts` and in-memory SQLite with the real migrations:
 
-- intake rejects unknown fields, bad refs, missing files, and missing edit targets, and saves stored URLs in place of file placeholders;
-- approving a crag → sector → route → topo submission creates every record with the right parents;
-- an edit changes only its own fields;
-- a failed approval stays queued, and approving again doesn't duplicate creates or audit rows;
-- a field conflict is found from an applied audit row after the base time, but not from rejected rows, rows from the same submission, or rows within the few-second slack;
-- an overlap with another queued submission on the same field is found;
-- a record changed only on other fields, or with a newer `updated_at` and no audit row, gets the record-changed warning instead of a conflict;
-- ISO and SQLite timestamps compare correctly;
-- crag editor edits write audit rows containing only the changed columns, with the editor as author and no reviewer, and deletes store the whole row;
-- approvals and rejections write one audit row per change, with the submitter as author and the deciding admin as reviewer, and delete the submission row;
-- after a decision, the status GET reports the outcome and the created IDs from the audit log;
-- only admin/super can approve, and members can't write through `/api/v1/topos`.
+- intake: merging, published objects becoming edits or `unchanged`, published refs resolved, withdrawal, rejected objects proposed again, every validation rule, and stored file URLs;
+- approval: parents first, with refs and annotation route links resolved; an edit changes only its own fields; a failure leaves earlier objects published and approving again continues;
+- rejection marks every object in the item and writes rejected audit rows;
+- conflicts: field conflicts from applied audit rows after the base time (not rejected rows, or rows within the slack), overlaps with other accounts' edits, and the record-changed warning;
+- the review page's loader, actions, and UI.
 
-Run `npm run verify` after each step, and run `npm run build` for the API and UI changes.
+The e2e suite (`e2e/submissions.spec.ts`, `e2e/app-workflows.spec.ts`) plays the TopoBuilder app against the real API: a member's new crag through approval, competing edits from two accounts, and an anonymous contributor's topo with images and annotations.

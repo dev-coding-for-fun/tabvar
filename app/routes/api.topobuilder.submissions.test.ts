@@ -5,9 +5,8 @@ import { createContext, createGetRequest, createRouteArgs, readJson } from "~/te
 
 const mocks = vi.hoisted(() => ({
   requireApiToken: vi.fn(),
-  createSubmission: vi.fn(),
-  getSubmissionStatus: vi.fn(),
-  listMySubmissions: vi.fn(),
+  receiveObjects: vi.fn(),
+  listMyObjects: vi.fn(),
   parseSubmissionRequest: vi.fn(),
 }));
 
@@ -18,13 +17,12 @@ vi.mock("~/lib/topobuilderAuth.server", async (importOriginal) => ({
 
 vi.mock("~/lib/submission.server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/lib/submission.server")>()),
-  createSubmission: mocks.createSubmission,
-  getSubmissionStatus: mocks.getSubmissionStatus,
-  listMySubmissions: mocks.listMySubmissions,
+  receiveObjects: mocks.receiveObjects,
+  listMyObjects: mocks.listMyObjects,
   parseSubmissionRequest: mocks.parseSubmissionRequest,
 }));
 
-import { SubmissionConflictError, SubmissionValidationError } from "~/lib/submission.server";
+import { SubmissionValidationError } from "~/lib/submission.server";
 import { action, loader } from "./api.topobuilder.submissions";
 
 const post = () => createRouteArgs({
@@ -37,62 +35,40 @@ describe("api.topobuilder.submissions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireApiToken.mockResolvedValue({ tokenId: "t1", uid: "submitter", client: "topobuilder" });
-    mocks.parseSubmissionRequest.mockResolvedValue({ payload: { changes: [] }, files: new Map() });
+    mocks.parseSubmissionRequest.mockResolvedValue({ payload: { objects: [] }, files: new Map() });
   });
 
-  it("queues a submission for the token's user", async () => {
-    mocks.createSubmission.mockResolvedValue({ id: "s-1", status: "pending", replaced: false });
+  it("receives the token user's objects and reports each one's state", async () => {
+    const objects = [{ entity: "crag", ref: "c1", id: null, state: "pending" }];
+    mocks.receiveObjects.mockResolvedValue(objects);
 
     const response = await action(post());
 
-    expect(response.status).toBe(201);
-    expect(await readJson(response)).toEqual({ id: "s-1", status: "pending", replaced: false });
-    expect(mocks.createSubmission).toHaveBeenCalledWith(expect.anything(), {
+    expect(response.status).toBe(200);
+    expect(await readJson(response)).toEqual({ objects });
+    expect(mocks.receiveObjects).toHaveBeenCalledWith(expect.anything(), {
       uid: "submitter",
       source: "topobuilder",
-      payload: { changes: [] },
+      payload: { objects: [] },
       files: new Map(),
-      replace: null,
     });
   });
 
-  it("replaces the submission named by ?replace", async () => {
-    mocks.createSubmission.mockResolvedValue({ id: "s-1", status: "pending", replaced: true });
-
-    const response = await action(createRouteArgs({
-      request: new Request("https://example.com/api/topobuilder/submissions?replace=s-1", { method: "POST", body: "{}" }),
-      context: createContext(),
-      params: {},
-    }));
-
-    expect(response.status).toBe(200);
-    expect(mocks.createSubmission).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ replace: "s-1" }));
-  });
-
-  it("returns 409 when the submission can't be replaced", async () => {
-    mocks.createSubmission.mockRejectedValue(new SubmissionConflictError("partly applied"));
-
-    const response = await action(post());
-
-    expect(response.status).toBe(409);
-    expect(await readJson(response)).toEqual({ error: "conflict", message: "partly applied" });
-  });
-
   it("returns 400 with the validation message for an invalid submission", async () => {
-    mocks.createSubmission.mockRejectedValue(new SubmissionValidationError("changes[0].op must be create or update"));
+    mocks.receiveObjects.mockRejectedValue(new SubmissionValidationError("objects[0].entity must be one of crag, sector, route, topo"));
 
     const response = await action(post());
 
     expect(response.status).toBe(400);
     expect(await readJson(response)).toEqual({
       error: "invalid_submission",
-      message: "changes[0].op must be create or update",
+      message: "objects[0].entity must be one of crag, sector, route, topo",
     });
   });
 
   it("returns 500 when storing the submission fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    mocks.createSubmission.mockRejectedValue(new Error("R2 unavailable"));
+    mocks.receiveObjects.mockRejectedValue(new Error("R2 unavailable"));
 
     const response = await action(post());
 
@@ -100,28 +76,9 @@ describe("api.topobuilder.submissions", () => {
     expect(await readJson(response)).toEqual(expect.objectContaining({ error: "server_error" }));
   });
 
-  it("reports the caller's submission status, or 404", async () => {
-    mocks.getSubmissionStatus.mockResolvedValueOnce({ id: "s-1", status: "approved", ids: { r1: 301 } });
-    const found = await loader(createRouteArgs({
-      request: createGetRequest("https://example.com/api/topobuilder/submissions?id=s-1"),
-      context: createContext(),
-      params: {},
-    }));
-    expect(await readJson(found)).toEqual({ id: "s-1", status: "approved", ids: { r1: 301 } });
-    expect(mocks.getSubmissionStatus).toHaveBeenCalledWith(expect.anything(), { uid: "submitter", id: "s-1" });
-
-    mocks.getSubmissionStatus.mockResolvedValueOnce(null);
-    const missing = await loader(createRouteArgs({
-      request: createGetRequest("https://example.com/api/topobuilder/submissions?id=other"),
-      context: createContext(),
-      params: {},
-    }));
-    expect(missing.status).toBe(404);
-  });
-
-  it("lists the caller's own submissions when no id is given", async () => {
-    const list = { submissions: [{ id: "s-1", status: "pending" }], serverTime: "2026-10-16 12:00:00" };
-    mocks.listMySubmissions.mockResolvedValue(list);
+  it("lists the caller's own objects since a cursor", async () => {
+    const list = { objects: [{ entity: "crag", ref: "c1", id: 41, state: "published" }], serverTime: "2026-10-16 12:00:00" };
+    mocks.listMyObjects.mockResolvedValue(list);
 
     const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/api/topobuilder/submissions?since=2026-10-15%2000:00:00"),
@@ -130,9 +87,6 @@ describe("api.topobuilder.submissions", () => {
     }));
 
     expect(await readJson(response)).toEqual(list);
-    expect(mocks.listMySubmissions).toHaveBeenCalledWith(expect.anything(), {
-      uid: "submitter",
-      since: "2026-10-15 00:00:00",
-    });
+    expect(mocks.listMyObjects).toHaveBeenCalledWith(expect.anything(), { uid: "submitter", since: "2026-10-15 00:00:00" });
   });
 });

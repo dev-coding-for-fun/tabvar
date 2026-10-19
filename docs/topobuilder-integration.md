@@ -4,14 +4,14 @@ For TopoBuilder developers and coding agents. It explains how TABVAR expects the
 
 ## The model in one paragraph
 
-TABVAR publishes crags, sectors, routes, and topos. The app **reads** them through the sync APIs. To **add or change** route data, the app sends a **submission**: a list of creates and edits. The submission waits in a review queue until a TABVAR admin approves or rejects it on the web, and nothing is public until it's approved. The app polls **"my submissions"** to show the user's proposals as "in review", and to learn the new IDs once they're published. **Issues** (bolt and hardware reports) are separate: they go through the issue sync API and their own moderation states.
+TABVAR publishes crags, sectors, routes, and topos. The app **reads** them through the sync APIs. To **add or change** route data, the app **proposes objects**: new objects under the app's own local IDs, and edits to existing records by their TABVAR IDs. TABVAR keeps one proposal per account and object, so sending an object again just updates its proposal. Proposals wait until a TABVAR admin approves or rejects them on the web, and nothing is public until it's approved. The app polls **"my objects"** to show what's in review, and to learn the TABVAR IDs of its objects once they're published. **Issues** (bolt and hardware reports) are separate: they go through the issue sync API and their own moderation states.
 
 ## Detailed references
 
 | Topic | Doc |
 | :--- | :--- |
 | Connecting an account, tokens, roles, errors | [api-auth-and-onboarding.md](api-auth-and-onboarding.md) |
-| Proposing route data and tracking submissions | [submissions-api.md](submissions-api.md) |
+| Proposing route data and tracking it | [submissions-api.md](submissions-api.md) |
 | Pulling crags, sectors, and routes | [route-sync-api.md](route-sync-api.md) |
 | Pulling topos (and admin-only direct publishing) | [topo-sync-api.md](topo-sync-api.md) |
 | Reporting and syncing issues | [issue-sync-api.md](issue-sync-api.md) |
@@ -34,13 +34,13 @@ Allowlisted callbacks: the `topobuilder:` scheme in production; `http://localhos
 | | `anonymous` | `member` | `admin`, `super` |
 | :--- | :---: | :---: | :---: |
 | Pull the catalog (crags, sectors, routes, topos) | ✅ | ✅ | ✅ |
-| Submit route data and track their own submissions | ✅ | ✅ | ✅ |
+| Propose route data and track their own proposals | ✅ | ✅ | ✅ |
 | Publish or delete topos directly (`/api/v1/topos`) | ❌ | ❌ | ✅ |
 | Report issues | ✅, always `In Moderation` | ✅, any status (skips moderation) | ✅ |
 | See issues in the pull | Public issues + their own in moderation | All issues | All issues |
 | Edit issues, change status, archive | ❌ | ✅ | ✅ |
 
-Every account, `anonymous` included, needs only a token to submit and track its own submissions. Use the `role` from the connect response to decide which controls to show.
+Every account, `anonymous` included, needs only a token to propose objects and track its own proposals. Use the `role` from the connect response to decide which controls to show.
 
 ---
 
@@ -68,67 +68,57 @@ GET /api/v1/topos?since=…
 
 ```json
 {
-  "changes": [
-    { "ref": "local-crag-17",   "entity": "crag",   "op": "create", "fields": { "name": "New Crag" } },
-    { "ref": "local-sector-4",  "entity": "sector", "op": "create", "fields": { "name": "Main Wall", "cragId": "local-crag-17" } },
-    { "ref": "local-route-88",  "entity": "route",  "op": "create", "fields": { "name": "New Line", "sectorId": "local-sector-4", "gradeYds": "5.11a" } },
-    { "entity": "route", "op": "update", "id": 456, "baseUpdatedAt": "2026-06-09 10:00:00", "fields": { "boltCount": 7 } },
-    { "ref": "local-topo-3", "entity": "topo", "op": "create", "fields": {
+  "objects": [
+    { "entity": "crag",   "ref": "local-crag-17",  "fields": { "name": "New Crag" } },
+    { "entity": "sector", "ref": "local-sector-4", "fields": { "name": "Main Wall", "cragId": "local-crag-17" } },
+    { "entity": "route",  "ref": "local-route-88", "fields": { "name": "New Line", "sectorId": "local-sector-4", "gradeYds": "5.11a" } },
+    { "entity": "route",  "id": 456, "baseUpdatedAt": "2026-06-09 10:00:00", "fields": { "boltCount": 7 } },
+    { "entity": "topo",   "ref": "local-topo-3", "fields": {
         "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "name": "Main Wall Left", "sectorId": "local-sector-4",
-        "background": "file:bg", "raster": "file:raster", "annotations": { "version": 1, "items": [] },
+        "background": "file:bg", "raster": "file:raster",
+        "annotations": { "version": 1, "items": [{ "id": "line-1", "routeId": "local-route-88" }] },
         "routes": [{ "routeId": 456, "label": "1" }, { "routeId": "local-route-88", "label": "2" }] } }
   ]
 }
 ```
 
-How to build one from the app's local data:
+The app's rules:
 
-- **One change per record.** List parents before children, because changes are applied in order.
-- **New records** use `op: "create"` with a `ref`. Use the app's own local ID as the `ref`; it maps straight back to the new TABVAR ID after approval.
-- **Existing TABVAR records** use their numeric `id`. Point at them by ID in parent fields and topo `routes`. **Never match records by name.** Two routes can share a name, and a renamed route keeps its ID.
+1. **Send objects under their local IDs, with any parents that aren't published yet.** An object the app created is identified by its `ref`, which is the app's own local ID for it, forever. Its parents go in the same request unless they're already in review or published. Each object carries its own links (`cragId`, `sectorId`, topo `routes`, annotation `routeId`), as a TABVAR ID or a local ID. Order and grouping don't matter.
+2. **Withdraw what the user removed.** `{ "entity": "route", "ref": "local-route-90", "withdraw": true }` takes a proposal out of review. Withdraw children along with their parent.
+3. **Read "my objects" (§4)** to show what's in review and to learn TABVAR IDs.
+4. **Resending is always safe.** Sending an object again, alone or within a larger export, updates its one proposal: the fields it sends replace the proposed values, and the rest are kept. After a lost response, or when unsure what TABVAR has, just send again.
+
+How to fill in each object:
+
+- **Records the app pulled from TABVAR** are edited by their numeric `id`, and linked by ID. **Never match records by name.** Two routes can share a name, and a renamed route keeps its ID.
 - **Edits** carry **only the fields the user changed**. `null` clears a field. Send `baseUpdatedAt`, the record's `updatedAt` from the last pull, so the reviewer is warned if TABVAR changed the record since then.
-- **Linking an unchanged catalog route** to a topo needs no change for that route; just use its ID in the topo's `routes`.
-- **Topos** need a stable `uuid`, and on create the `background` (clean photo) and `raster` (rendered topo) images. Send each image as a multipart part and reference it as `file:<part name>`. JPEG, PNG, GIF, and WebP are accepted. `annotations` is `{ version, items }`.
-- **Annotation route references:** set each item's `routeId` to the TABVAR ID for a catalog route, or to the route's `ref` (its local ID) for a route created in the same submission. Never use a local ID for a route that isn't in the submission; intake rejects it. On approval, TABVAR rewrites refs to the new route IDs, so annotations pulled from `/api/v1/topos` always hold TABVAR IDs. The app maps them back to its local routes through the IDs it adopted (§4). Other item fields are stored untouched.
+- **The app's own objects after they're published** can still be sent by `ref`. TABVAR turns that into an edit of the published record, and drops it as `unchanged` if nothing differs. Switching to the TABVAR `id` once known is fine too.
+- **Linking an unchanged catalog route** to a topo needs no object for that route; just use its ID in the topo's `routes`.
+- **Topos** need a stable `uuid`, and when new, the `background` (clean photo) and `raster` (rendered topo) images. Send each image as a multipart part and reference it as `file:<part name>`. JPEG, PNG, GIF, and WebP are accepted. `annotations` is `{ version, items }`.
+- **Annotation route references:** set each item's `routeId` to the TABVAR ID for a catalog route, or to the route's local ID for one of the app's own routes. On approval, TABVAR rewrites local IDs to TABVAR IDs, so annotations pulled from `/api/v1/topos` always hold TABVAR IDs. The app maps them back through the IDs it adopted (§4). Other item fields are stored untouched.
 - **No deletes.** Retire a route or topo by setting `status`. Topo `status` is `Active` or `Deleted`.
-- **Limits:** 500 changes per submission, 200 routes per topo. Field names and editable fields are listed in [submissions-api.md](submissions-api.md).
+- **Limits:** 500 objects per request, 200 routes per topo. Field names and editable fields are listed in [submissions-api.md](submissions-api.md).
 
 **Responses**
 
-- `201 { id, status: "pending" }`: store the submission `id` with the local records it covers (for topos, the existing `tabvarSubmissionId`).
-- `400 invalid_submission`: the `message` lists up to 10 problems, each naming the change and field (for example `changes[2].fields.sectorId refers to sector 55, which doesn't exist`). Fix them and resubmit; nothing was stored.
+- `200 { objects: [{ entity, ref, id, state }] }`, one per object sent, in order. `state` is `pending` (in review), `unchanged` (it matches the published record, so nothing is in review), or `withdrawn`.
+- `400 invalid_submission`: the `message` lists up to 10 problems, each naming the object and field (for example `objects[2].fields.sectorId refers to "s9", which isn't a sector you've proposed`). Nothing was stored; fix them and send again.
 - `500 server_error`: nothing was stored, so retry.
-
-### Resubmitting before review
-
-When the user changes something that's still in review, send the whole updated proposal with `?replace=<stored submission id>`. The pending submission is overwritten in place (`200`, same ID), so the review queue never fills up with stale copies.
-
-- If that submission was already approved or rejected, a new one is created (`201`) with a new ID. Store the new ID.
-- `409 conflict` means an approval failed partway, so some of its records may already be published. Don't resubmit; keep polling (§4) until it's decided.
-- Each resubmission replaces the previous one entirely. Include every change, not just the latest edit.
-
-### Lost responses
-
-There's no idempotency key, so a request whose response never arrives may or may not have been stored. Don't retry blindly. Instead:
-
-1. Poll "my submissions" (§4).
-2. Look for a **pending** submission whose `changes` contain one of your refs. Refs are the app's local IDs, for example the local topo ID on its `topo` create.
-3. If you find one, adopt its `id` as the stored submission ID; it was stored. If not, submit again, with `?replace=` if you have an older ID.
 
 ---
 
 ## 4. Show what's in review, and adopt the results
 
-Poll `GET /api/topobuilder/submissions?since=<serverTime>` alongside the catalog pulls. It only ever returns the caller's own submissions, whatever their role.
+Poll `GET /api/topobuilder/submissions?since=<serverTime>` alongside the catalog pulls. It returns the caller's own objects that changed since the cursor, whatever their role. Upsert them by `ref` (or by `entity` + `id` for edits of records the app didn't create). The cursor is inclusive.
 
-- **`pending`** submissions are returned in full on every call, with their `changes`. Mark the records they touch (`entity`, plus `id` for edits or `ref` for creates) as "in review", and show proposed values where that helps. `error` set means an approval attempt failed and the submission is still queued. It needs no action from the app.
-- **`approved`** submissions come with `ids`, mapping each `ref` to the new TABVAR ID. Re-key the local records to those IDs, clear their in-review markers, and pull the catalog to get the published versions. Later edits to those records then become `update`s instead of duplicate creates.
-- **`rejected`** submissions: clear the markers and drop the local proposal, or keep it as a private draft. No reason is given; TABVAR rejects spam and junk silently.
-- A decision is reported on the first poll after it happens. The cursor is inclusive, so dedupe by `id`. A call without `since` returns every past decision.
+- **`pending`:** mark the object "in review", and show the proposed `fields` where that helps. `error` set means an approval attempt failed and it's still queued. It needs no action from the app.
+- **`published`:** `id` is the TABVAR record. Re-key the local object to it, clear the in-review marker, and pull the catalog to get the published version.
+- **`rejected`:** clear the marker and drop the proposal, or keep it as a private draft. No reason is given; TABVAR rejects spam and junk silently. Sending the object again starts a fresh proposal.
 
-`GET /api/topobuilder/submissions?id=<id>` returns the status of a single submission.
+A call without `since` returns every object the account has proposed, which is how the app rebuilds its state after a reinstall.
 
-A submission is approved or rejected as a whole. If the reviewer wanted part of it, they reject it and make the edit themselves; the change then shows up in the catalog pull.
+The reviewer approves or rejects an account's linked objects together: a new crag with its new sectors, routes and topos is one review item. If the reviewer wanted only part of it, they reject it and make the edit themselves; the change then shows up in the catalog pull.
 
 ---
 
@@ -149,7 +139,7 @@ Issues use the issue sync API, not submissions ([issue-sync-api.md](issue-sync-a
 Admins and supers can bypass review with `POST`/`DELETE /api/v1/topos` ([topo-sync-api.md](topo-sync-api.md)). Other roles get `403`, with a message pointing at the submissions API. Use it only for admin-facing features:
 
 - An update keeps every field it leaves out. `routes` replaces all of the topo's links.
-- Links must point to existing routes. New routes go through a submission.
+- Links must point to existing routes. New routes go through a proposal.
 - Images must be uploaded with the request, or already stored by TABVAR.
 
 ---
@@ -157,23 +147,23 @@ Admins and supers can bypass review with `POST`/`DELETE /api/v1/topos` ([topo-sy
 ## Conventions
 
 - **Timestamps** use UTC `YYYY-MM-DD HH:MM:SS`. Treat `serverTime` and `updatedAt` as opaque, and pass them back as given.
-- **IDs** are numbers. **Refs** are the app's own strings, unique within one submission.
+- **IDs** are numbers. **Refs** are the app's own local IDs, as strings, and must be unique within the account (across entities too).
 - **Field names** are camelCase and match the pull APIs (`gradeYds`, `sectorId`, …).
 - **Errors** have the shape `{ "error": "<code>", "message": "…" }`; the codes are listed in [api-auth-and-onboarding.md](api-auth-and-onboarding.md#error-code-reference).
 
 ## Not available (yet)
 
-- Deleting records through submissions. Use `status`.
-- Partial approval, or the reviewer editing a proposal.
+- Deleting records through proposals. Use `status`.
+- Partial approval of a review item, or the reviewer editing a proposal.
 - A reason for a rejection.
 - Detecting duplicates by name. Fuzzy name matching is planned for later, so don't rely on TABVAR to merge same-named records.
-- An admin view of everyone's submissions in the app. Reviewing happens on the TABVAR website.
+- An admin view of everyone's proposals in the app. Reviewing happens on the TABVAR website.
 
 ## Migrating from the old submission format
 
-The earlier `/api/topobuilder/submissions` payload is rejected with `400`: the `kind` plus `crag`/`sector`/`topo` tree, routes referenced by name, a single image per topo. Moving to this flow means:
+The earlier `/api/topobuilder/submissions` payloads are rejected with `400`: the `kind` plus `crag`/`sector`/`topo` tree, and the `changes` list with `op`. Moving to this flow means:
 
-1. Build the `changes` list from §3: local IDs as refs, catalog records by numeric ID, edits as changed fields with `baseUpdatedAt`, topos with a `uuid` and both images.
-2. Store the submission ID returned for each submission, resubmit edits with `?replace=`, and recover lost responses through "my submissions".
-3. Poll "my submissions" (§4) to drive in-review markers, adopt the new IDs, and clear rejections.
-4. Read published topos from `GET /api/v1/topos` instead of assuming a submission published them.
+1. Build the `objects` list from §3: local IDs as refs, with unpublished parents included; catalog records by numeric ID; edits as changed fields with `baseUpdatedAt`; topos with a `uuid` and both images.
+2. Drop any stored submission IDs. Objects are tracked by their local IDs, and resending replaces nothing but the fields it sends.
+3. Poll "my objects" (§4) to drive in-review markers, adopt the TABVAR IDs, and clear rejections.
+4. Read published topos from `GET /api/v1/topos` instead of assuming a proposal published them.

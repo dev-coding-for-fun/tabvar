@@ -32,8 +32,8 @@ import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR } from "~/lib/constants";
 import { getDB } from "~/lib/db";
 import { privatePageMeta } from "~/lib/seo";
-import type { SubmissionPayload } from "~/lib/submission.server";
-import { approveSubmission, rejectSubmission, type ReviewResult } from "~/lib/submissionReview.server";
+import type { SubmissionObject } from "~/lib/submission.server";
+import { approveChain, loadPendingChains, rejectChain, type ReviewResult } from "~/lib/submissionReview.server";
 import {
   countConflicts,
   findConflicts,
@@ -42,7 +42,7 @@ import {
 } from "~/lib/submissionConflicts.server";
 import {
   countChanges,
-  describeSubmissionChanges,
+  describeObjects,
   type ChangeCounts,
   type ChangeView,
   type DisplayValue,
@@ -51,12 +51,17 @@ import {
 
 const PAGE_PATH = "/admin/submissions";
 
-type SubmissionSummary = {
-  id: string;
+/** One review item: a chain of an account's linked pending objects. */
+type ChainSummary = {
+  /** Identifies the chain; any of its object ids does too. */
+  item: number;
+  /** What the chain is about: its first (topmost) object. */
+  title: string;
   uid: string;
   source: string;
+  /** Why the last approval attempt failed, if it did. */
   error: string | null;
-  createdAt: string;
+  receivedAt: string;
   submitterName: string | null;
   submitterEmail: string | null;
   counts: ChangeCounts;
@@ -65,63 +70,56 @@ type SubmissionSummary = {
 
 type LoaderData = {
   error?: string;
-  submissions: SubmissionSummary[];
-  selected: { id: string; changes: ChangeView[]; conflicts: Record<number, ChangeConflicts> } | null;
+  chains: ChainSummary[];
+  selected: { item: number; changes: ChangeView[]; conflicts: Record<number, ChangeConflicts> } | null;
 };
 
 export const meta: MetaFunction<typeof loader> = () => privatePageMeta("Submissions");
 
+function chainTitle([first]: SubmissionObject[]) {
+  return first.targetId === null
+    ? `New ${first.entity} “${typeof first.fields.name === "string" ? first.fields.name : first.ref}”`
+    : `Edit ${first.entity} #${first.targetId}`;
+}
+
 export async function loader(args: LoaderFunctionArgs) {
   const user = await requireUser(args);
   if (user.role !== "admin" && user.role !== "super") {
-    return data<LoaderData>({ error: PERMISSION_ERROR, submissions: [], selected: null }, { status: 403 });
+    return data<LoaderData>({ error: PERMISSION_ERROR, chains: [], selected: null }, { status: 403 });
   }
 
   const db = getDB(args.context);
-  const rows = await db.selectFrom("submission")
-    .leftJoin("user", "submission.uid", "user.uid")
-    .select([
-      "submission.id",
-      "submission.uid",
-      "submission.source",
-      "submission.payload",
-      "submission.error",
-      "submission.created_at as createdAt",
-      "user.display_name as submitterName",
-      "user.email as submitterEmail",
-    ])
-    .orderBy("submission.created_at", "desc")
-    .execute();
+  const pending = await loadPendingChains(db);
+  const allPending = pending.flatMap((chain) =>
+    chain.objects.map((object) => ({ ...object, submitterName: chain.author.displayName ?? null })));
+  // The queue is small, so every chain is checked to show conflict counts in the list.
+  const conflictsByChain = new Map(await Promise.all(pending.map(async (chain) =>
+    [chain.key, await findConflicts(db, chain.objects, allPending)] as const)));
 
-  const queued = rows.map((row) => ({
-    id: row.id,
-    createdAt: row.createdAt,
-    submitterName: row.submitterName,
-    payload: JSON.parse(row.payload) as SubmissionPayload,
-  }));
-  // The queue is small, so every submission is checked to show conflict counts in the list.
-  const conflictsById = new Map(await Promise.all(queued.map(async (submission) => [
-    submission.id,
-    await findConflicts(db, submission, queued.filter((other) => other.id !== submission.id)),
-  ] as const)));
-
-  const submissions = rows.map(({ payload: _payload, ...row }, index) => ({
-    ...row,
-    counts: countChanges(queued[index].payload),
-    conflictCounts: countConflicts(conflictsById.get(row.id)!),
+  const chains: ChainSummary[] = pending.map((chain) => ({
+    item: chain.key,
+    title: chainTitle(chain.objects),
+    uid: chain.uid,
+    source: chain.source,
+    error: chain.objects.find((object) => object.error)?.error ?? null,
+    receivedAt: chain.objects.reduce((latest, object) => (object.receivedAt > latest ? object.receivedAt : latest), ""),
+    submitterName: chain.author.displayName ?? null,
+    submitterEmail: chain.authorEmail,
+    counts: countChanges(chain.objects),
+    conflictCounts: countConflicts(conflictsByChain.get(chain.key)!),
   }));
 
-  const selectedId = new URL(args.request.url).searchParams.get("id");
-  const selectedSubmission = queued.find((submission) => submission.id === selectedId);
-  const selected = selectedSubmission
+  const item = Number(new URL(args.request.url).searchParams.get("item"));
+  const selectedChain = pending.find((chain) => chain.objects.some((object) => object.id === item));
+  const selected = selectedChain
     ? {
-      id: selectedSubmission.id,
-      changes: await describeSubmissionChanges(db, selectedSubmission.payload),
-      conflicts: Object.fromEntries(conflictsById.get(selectedSubmission.id)!),
+      item: selectedChain.key,
+      changes: await describeObjects(db, selectedChain.objects),
+      conflicts: Object.fromEntries(conflictsByChain.get(selectedChain.key)!),
     }
     : null;
 
-  return { submissions, selected } satisfies LoaderData;
+  return { chains, selected } satisfies LoaderData;
 }
 
 export async function action(args: ActionFunctionArgs) {
@@ -131,24 +129,21 @@ export async function action(args: ActionFunctionArgs) {
   }
 
   const formData = await args.request.formData();
-  const id = formData.get("id")?.toString();
+  const item = Number(formData.get("item"));
   const intent = formData.get("intent");
-  if (!id || (intent !== "approve" && intent !== "reject")) {
-    return data<ReviewResult>({ ok: false, error: "Choose approve or reject for a submission." }, { status: 400 });
+  if (!Number.isInteger(item) || item <= 0 || (intent !== "approve" && intent !== "reject")) {
+    return data<ReviewResult>({ ok: false, error: "Choose approve or reject for an item." }, { status: 400 });
   }
 
-  const review = intent === "approve" ? approveSubmission : rejectSubmission;
-  const result = await review(args.context, { id, reviewer: user });
+  const review = intent === "approve" ? approveChain : rejectChain;
+  const result = await review(args.context, { item, reviewer: user });
   if (!result.ok) {
     return data<ReviewResult>(result, { status: 409 });
   }
 
-  // Move on to the next submission in the list.
-  const next = await getDB(args.context).selectFrom("submission")
-    .select("id")
-    .orderBy("created_at", "desc")
-    .executeTakeFirst();
-  return redirect(next ? `${PAGE_PATH}?id=${encodeURIComponent(next.id)}` : PAGE_PATH);
+  // Move on to the next item in the list.
+  const [next] = await loadPendingChains(getDB(args.context));
+  return redirect(next ? `${PAGE_PATH}?item=${next.key}` : PAGE_PATH);
 }
 
 function countLabel({ creates, edits }: ChangeCounts) {
@@ -167,25 +162,25 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
-function SubmissionListItem({ submission, active }: { submission: SubmissionSummary; active: boolean }) {
+function ChainListItem({ chain, active }: { chain: ChainSummary; active: boolean }) {
   return (
     <UnstyledButton
       component={Link}
-      to={`?id=${encodeURIComponent(submission.id)}`}
+      to={`?item=${chain.item}`}
       aria-current={active ? "true" : undefined}
       w="100%"
     >
       <Paper withBorder p="sm" bg={active ? "var(--mantine-primary-color-light)" : undefined}>
         <Stack gap={4}>
           <Group justify="space-between" wrap="nowrap">
-            <Text fw={600} truncate>{submission.submitterName ?? submission.uid}</Text>
-            <SourceBadge source={submission.source} />
+            <Text fw={600} truncate>{chain.title}</Text>
+            <SourceBadge source={chain.source} />
           </Group>
-          <Text size="sm">{countLabel(submission.counts)}</Text>
+          <Text size="sm">{chain.submitterName ?? chain.uid} · {countLabel(chain.counts)}</Text>
           <Group gap="xs">
-            <Text size="xs" c="dimmed">{submission.createdAt} UTC</Text>
-            {submission.error ? <Badge size="xs" color="red">approval failed</Badge> : null}
-            <ConflictBadges counts={submission.conflictCounts} />
+            <Text size="xs" c="dimmed">{chain.receivedAt} UTC</Text>
+            {chain.error ? <Badge size="xs" color="red">approval failed</Badge> : null}
+            <ConflictBadges counts={chain.conflictCounts} />
           </Group>
         </Stack>
       </Paper>
@@ -225,9 +220,9 @@ function ConflictSection({ conflicts }: { conflicts: ChangeConflicts }) {
               </List.Item>
             ))}
             {overlaps.map((overlap) => (
-              <List.Item key={`overlap-${overlap.submissionId}`}>
+              <List.Item key={`overlap-${overlap.item}`}>
                 {overlap.fields.join(", ")} {overlap.fields.length === 1 ? "is" : "are"} also edited in{" "}
-                <Anchor component={Link} to={`?id=${encodeURIComponent(overlap.submissionId)}`} size="sm">
+                <Anchor component={Link} to={`?item=${overlap.item}`} size="sm">
                   a submission from {overlap.submitterName ?? "another user"}
                 </Anchor>.
               </List.Item>
@@ -289,7 +284,7 @@ function Value({ value }: { value: DisplayValue | undefined }) {
 }
 
 function ChangeCard({ change, conflicts }: { change: ChangeView; conflicts: ChangeConflicts | undefined }) {
-  const isEdit = change.op === "update";
+  const isEdit = !change.isNew;
   const hasConflict = Boolean(conflicts && (conflicts.fieldConflicts.length > 0 || conflicts.overlaps.length > 0));
 
   return (
@@ -305,6 +300,10 @@ function ChangeCard({ change, conflicts }: { change: ChangeView; conflicts: Chan
         </div>
 
         {conflicts ? <ConflictSection conflicts={conflicts} /> : null}
+
+        {change.error ? (
+          <Alert color="red" title="Approving this failed">{change.error}</Alert>
+        ) : null}
 
         {change.missing ? (
           <Alert color="red" title="Record not found">
@@ -360,7 +359,7 @@ function ChangeCard({ change, conflicts }: { change: ChangeView; conflicts: Chan
   );
 }
 
-function ReviewActions({ id, savedError }: { id: string; savedError: string | null }) {
+function ReviewActions({ item, savedError }: { item: number; savedError: string | null }) {
   const fetcher = useFetcher<ReviewResult>();
   const busy = fetcher.state !== "idle";
   const intent = fetcher.formData?.get("intent");
@@ -370,13 +369,13 @@ function ReviewActions({ id, savedError }: { id: string; savedError: string | nu
     <>
       {savedError ? (
         <Alert color="red" title="The last approval attempt failed">
-          {savedError} Changes made before the failure stay applied; approving again continues from there.
+          {savedError} Objects approved before the failure are published; approving again continues with the rest.
         </Alert>
       ) : actionError ? (
         <Alert color="red" title="Couldn't complete">{actionError}</Alert>
       ) : null}
       <fetcher.Form method="post" action={PAGE_PATH}>
-        <input type="hidden" name="id" value={id} />
+        <input type="hidden" name="item" value={item} />
         <Group gap="xs">
           <Button type="submit" name="intent" value="approve" disabled={busy} loading={busy && intent === "approve"}>
             Approve
@@ -390,8 +389,8 @@ function ReviewActions({ id, savedError }: { id: string; savedError: string | nu
   );
 }
 
-function SubmissionDetail({ submission, changes, conflicts }: {
-  submission: SubmissionSummary;
+function ChainDetail({ chain, changes, conflicts }: {
+  chain: ChainSummary;
   changes: ChangeView[];
   conflicts: Record<number, ChangeConflicts>;
 }) {
@@ -405,24 +404,24 @@ function SubmissionDetail({ submission, changes, conflicts }: {
         <Stack gap="sm">
           <Group justify="space-between" align="flex-start">
             <div>
-              <Text fw={600}>{submission.submitterName ?? submission.uid}</Text>
-              {submission.submitterEmail ? <Text size="sm" c="dimmed">{submission.submitterEmail}</Text> : null}
-              <Text size="sm" c="dimmed">Submitted {submission.createdAt} UTC · {countLabel(submission.counts)}</Text>
+              <Text fw={600}>{chain.submitterName ?? chain.uid}</Text>
+              {chain.submitterEmail ? <Text size="sm" c="dimmed">{chain.submitterEmail}</Text> : null}
+              <Text size="sm" c="dimmed">Last received {chain.receivedAt} UTC · {countLabel(chain.counts)}</Text>
             </div>
-            <SourceBadge source={submission.source} />
+            <SourceBadge source={chain.source} />
           </Group>
-          <ReviewActions key={submission.id} id={submission.id} savedError={submission.error} />
+          <ReviewActions key={chain.item} item={chain.item} savedError={chain.error} />
         </Stack>
       </Paper>
 
-      {changes.map((change) => <ChangeCard key={change.index} change={change} conflicts={conflicts[change.index]} />)}
+      {changes.map((change) => <ChangeCard key={change.key} change={change} conflicts={conflicts[change.key]} />)}
     </Stack>
   );
 }
 
 export default function AdminSubmissions() {
-  const { error, submissions, selected } = useLoaderData<LoaderData>();
-  const selectedSummary = selected ? submissions.find((submission) => submission.id === selected.id) : undefined;
+  const { error, chains, selected } = useLoaderData<LoaderData>();
+  const selectedSummary = selected ? chains.find((chain) => chain.item === selected.item) : undefined;
 
   return (
     <RequirePermission access="atLeastSuper">
@@ -431,7 +430,7 @@ export default function AdminSubmissions() {
           <div>
             <Title order={2}>Submissions</Title>
             <Text c="dimmed" size="sm">
-              Proposed route data waiting for review. Approving writes the changes. Past decisions are in the audit log.
+              Proposed route data waiting for review, grouped into linked objects. Approving publishes them. Past decisions are in the audit log.
             </Text>
           </div>
 
@@ -441,27 +440,27 @@ export default function AdminSubmissions() {
             </Alert>
           ) : null}
 
-          {!error && submissions.length === 0 ? (
+          {!error && chains.length === 0 ? (
             <Paper withBorder p="md">
               <Text c="dimmed">No submissions are waiting for review.</Text>
             </Paper>
           ) : null}
 
-          {submissions.length > 0 ? (
+          {chains.length > 0 ? (
             <Grid gap="lg">
               <Grid.Col span={{ base: 12, md: 4 }} visibleFrom={selectedSummary ? "md" : undefined}>
                 <Stack gap="xs">
-                  {submissions.map((submission) => (
-                    <SubmissionListItem key={submission.id} submission={submission} active={submission.id === selected?.id} />
+                  {chains.map((chain) => (
+                    <ChainListItem key={chain.item} chain={chain} active={chain.item === selected?.item} />
                   ))}
                 </Stack>
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 8 }}>
                 {selected && selectedSummary ? (
-                  <SubmissionDetail submission={selectedSummary} changes={selected.changes} conflicts={selected.conflicts} />
+                  <ChainDetail chain={selectedSummary} changes={selected.changes} conflicts={selected.conflicts} />
                 ) : (
                   <Paper withBorder p="md" visibleFrom="md">
-                    <Text c="dimmed">Choose a submission to review.</Text>
+                    <Text c="dimmed">Choose an item to review.</Text>
                   </Paper>
                 )}
               </Grid.Col>

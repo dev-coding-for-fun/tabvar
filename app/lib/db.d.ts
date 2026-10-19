@@ -320,12 +320,19 @@ export interface SigninEvent {
 }
 
 export interface Submission {
-  created_at: Generated<string>;
+  base_updated_at: string | null;
+  decided_at: string | null;
+  entity: string;
   error: string | null;
-  id: string;
-  payload: string;
+  fields: string;
+  id: Generated<number>;
+  received_at: string;
+  ref: string | null;
   source: string;
+  state: string;
+  target_id: number | null;
   uid: string;
+  updated_at: string;
 }
 
 export interface Topo {

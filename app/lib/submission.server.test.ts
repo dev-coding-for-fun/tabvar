@@ -23,11 +23,9 @@ vi.mock("~/lib/s3.server", () => ({
 }));
 
 import {
-  createSubmission,
-  getSubmissionStatus,
-  listMySubmissions,
+  listMyObjects,
   parseSubmissionRequest,
-  SubmissionConflictError,
+  receiveObjects,
   SubmissionValidationError,
 } from "./submission.server";
 
@@ -36,48 +34,48 @@ const Sqlite = createRequire(import.meta.url)("better-sqlite3") as new (path: st
 
 const image = (name: string, type = "image/jpeg") => new File(["image-bytes"], name, { type });
 
-const fullSubmission = {
-  changes: [
-    { ref: "c1", entity: "crag", op: "create", fields: { name: "New Crag" } },
-    { ref: "s1", entity: "sector", op: "create", fields: { name: "Main Wall", cragId: "c1" } },
-    { ref: "r1", entity: "route", op: "create", fields: { name: "New Line", sectorId: "s1", gradeYds: "5.11a" } },
-    { entity: "route", op: "update", id: 100, baseUpdatedAt: "2026-06-09 10:00:00", fields: { boltCount: 7, notes: null } },
-    {
-      entity: "topo",
-      op: "create",
-      fields: {
-        uuid: "topo-new",
-        name: "Main Wall Left",
-        sectorId: "s1",
-        background: "file:bg",
-        raster: "file:raster",
-        annotations: { version: 1, items: [{ id: "a1", routeId: "r1" }, { id: "a2", routeId: 100 }, { id: "a3", routeId: null }] },
-        routes: [{ routeId: 100, label: "1" }, { routeId: "r1", label: "2", sortOrder: 2 }],
-      },
-    },
-  ],
-};
+const newCrag = { entity: "crag", ref: "c1", fields: { name: "New Crag" } };
+const newSector = { entity: "sector", ref: "s1", fields: { name: "Main Wall", cragId: "c1" } };
+const newRoute = { entity: "route", ref: "r1", fields: { name: "New Line", sectorId: "s1", gradeYds: "5.11a" } };
 
 describe("submission intake", () => {
   let sqlite: InstanceType<typeof Sqlite>;
   let db: Kysely<DB>;
-  const files = () => new Map([["bg", image("bg.jpg")], ["raster", image("raster.png", "image/png")]]);
+
+  const submit = (objects: unknown[], options: { uid?: string; files?: Map<string, File> } = {}) =>
+    receiveObjects(createContext(), {
+      uid: options.uid ?? "submitter",
+      source: "topobuilder",
+      payload: { objects },
+      files: options.files ?? new Map(),
+    });
+
+  async function stored(uid = "submitter") {
+    const rows = await db.selectFrom("submission").selectAll().where("uid", "=", uid).orderBy("id").execute();
+    return rows.map((row) => ({ ...row, fields: JSON.parse(row.fields) }));
+  }
+
+  function publish(entity: string, ref: string, targetId: number) {
+    sqlite.exec(`
+      INSERT INTO submission (uid, source, entity, ref, target_id, fields, state, received_at, updated_at)
+      VALUES ('submitter', 'topobuilder', '${entity}', '${ref}', ${targetId}, '{}', 'published', '2026-10-01 00:00:00', '2026-10-01 00:00:00');
+    `);
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
     sqlite = new Sqlite(":memory:");
     db = new Kysely<DB>({ dialect: new SqliteDialect({ database: sqlite }) });
-    sqlite.exec("PRAGMA foreign_keys = ON");
     sqlite.exec(readFileSync(resolve("migrations", "0002_initial_setup.sql"), "utf8"));
     sqlite.exec("ALTER TABLE route ADD COLUMN updated_at TIMESTAMP");
-    for (const migration of ["0062_add_raw_topos.sql", "0070_add_audit_log.sql", "0071_replace_topo_submission.sql"]) {
+    for (const migration of ["0062_add_raw_topos.sql", "0063_add_topo_coordinates.sql", "0072_submission_per_object.sql"]) {
       sqlite.exec(readFileSync(resolve("migrations", migration), "utf8"));
     }
     sqlite.exec(`
       INSERT INTO user (uid, display_name) VALUES ('submitter', 'Submitter'), ('someone-else', 'Other');
       INSERT INTO crag (id, name) VALUES (1, 'Crag');
       INSERT INTO sector (id, name, crag_id) VALUES (10, 'Sector', 1);
-      INSERT INTO route (id, name, sector_id) VALUES (100, 'Route', 10);
+      INSERT INTO route (id, name, sector_id, bolt_count) VALUES (100, 'Route', 10, 6);
       INSERT INTO topo (id, uuid, name, background_image_url, raster_image_url) VALUES (7, 'topo-existing', 'Topo', 'bg.jpg', 'raster.jpg');
     `);
     mocks.getDB.mockReturnValue(db);
@@ -88,288 +86,211 @@ describe("submission intake", () => {
     }));
   });
 
-  async function storedPayload() {
-    const { payload } = await db.selectFrom("submission").select("payload").executeTakeFirstOrThrow();
-    return { raw: payload, parsed: JSON.parse(payload) };
-  }
+  it("stores one pending proposal per object, with uploaded files and refs to new parents", async () => {
+    const result = await submit(
+      [
+        newCrag,
+        newSector,
+        newRoute,
+        { entity: "route", id: 100, baseUpdatedAt: "2026-06-09 10:00:00", fields: { boltCount: 7 } },
+        {
+          entity: "topo",
+          ref: "t1",
+          fields: {
+            uuid: "topo-new", name: "Main Wall Left", sectorId: "s1", background: "file:bg", raster: "file:raster",
+            annotations: { version: 1, items: [{ id: "a1", routeId: "r1" }] }, routes: [{ routeId: "r1", label: "1" }],
+          },
+        },
+      ],
+      { files: new Map([["bg", image("bg.jpg")], ["raster", image("raster.png", "image/png")]]) },
+    );
 
-  it("queues a multi-level submission and stores uploaded file URLs in place of placeholders", async () => {
-    const result = await createSubmission(createContext(), {
-      uid: "submitter",
-      source: "topobuilder",
-      payload: fullSubmission,
-      files: files(),
+    expect(result.map((object) => object.state)).toEqual(["pending", "pending", "pending", "pending", "pending"]);
+    const rows = await stored();
+    expect(rows.map((row) => [row.entity, row.ref, row.target_id, row.state])).toEqual([
+      ["crag", "c1", null, "pending"],
+      ["sector", "s1", null, "pending"],
+      ["route", "r1", null, "pending"],
+      ["route", null, 100, "pending"],
+      ["topo", "t1", null, "pending"],
+    ]);
+    expect(rows[1].fields).toEqual({ name: "Main Wall", cragId: "c1" });
+    expect(rows[3]).toMatchObject({ fields: { boltCount: 7 }, base_updated_at: "2026-06-09 10:00:00" });
+    expect(rows[4].fields).toMatchObject({
+      background: "https://topos.example.com/submissions/submitter/bg.jpg",
+      raster: "https://topos.example.com/submissions/submitter/raster.png",
+    });
+  });
+
+  it("merges a resubmitted object field by field, the newest value winning", async () => {
+    await submit([newCrag, newSector, newRoute]);
+    await submit([{ entity: "route", ref: "r1", fields: { gradeYds: "5.11b", boltCount: 8 } }]);
+
+    const route = (await stored()).find((row) => row.ref === "r1");
+    expect(route?.fields).toEqual({ name: "New Line", sectorId: "s1", gradeYds: "5.11b", boltCount: 8 });
+  });
+
+  it("keeps one proposal per object however overlapping submissions arrive", async () => {
+    await submit([newCrag, newSector, newRoute]);
+    await submit([newSector, newRoute]);
+    await submit([newRoute]);
+    await submit([newCrag, newSector, newRoute, { entity: "sector", ref: "s2", fields: { name: "Upper Wall", cragId: "c1" } }]);
+
+    expect((await stored()).map((row) => row.ref)).toEqual(["c1", "s1", "r1", "s2"]);
+  });
+
+  it("treats an identical retry as a no-op", async () => {
+    await submit([newCrag, newSector, newRoute]);
+    const before = await stored();
+
+    expect((await submit([newCrag, newSector, newRoute])).map((object) => object.state)).toEqual(["pending", "pending", "pending"]);
+    expect((await stored()).map((row) => [row.id, row.fields])).toEqual(before.map((row) => [row.id, row.fields]));
+  });
+
+  it("turns an object you already published into an edit, and drops one that changes nothing", async () => {
+    publish("route", "r1", 100);
+
+    expect(await submit([{ entity: "route", ref: "r1", fields: { name: "Route", sectorId: 10 } }]))
+      .toEqual([{ entity: "route", ref: "r1", id: 100, state: "unchanged" }]);
+    expect((await stored())[0].state).toBe("published");
+
+    await submit([{ entity: "route", ref: "r1", fields: { boltCount: 7 } }]);
+    expect(await stored()).toEqual([expect.objectContaining({ ref: "r1", target_id: 100, state: "pending", fields: { boltCount: 7 } })]);
+  });
+
+  it("stores references to your published objects as their record ids", async () => {
+    publish("sector", "s1", 10);
+
+    await submit([{ entity: "route", ref: "r2", fields: { name: "Another Line", sectorId: "s1" } }]);
+
+    expect((await stored()).find((row) => row.ref === "r2")?.fields.sectorId).toBe(10);
+  });
+
+  it("proposes a rejected object again from scratch", async () => {
+    sqlite.exec(`
+      INSERT INTO submission (uid, source, entity, ref, fields, state, received_at, decided_at, updated_at)
+      VALUES ('submitter', 'topobuilder', 'crag', 'c1', '{"name":"Spam"}', 'rejected', '2026-10-01', '2026-10-02', '2026-10-02');
+    `);
+
+    await submit([{ entity: "crag", ref: "c1", fields: { name: "Real Crag" } }]);
+
+    expect(await stored()).toEqual([expect.objectContaining({ state: "pending", fields: { name: "Real Crag" }, decided_at: null })]);
+  });
+
+  describe("withdrawing", () => {
+    it("removes a new object's proposal, and leaves a published object published", async () => {
+      await submit([newCrag]);
+      publish("route", "r1", 100);
+      await submit([{ entity: "route", ref: "r1", fields: { boltCount: 9 } }]);
+
+      expect(await submit([{ entity: "crag", ref: "c1", withdraw: true }, { entity: "route", ref: "r1", withdraw: true }]))
+        .toEqual([
+          { entity: "crag", ref: "c1", id: null, state: "withdrawn" },
+          { entity: "route", ref: "r1", id: 100, state: "withdrawn" },
+        ]);
+      expect(await stored()).toEqual([expect.objectContaining({ ref: "r1", state: "published" })]);
     });
 
-    expect(result).toEqual({ id: expect.any(String), status: "pending", replaced: false });
-    const row = await db.selectFrom("submission").selectAll().executeTakeFirstOrThrow();
-    expect(row).toEqual(expect.objectContaining({ id: result.id, uid: "submitter", source: "topobuilder", error: null }));
+    it("refuses to strand a pending child", async () => {
+      await submit([newCrag, newSector]);
 
-    const topo = (await storedPayload()).parsed.changes[4];
-    expect(topo.fields.background).toBe(`https://topos.example.com/submissions/${result.id}/bg.jpg`);
-    expect(topo.fields.raster).toBe(`https://topos.example.com/submissions/${result.id}/raster.png`);
-    expect(mocks.uploadFileToR2).toHaveBeenCalledTimes(2);
-    expect(mocks.uploadFileToR2).toHaveBeenCalledWith(
-      expect.anything(), expect.any(File), "topos", "https://topos.example.com",
-      { keyPrefix: `submissions/${result.id}`, useContentHash: true },
-    );
+      await expect(submit([{ entity: "crag", ref: "c1", withdraw: true }]))
+        .rejects.toThrow('your pending sector "s1" fields.cragId refers to "c1"');
+      expect(await stored()).toHaveLength(2);
+    });
   });
 
   it("stores text containing HTML entities so the DB's entity decoding can't alter it", async () => {
-    await createSubmission(createContext(), {
-      uid: "submitter",
-      source: "topobuilder",
-      payload: { changes: [{ entity: "route", op: "update", id: 100, fields: { notes: '<p>Tom &amp; "Jerry" &quot;</p>' } }] },
-      files: new Map(),
-    });
+    await submit([{ entity: "route", id: 100, fields: { notes: '<p>Tom &amp; "Jerry" &quot;</p>' } }]);
 
-    const { raw, parsed } = await storedPayload();
-    expect(raw).not.toContain("&");
-    expect(parsed.changes[0].fields.notes).toBe('<p>Tom &amp; "Jerry" &quot;</p>');
+    const { fields } = await db.selectFrom("submission").select("fields").executeTakeFirstOrThrow();
+    expect(fields).not.toContain("&");
+    expect(JSON.parse(fields).notes).toBe('<p>Tom &amp; "Jerry" &quot;</p>');
   });
 
   it.each([
-    ["an empty change list", { changes: [] }, "at least one change"],
-    ["an unknown entity", { changes: [{ entity: "area", op: "create", fields: {} }] }, "changes[0].entity must be one of"],
-    ["a delete", { changes: [{ entity: "route", op: "delete", id: 100, fields: {} }] }, "changes[0].op must be create or update"],
-    ["an unknown field", { changes: [{ entity: "route", op: "update", id: 100, fields: { grade: "5.9" } }] }, "changes[0].fields.grade is not an editable route field"],
-    ["a wrongly typed field", { changes: [{ entity: "route", op: "update", id: 100, fields: { boltCount: "7" } }] }, "boltCount must be an integer or null"],
-    ["clearing a required field", { changes: [{ entity: "route", op: "update", id: 100, fields: { name: null } }] }, "name must be a non-empty string"],
-    ["clearing a topo status", { changes: [{ entity: "topo", op: "update", id: 7, fields: { status: null } }] }, "status must be one of Active, Deleted"],
-    ["a create missing required fields", { changes: [{ entity: "route", op: "create", fields: { name: "Line" } }] }, "fields.sectorId is required to create a route"],
-    ["an empty update", { changes: [{ entity: "route", op: "update", id: 100, fields: {} }] }, "must include at least one field to change"],
-    ["a ref to a later create", { changes: [
-      { entity: "route", op: "create", fields: { name: "Line", sectorId: "s1" } },
-      { ref: "s1", entity: "sector", op: "create", fields: { name: "Wall", cragId: 1 } },
-    ] }, 'changes[0].fields.sectorId refers to "s1"'],
-    ["a ref to the wrong kind of record", { changes: [
-      { ref: "c1", entity: "crag", op: "create", fields: { name: "Crag" } },
-      { entity: "route", op: "create", fields: { name: "Line", sectorId: "c1" } },
-    ] }, "not the ref of an earlier sector create"],
-    ["a duplicate ref", { changes: [
-      { ref: "c1", entity: "crag", op: "create", fields: { name: "A" } },
-      { ref: "c1", entity: "crag", op: "create", fields: { name: "B" } },
-    ] }, 'ref "c1" is already used'],
-    ["a missing file part", { changes: [{ entity: "topo", op: "update", id: 7, fields: { raster: "file:nope" } }] }, 'missing file part "nope"'],
-    ["a file value that isn't a placeholder", { changes: [{ entity: "topo", op: "update", id: 7, fields: { raster: "https://elsewhere/x.jpg" } }] }, "reference to an uploaded file"],
-    ["an annotation document without items", { changes: [{ entity: "topo", op: "update", id: 7, fields: { annotations: { version: 1 } } }] }, "fields.annotations must be an annotation document"],
-    ["a missing update target", { changes: [{ entity: "route", op: "update", id: 999, fields: { name: "X" } }] }, "changes[0].id refers to route 999, which doesn't exist"],
-    ["a missing parent", { changes: [{ entity: "route", op: "create", fields: { name: "Line", sectorId: 55 } }] }, "fields.sectorId refers to sector 55"],
-    ["a missing linked route", { changes: [{ entity: "topo", op: "update", id: 7, fields: { routes: [{ routeId: 404 }] } }] }, "routes[0].routeId refers to route 404"],
-    ["a topo create reusing an existing uuid", { changes: [{ entity: "topo", op: "create", fields: {
-      uuid: "topo-existing", name: "Again", background: "file:bg", raster: "file:raster",
-    } }] }, '"topo-existing" belongs to an existing topo'],
-    ["a topo uuid change", { changes: [{ entity: "topo", op: "update", id: 7, fields: { uuid: "other" } }] }, "fields.uuid can't be changed"],
-    ["an annotation naming a route by an unknown local id", { changes: [{ entity: "topo", op: "update", id: 7, fields: {
-      annotations: { version: 1, items: [{ id: "a1", routeId: "local-route-9" }] },
-    } }] }, 'fields.annotations.items[0].routeId refers to "local-route-9"'],
-    ["an annotation naming a route that doesn't exist", { changes: [{ entity: "topo", op: "update", id: 7, fields: {
-      annotations: { version: 1, items: [{ id: "a1", routeId: 404 }] },
-    } }] }, "fields.annotations.items[0].routeId refers to route 404"],
-    ["an unknown topo status", { changes: [{ entity: "topo", op: "update", id: 7, fields: { status: "Retired" } }] }, "fields.status must be one of Active, Deleted"],
-  ])("rejects %s", async (_label, payload, message) => {
-    const attempt = createSubmission(createContext(), { uid: "submitter", source: "topobuilder", payload, files: files() });
+    ["an empty object list", [], "at least one object"],
+    ["both a ref and an id", [{ entity: "route", ref: "r1", id: 100, fields: { name: "X" } }], "needs either a ref"],
+    ["an unknown entity", [{ entity: "area", ref: "a1", fields: { name: "X" } }], "objects[0].entity must be one of"],
+    ["an unknown field", [{ entity: "route", id: 100, fields: { grade: "5.9" } }], "objects[0].fields.grade is not an editable route field"],
+    ["a wrongly typed field", [{ entity: "route", id: 100, fields: { boltCount: "7" } }], "boltCount must be an integer or null"],
+    ["fields on a withdrawal", [{ entity: "route", ref: "r1", withdraw: true, fields: { name: "X" } }], "fields isn't allowed when withdrawing"],
+    ["the same object twice", [newCrag, newCrag], "objects[1] repeats an object"],
+    ["a new object missing required fields", [{ entity: "route", ref: "r9", fields: { name: "Line" } }], "fields.sectorId is required for a new route"],
+    ["a ref to an object you haven't proposed", [{ entity: "route", ref: "r9", fields: { name: "Line", sectorId: "nope" } }], 'fields.sectorId refers to "nope", which isn\'t a sector you\'ve proposed'],
+    ["a ref to the wrong kind of object", [newCrag, { entity: "route", ref: "r9", fields: { name: "Line", sectorId: "c1" } }], "which is your crag, not a sector"],
+    ["an edit of a record that doesn't exist", [{ entity: "route", id: 999, fields: { name: "X" } }], "objects[0] refers to route 999, which doesn't exist"],
+    ["a parent that doesn't exist", [{ entity: "route", ref: "r9", fields: { name: "Line", sectorId: 55 } }], "fields.sectorId refers to sector 55"],
+    ["an annotation naming an unknown route", [{ entity: "topo", id: 7, fields: { annotations: { version: 1, items: [{ routeId: "local-9" }] } } }], 'annotations.items[0].routeId refers to "local-9"'],
+    ["a missing file part", [{ entity: "topo", id: 7, fields: { raster: "file:nope" } }], 'missing file part "nope"'],
+    ["a file value that isn't a placeholder", [{ entity: "topo", id: 7, fields: { raster: "https://elsewhere/x.jpg" } }], "reference to an uploaded file"],
+    ["a new topo reusing an existing uuid", [{ entity: "topo", ref: "t9", fields: { uuid: "topo-existing", name: "Again", background: "file:bg", raster: "file:raster" } }], '"topo-existing" belongs to topo 7'],
+    ["a topo uuid change", [{ entity: "topo", id: 7, fields: { uuid: "other" } }], "fields.uuid can't be changed"],
+    ["an unknown topo status", [{ entity: "topo", id: 7, fields: { status: "Retired" } }], "fields.status must be one of Active, Deleted"],
+  ])("rejects %s, storing nothing", async (_label, objects, message) => {
+    const attempt = submit(objects as unknown[], { files: new Map([["bg", image("bg.jpg")], ["raster", image("raster.jpg")]]) });
 
     await expect(attempt).rejects.toBeInstanceOf(SubmissionValidationError);
     await expect(attempt).rejects.toThrow(message);
     expect(mocks.uploadFileToR2).not.toHaveBeenCalled();
-    expect(await db.selectFrom("submission").select("id").execute()).toEqual([]);
+    expect(await stored()).toEqual([]);
   });
 
   it("rejects files that aren't images", async () => {
-    const attempt = createSubmission(createContext(), {
-      uid: "submitter",
-      source: "topobuilder",
-      payload: { changes: [{ entity: "topo", op: "update", id: 7, fields: { raster: "file:raster" } }] },
-      files: new Map([["raster", image("raster.pdf", "application/pdf")]]),
-    });
+    const attempt = submit(
+      [{ entity: "topo", id: 7, fields: { raster: "file:raster" } }],
+      { files: new Map([["raster", image("raster.pdf", "application/pdf")]]) },
+    );
 
     await expect(attempt).rejects.toThrow('unsupported file type "application/pdf"');
   });
 
-  it("removes uploaded files when the submission can't be stored", async () => {
-    const attempt = createSubmission(createContext(), {
-      uid: "no-such-user",
-      source: "topobuilder",
-      payload: fullSubmission,
-      files: files(),
-    });
+  it("removes newly uploaded files when the proposals can't be stored", async () => {
+    const attempt = submit(
+      [{ entity: "topo", id: 7, fields: { raster: "file:raster" } }],
+      { uid: "no-such-user", files: new Map([["raster", image("raster.png", "image/png")]]) },
+    );
 
     await expect(attempt).rejects.toThrow("FOREIGN KEY");
-    expect(mocks.deleteFromR2).toHaveBeenCalledTimes(2);
-    expect(mocks.deleteFromR2).toHaveBeenCalledWith(expect.anything(), "topos", expect.stringMatching(/^submissions\/.+\/bg\.jpg$/));
+    expect(mocks.deleteFromR2).toHaveBeenCalledWith(expect.anything(), "topos", "submissions/no-such-user/raster.png");
   });
 
   it("reads a JSON body or a multipart submission with file parts", async () => {
     const json = await parseSubmissionRequest(new Request("https://example.com", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ changes: [] }),
+      body: JSON.stringify({ objects: [] }),
     }));
-    expect(json).toEqual({ payload: { changes: [] }, files: new Map() });
+    expect(json).toEqual({ payload: { objects: [] }, files: new Map() });
 
     const formData = new FormData();
-    formData.append("submission", JSON.stringify(fullSubmission));
+    formData.append("submission", JSON.stringify({ objects: [newCrag] }));
     formData.append("bg", image("bg.jpg"));
     const multipart = await parseSubmissionRequest(new Request("https://example.com", { method: "POST", body: formData }));
-    expect(multipart.payload).toEqual(fullSubmission);
+    expect(multipart.payload).toEqual({ objects: [newCrag] });
     expect([...multipart.files.keys()]).toEqual(["bg"]);
 
     await expect(parseSubmissionRequest(new Request("https://example.com", { method: "POST", body: "{nope" })))
       .rejects.toThrow("must be valid JSON");
   });
 
-  describe("status", () => {
-    it("reports a queued submission, with any approval error, only to its submitter", async () => {
-      sqlite.exec(`INSERT INTO submission (id, uid, source, payload, error) VALUES ('queued', 'submitter', 'topobuilder', '{}', 'Route 100 is gone')`);
+  describe("my objects", () => {
+    it("lists the caller's objects, changed since the cursor, and no one else's", async () => {
+      await submit([newCrag]);
+      await submit([{ entity: "crag", ref: "theirs", fields: { name: "Theirs" } }], { uid: "someone-else" });
+      sqlite.exec("UPDATE submission SET updated_at = '2026-10-01 00:00:00' WHERE ref = 'c1'");
+      publish("route", "r1", 100);
+      sqlite.exec("UPDATE submission SET updated_at = '2026-10-05 00:00:00', decided_at = '2026-10-05 00:00:00' WHERE ref = 'r1'");
 
-      expect(await getSubmissionStatus(createContext(), { uid: "submitter", id: "queued" }))
-        .toEqual({ id: "queued", status: "pending", error: "Route 100 is gone" });
-      expect(await getSubmissionStatus(createContext(), { uid: "someone-else", id: "queued" })).toBeNull();
-      expect(await getSubmissionStatus(createContext(), { uid: "submitter", id: "unknown" })).toBeNull();
-    });
-
-    it("reports a decided submission and its created ids from the audit log", async () => {
-      sqlite.exec(`
-        INSERT INTO audit_log (author_uid, reviewer_uid, decision, source, entity, entity_id, action, changes, submission_id, ref) VALUES
-          ('submitter', 'admin', 'approved', 'topobuilder', 'sector', 21, 'create', '{}', 'done', 's1'),
-          ('submitter', 'admin', 'approved', 'topobuilder', 'route', 100, 'update', '{}', 'done', NULL),
-          ('submitter', 'admin', 'approved', 'topobuilder', 'route', 301, 'create', '{}', 'done', 'r1'),
-          ('submitter', 'admin', 'rejected', 'topobuilder', 'route', NULL, 'create', '{}', 'declined', 'r1');
-      `);
-
-      expect(await getSubmissionStatus(createContext(), { uid: "submitter", id: "done" }))
-        .toEqual({ id: "done", status: "approved", ids: { s1: 21, r1: 301 } });
-      expect(await getSubmissionStatus(createContext(), { uid: "submitter", id: "declined" }))
-        .toEqual({ id: "declined", status: "rejected", ids: {} });
-      expect(await getSubmissionStatus(createContext(), { uid: "someone-else", id: "done" })).toBeNull();
-    });
-  });
-
-  describe("replacing a pending submission", () => {
-    const edit = (boltCount: number) => ({ changes: [{ entity: "route", op: "update", id: 100, fields: { boltCount } }] });
-    const submit = (payload: unknown, options: { uid?: string; replace?: string; files?: Map<string, File> } = {}) =>
-      createSubmission(createContext(), {
-        uid: options.uid ?? "submitter",
-        source: "topobuilder",
-        payload,
-        files: options.files ?? new Map(),
-        replace: options.replace,
-      });
-    const rows = () => db.selectFrom("submission").select(["id", "uid", "payload", "created_at"]).orderBy("uid").execute();
-
-    it("overwrites the caller's pending submission in place, as a fresh submission", async () => {
-      const { id } = await submit(edit(7));
-      sqlite.exec(`UPDATE submission SET created_at = '2026-01-01 00:00:00' WHERE id = '${id}'`);
-
-      expect(await submit(edit(8), { replace: id })).toEqual({ id, status: "pending", replaced: true });
-
-      const [row] = await rows();
-      expect(await rows()).toHaveLength(1);
-      expect(JSON.parse(row.payload).changes[0].fields).toEqual({ boltCount: 8 });
-      expect(row.created_at > "2026-01-01 00:00:00").toBe(true);
-    });
-
-    it("creates a new submission when there's no pending one of the caller's to replace", async () => {
-      const { id: theirs } = await submit(edit(7), { uid: "someone-else" });
-
-      const forOthers = await submit(edit(8), { replace: theirs });
-      const forUnknown = await submit(edit(9), { replace: "decided-or-unknown" });
-
-      expect(forOthers).toMatchObject({ replaced: false });
-      expect(forOthers.id).not.toBe(theirs);
-      expect(forUnknown).toMatchObject({ replaced: false });
-      expect((await rows()).map((row) => row.id).sort()).toEqual([theirs, forOthers.id, forUnknown.id].sort());
-    });
-
-    it("refuses to replace a submission a failed approval left partly applied", async () => {
-      const { id } = await submit(edit(7));
-      sqlite.exec(`UPDATE submission SET error = 'route 100 is gone' WHERE id = '${id}'`);
-
-      await expect(submit(edit(8), { replace: id })).rejects.toBeInstanceOf(SubmissionConflictError);
-      expect(JSON.parse((await rows())[0].payload).changes[0].fields).toEqual({ boltCount: 7 });
-    });
-
-    it("leaves the current version intact when the replacement is invalid or fails", async () => {
-      const files = new Map([["raster", image("raster.png", "image/png")]]);
-      const topoEdit = { changes: [{ entity: "topo", op: "update", id: 7, fields: { raster: "file:raster" } }] };
-      const { id } = await submit(topoEdit, { files });
-
-      await expect(submit({ changes: [] }, { replace: id })).rejects.toBeInstanceOf(SubmissionValidationError);
-
-      // The replacement reuses the stored raster, then a later upload fails.
-      mocks.uploadFileToR2.mockClear();
-      mocks.uploadFileToR2
-        .mockImplementationOnce(async (_context, file: File, _bucket, domain: string, options) => ({
-          url: `${domain}/${options.keyPrefix}/${file.name}`,
-          name: `${options.keyPrefix}/${file.name}`,
-          type: file.type,
-        }))
-        .mockRejectedValueOnce(new Error("R2 unavailable"));
-      const failing = {
-        changes: [{ entity: "topo", op: "update", id: 7, fields: { raster: "file:raster", background: "file:bg" } }],
-      };
-      await expect(submit(failing, { replace: id, files: new Map([...files, ["bg", image("bg.jpg")]]) }))
-        .rejects.toThrow("R2 unavailable");
-
-      expect(mocks.deleteFromR2).not.toHaveBeenCalledWith(expect.anything(), "topos", `submissions/${id}/raster.png`);
-      expect(JSON.parse((await rows())[0].payload).changes[0].fields).toEqual({
-        raster: `https://topos.example.com/submissions/${id}/raster.png`,
-      });
-    });
-  });
-
-  describe("my submissions", () => {
-    const change = { entity: "route", op: "update", id: 100, fields: { boltCount: 7 } };
-
-    beforeEach(() => {
-      sqlite.exec(`
-        INSERT INTO submission (id, uid, source, payload, created_at, error) VALUES
-          ('older', 'submitter', 'topobuilder', '${JSON.stringify({ changes: [change] })}', '2026-10-01 09:00:00', NULL),
-          ('newer', 'submitter', 'topobuilder', '${JSON.stringify({ changes: [change] })}', '2026-10-02 09:00:00', 'route 100 is gone'),
-          ('theirs', 'someone-else', 'topobuilder', '{"changes":[]}', '2026-10-02 09:00:00', NULL);
-        INSERT INTO audit_log (author_uid, reviewer_uid, decision, source, entity, entity_id, action, changes, submission_id, ref, created_at) VALUES
-          ('submitter', 'admin', 'approved', 'topobuilder', 'sector', 21, 'create', '{}', 'done', 's1', '2026-10-03 10:00:00'),
-          ('submitter', 'admin', 'approved', 'topobuilder', 'route', 301, 'create', '{}', 'done', 'r1', '2026-10-03 10:00:01'),
-          ('submitter', 'admin', 'rejected', 'topobuilder', 'route', NULL, 'create', '{}', 'declined', 'r1', '2026-10-04 10:00:00'),
-          ('submitter', 'admin', 'approved', 'topobuilder', 'crag', 5, 'create', '{}', 'newer', 'c1', '2026-10-02 10:00:00'),
-          ('someone-else', 'admin', 'approved', 'topobuilder', 'route', 9, 'create', '{}', 'other', 'r1', '2026-10-05 10:00:00');
-      `);
-    });
-
-    it("lists the caller's queued submissions with their changes, and decided ones from the audit log", async () => {
-      const list = await listMySubmissions(createContext(), { uid: "submitter", since: null });
-
-      expect(list.submissions).toEqual([
-        { id: "newer", submitterUid: "submitter", status: "pending", createdAt: "2026-10-02 09:00:00", error: "route 100 is gone", changes: [change] },
-        { id: "older", submitterUid: "submitter", status: "pending", createdAt: "2026-10-01 09:00:00", error: null, changes: [change] },
-        { id: "done", submitterUid: "submitter", status: "approved", decidedAt: "2026-10-03 10:00:01", ids: { s1: 21, r1: 301 } },
-        { id: "declined", submitterUid: "submitter", status: "rejected", decidedAt: "2026-10-04 10:00:00", ids: {} },
+      const all = await listMyObjects(createContext(), { uid: "submitter", since: null });
+      expect(all.objects).toEqual([
+        expect.objectContaining({ entity: "crag", ref: "c1", id: null, state: "pending", fields: { name: "New Crag" } }),
+        expect.objectContaining({ entity: "route", ref: "r1", id: 100, state: "published", decidedAt: "2026-10-05 00:00:00" }),
       ]);
-      expect(list.serverTime).toBe("2026-10-04 10:00:00");
-    });
+      expect(all.serverTime).toBe("2026-10-05 00:00:00");
 
-    it("reports decisions since the cursor in full, and always every queued submission", async () => {
-      const list = await listMySubmissions(createContext(), { uid: "submitter", since: "2026-10-03 10:00:01" });
-
-      expect(list.submissions.map((submission) => [submission.id, submission.status])).toEqual([
-        ["newer", "pending"], ["older", "pending"], ["done", "approved"], ["declined", "rejected"],
-      ]);
-      // The cursor fell between this submission's audit rows; its ids are still complete.
-      expect(list.submissions.find((submission) => submission.id === "done")).toMatchObject({ ids: { s1: 21, r1: 301 } });
-    });
-
-    it("returns only queued submissions when nothing was decided since the cursor", async () => {
-      const list = await listMySubmissions(createContext(), { uid: "submitter", since: "2026-10-04 10:00:01" });
-
-      expect(list.submissions.map((submission) => submission.id)).toEqual(["newer", "older"]);
-      expect(list.serverTime).toBe("2026-10-04 10:00:01");
-    });
-
-    it("never includes other users' submissions", async () => {
-      const list = await listMySubmissions(createContext(), { uid: "someone-else", since: null });
-
-      expect(list.submissions.map((submission) => submission.id)).toEqual(["theirs", "other"]);
+      const recent = await listMyObjects(createContext(), { uid: "submitter", since: "2026-10-02 00:00:00" });
+      expect(recent.objects.map((object) => object.ref)).toEqual(["r1"]);
     });
   });
 });

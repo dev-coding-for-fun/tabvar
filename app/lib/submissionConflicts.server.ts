@@ -1,12 +1,12 @@
 import type { Kysely } from "kysely";
 import { chunk, MAX_IDS_PER_QUERY } from "./audit.server";
 import type { DB } from "./db.d";
-import { SUBMISSION_FIELDS, type SubmissionEntity, type SubmissionPayload } from "./submission.server";
+import { SUBMISSION_FIELDS, type SubmissionEntity, type SubmissionObject } from "./submission.server";
 import { fieldLabel } from "./submissionView.server";
 
 /**
- * Conflict checks for queued submissions, run when one is reviewed. They inform
- * the reviewer and never block approval. See docs/submissions-review-plan.md.
+ * Conflict checks for pending edits, run when they're reviewed. They inform the
+ * reviewer and never block approval. See docs/submissions-review-plan.md.
  */
 
 // An audit row is written just after the change it records, so its created_at
@@ -25,7 +25,8 @@ export type FieldConflict = {
 };
 
 export type Overlap = {
-  submissionId: string;
+  /** The other pending object, which identifies its chain. */
+  item: number;
   submitterName: string | null;
   fields: string[];
 };
@@ -42,8 +43,8 @@ export type ChangeConflicts = {
 
 export type ConflictCounts = { conflicts: number; warnings: number };
 
-type QueuedSubmission = { id: string; createdAt: string; payload: SubmissionPayload };
-type OtherSubmission = QueuedSubmission & { submitterName: string | null };
+/** A pending object from another account, with its submitter's name. */
+export type OtherPendingObject = SubmissionObject & { submitterName: string | null };
 
 /** Parses SQLite (`YYYY-MM-DD HH:MM:SS`, UTC) and ISO timestamps to epoch ms. */
 export function timestampMs(value: string | null | undefined): number {
@@ -52,7 +53,7 @@ export function timestampMs(value: string | null | undefined): number {
   return Date.parse(sqlite ? `${value.replace(" ", "T")}Z` : value);
 }
 
-const LABELS_BY_COLUMN = Object.fromEntries(
+const FIELDS_BY_COLUMN = Object.fromEntries(
   (Object.keys(SUBMISSION_FIELDS) as SubmissionEntity[]).map((entity) => [
     entity,
     Object.fromEntries(Object.entries(SUBMISSION_FIELDS[entity]).map(([field, spec]) => [spec.column, field])),
@@ -60,7 +61,7 @@ const LABELS_BY_COLUMN = Object.fromEntries(
 ) as Record<SubmissionEntity, Record<string, string>>;
 
 function fieldName(entity: SubmissionEntity, column: string) {
-  return LABELS_BY_COLUMN[entity][column] ?? column;
+  return FIELDS_BY_COLUMN[entity][column] ?? column;
 }
 
 type AuditRow = {
@@ -72,11 +73,7 @@ type AuditRow = {
   changes: string;
 };
 
-async function loadRecentHistory(
-  db: Kysely<DB>,
-  submissionId: string,
-  targets: Map<SubmissionEntity, number[]>,
-) {
+async function loadRecentHistory(db: Kysely<DB>, targets: Map<SubmissionEntity, number[]>) {
   const history: AuditRow[] = [];
   const updatedAt = new Map<string, string | null>();
 
@@ -86,9 +83,8 @@ async function loadRecentHistory(
         .select(["entity", "entity_id", "created_at", "author_name", "reviewer_name", "changes"])
         .where("entity", "=", entity)
         .where("entity_id", "in", idChunk)
-        // Only applied changes, and not ones this submission made in an earlier, partly failed approval.
+        // Only changes that were applied.
         .where((eb) => eb.or([eb("decision", "is", null), eb("decision", "=", "approved")]))
-        .where((eb) => eb.or([eb("submission_id", "is", null), eb("submission_id", "!=", submissionId)]))
         .orderBy("id")
         .execute();
       history.push(...rows);
@@ -104,41 +100,40 @@ async function loadRecentHistory(
 }
 
 /**
- * Checks each edit in a submission against the audit log since the submitter's
- * base time and against other queued submissions. Returns conflicts by change index.
+ * Checks each pending edit against the audit log since the submitter's base time
+ * (their `baseUpdatedAt`, or when the proposal arrived) and against other
+ * accounts' pending edits. Returns conflicts by object id.
  */
 export async function findConflicts(
   db: Kysely<DB>,
-  submission: QueuedSubmission,
-  others: OtherSubmission[],
+  objects: SubmissionObject[],
+  others: OtherPendingObject[],
 ): Promise<Map<number, ChangeConflicts>> {
+  const edits = objects.filter((object) => object.targetId !== null);
   const targets = new Map<SubmissionEntity, number[]>();
-  submission.payload.changes.forEach((change) => {
-    if (change.op !== "update" || !change.id || change.applied) return;
-    targets.set(change.entity, [...(targets.get(change.entity) ?? []), change.id]);
-  });
+  for (const edit of edits) {
+    targets.set(edit.entity, [...(targets.get(edit.entity) ?? []), edit.targetId!]);
+  }
 
-  const { history, updatedAt } = await loadRecentHistory(db, submission.id, targets);
+  const { history, updatedAt } = await loadRecentHistory(db, targets);
   const result = new Map<number, ChangeConflicts>();
 
-  submission.payload.changes.forEach((change, index) => {
-    if (change.op !== "update" || !change.id || change.applied) return;
-
-    const baseMs = Number.isNaN(timestampMs(change.baseUpdatedAt))
-      ? timestampMs(submission.createdAt)
-      : timestampMs(change.baseUpdatedAt);
-    const fields = Object.keys(change.fields);
-    const columns = new Set(fields.map((field) => SUBMISSION_FIELDS[change.entity][field].column));
+  for (const edit of edits) {
+    const baseMs = Number.isNaN(timestampMs(edit.baseUpdatedAt))
+      ? timestampMs(edit.receivedAt)
+      : timestampMs(edit.baseUpdatedAt);
+    const fields = Object.keys(edit.fields);
+    const columns = new Set(fields.map((field) => SUBMISSION_FIELDS[edit.entity][field].column));
 
     const fieldConflicts: FieldConflict[] = [];
     const otherFields = new Set<string>();
-    const since = history.filter((row) => row.entity === change.entity
-      && row.entity_id === change.id
+    const since = history.filter((row) => row.entity === edit.entity
+      && row.entity_id === edit.targetId
       && timestampMs(row.created_at) > baseMs + AUDIT_SLACK_MS);
     for (const row of since) {
       const changes = JSON.parse(row.changes) as Record<string, [unknown, unknown]>;
       for (const [column, [before, after]] of Object.entries(changes)) {
-        const field = fieldName(change.entity, column);
+        const field = fieldName(edit.entity, column);
         if (columns.has(column)) {
           fieldConflicts.push({
             field,
@@ -155,20 +150,17 @@ export async function findConflicts(
       }
     }
 
-    const overlaps: Overlap[] = [];
-    for (const other of others) {
-      const shared = new Set<string>();
-      for (const otherChange of other.payload.changes) {
-        if (otherChange.op !== "update" || otherChange.entity !== change.entity || otherChange.id !== change.id) continue;
-        Object.keys(otherChange.fields).filter((field) => fields.includes(field)).forEach((field) => shared.add(field));
-      }
-      if (shared.size > 0) {
-        overlaps.push({ submissionId: other.id, submitterName: other.submitterName, fields: [...shared].map(fieldLabel) });
-      }
-    }
+    const overlaps: Overlap[] = others
+      .filter((other) => other.uid !== edit.uid && other.entity === edit.entity && other.targetId === edit.targetId)
+      .map((other) => ({
+        item: other.id,
+        submitterName: other.submitterName,
+        fields: Object.keys(other.fields).filter((field) => fields.includes(field)).map(fieldLabel),
+      }))
+      .filter((overlap) => overlap.fields.length > 0);
 
     let recordChanged: RecordChangedWarning | null = null;
-    const recordUpdatedAt = updatedAt.get(`${change.entity}:${change.id}`);
+    const recordUpdatedAt = updatedAt.get(`${edit.entity}:${edit.targetId}`);
     if (otherFields.size > 0) {
       recordChanged = { kind: "otherFields", fields: [...otherFields] };
     } else if (since.length === 0 && recordUpdatedAt && timestampMs(recordUpdatedAt) > baseMs) {
@@ -176,9 +168,9 @@ export async function findConflicts(
     }
 
     if (fieldConflicts.length > 0 || overlaps.length > 0 || recordChanged) {
-      result.set(index, { fieldConflicts, overlaps, recordChanged });
+      result.set(edit.id, { fieldConflicts, overlaps, recordChanged });
     }
-  });
+  }
 
   return result;
 }

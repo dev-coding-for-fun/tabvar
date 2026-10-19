@@ -1,10 +1,8 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
-  createSubmission,
-  getSubmissionStatus,
-  listMySubmissions,
+  listMyObjects,
   parseSubmissionRequest,
-  SubmissionConflictError,
+  receiveObjects,
   SubmissionValidationError,
 } from "~/lib/submission.server";
 import {
@@ -17,28 +15,18 @@ import {
 const SOURCE = "topobuilder";
 
 /**
- * GET without `id` lists the caller's own submissions (whatever their role);
- * `since` limits decided ones to those since a previous serverTime.
- * GET with `id` reports on one of the caller's submissions.
+ * Lists the caller's own objects (whatever their role) with their review state;
+ * `since` limits it to objects changed since a previous serverTime.
  */
 export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const headers = corsHeaders(request, context);
   const tokenUser = await requireApiToken(request, context, headers);
 
-  const params = new URL(request.url).searchParams;
-  const id = params.get("id");
-  if (!id) {
-    const list = await listMySubmissions(context, { uid: tokenUser.uid, since: params.get("since") });
-    return jsonResponse(list, { headers });
-  }
-
-  const status = await getSubmissionStatus(context, { uid: tokenUser.uid, id });
-  if (!status) {
-    return apiError("not_found", 404, "Submission not found.", headers);
-  }
-  return jsonResponse(status, { headers });
+  const since = new URL(request.url).searchParams.get("since");
+  return jsonResponse(await listMyObjects(context, { uid: tokenUser.uid, since }), { headers });
 };
 
+/** Proposes or withdraws objects. Sending the same objects again is safe. */
 export const action = async ({ request, context }: ActionFunctionArgs) => {
   const headers = corsHeaders(request, context);
 
@@ -47,32 +35,26 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   }
 
   if (request.method !== "POST") {
-    return apiError("method_not_allowed", 405, "Use POST to create a submission.", headers);
+    return apiError("method_not_allowed", 405, "Use POST to submit objects.", headers);
   }
 
   const tokenUser = await requireApiToken(request, context, headers);
 
   try {
     const { payload, files } = await parseSubmissionRequest(request);
-    const submission = await createSubmission(context, {
+    const objects = await receiveObjects(context, {
       uid: tokenUser.uid,
       source: SOURCE,
       payload,
       files,
-      // Overwrites the caller's pending submission with this id, if there is one.
-      replace: new URL(request.url).searchParams.get("replace"),
     });
-
-    return jsonResponse(submission, { status: submission.replaced ? 200 : 201, headers });
+    return jsonResponse({ objects }, { headers });
   } catch (error) {
     if (error instanceof SubmissionValidationError) {
       return apiError("invalid_submission", 400, error.message, headers);
     }
-    if (error instanceof SubmissionConflictError) {
-      return apiError("conflict", 409, error.message, headers);
-    }
 
-    console.error("Error creating submission:", error);
+    console.error("Error receiving submission:", error);
     return apiError("server_error", 500, "Failed to store the submission.", headers);
   }
 };

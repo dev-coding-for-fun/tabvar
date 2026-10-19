@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReviewChain } from "~/lib/submissionReview.server";
 import {
   createContext,
   createFormRequest,
   createGetRequest,
-  createMockDb,
   createRouteArgs,
+  createSubmissionObject,
   createUser,
   getStatus,
   readJson,
@@ -13,24 +14,15 @@ import {
 const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
   requireUser: vi.fn(),
-  approveSubmission: vi.fn(),
-  rejectSubmission: vi.fn(),
-  describeSubmissionChanges: vi.fn(),
+  approveChain: vi.fn(),
+  rejectChain: vi.fn(),
+  loadPendingChains: vi.fn(),
+  describeObjects: vi.fn(),
   findConflicts: vi.fn(),
-}));
-
-vi.mock("~/lib/submissionConflicts.server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("~/lib/submissionConflicts.server")>()),
-  findConflicts: mocks.findConflicts,
 }));
 
 vi.mock("~/lib/db", () => ({
   getDB: mocks.getDB,
-}));
-
-vi.mock("~/lib/submissionView.server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("~/lib/submissionView.server")>()),
-  describeSubmissionChanges: mocks.describeSubmissionChanges,
 }));
 
 vi.mock("~/lib/auth.server", () => ({
@@ -38,11 +30,33 @@ vi.mock("~/lib/auth.server", () => ({
 }));
 
 vi.mock("~/lib/submissionReview.server", () => ({
-  approveSubmission: mocks.approveSubmission,
-  rejectSubmission: mocks.rejectSubmission,
+  approveChain: mocks.approveChain,
+  rejectChain: mocks.rejectChain,
+  loadPendingChains: mocks.loadPendingChains,
+}));
+
+vi.mock("~/lib/submissionView.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/lib/submissionView.server")>()),
+  describeObjects: mocks.describeObjects,
+}));
+
+vi.mock("~/lib/submissionConflicts.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/lib/submissionConflicts.server")>()),
+  findConflicts: mocks.findConflicts,
 }));
 
 import { action, loader } from "./admin.submissions";
+
+function chain(objects: ReviewChain["objects"]): ReviewChain {
+  return {
+    key: Math.min(...objects.map((object) => object.id)),
+    uid: "submitter",
+    source: "topobuilder",
+    author: { uid: "submitter", displayName: "Submitter" },
+    authorEmail: "submitter@example.com",
+    objects,
+  };
+}
 
 const review = (fields: Record<string, string>) => action(createRouteArgs({
   request: createFormRequest("https://example.com/admin/submissions", fields),
@@ -55,28 +69,29 @@ describe("admin.submissions action", () => {
     vi.clearAllMocks();
   });
 
-  it("lets admins and supers decide as themselves, then moves on to the next submission", async () => {
+  it("lets admins and supers decide as themselves, then moves on to the next item", async () => {
     const reviewer = createUser({ uid: "super-1", role: "super" });
     mocks.requireUser.mockResolvedValue(reviewer);
-    mocks.getDB.mockReturnValue(createMockDb({ select: [{ executeTakeFirst: { id: "sub-3" } }, { executeTakeFirst: undefined }] }));
-    mocks.approveSubmission.mockResolvedValue({ ok: true, ids: { r1: 5 } });
-    mocks.rejectSubmission.mockResolvedValue({ ok: true, ids: {} });
+    const next = chain([createSubmissionObject({ entity: "crag", ref: "c9", fields: { name: "Next" } })]);
+    mocks.loadPendingChains.mockResolvedValueOnce([next]).mockResolvedValueOnce([]);
+    mocks.approveChain.mockResolvedValue({ ok: true });
+    mocks.rejectChain.mockResolvedValue({ ok: true });
 
-    const approved = await review({ id: "sub-1", intent: "approve" });
+    const approved = await review({ item: "11", intent: "approve" });
     expect(getStatus(approved)).toBe(302);
-    expect((approved as Response).headers.get("Location")).toBe("/admin/submissions?id=sub-3");
-    expect(mocks.approveSubmission).toHaveBeenCalledWith(expect.anything(), { id: "sub-1", reviewer });
+    expect((approved as Response).headers.get("Location")).toBe(`/admin/submissions?item=${next.key}`);
+    expect(mocks.approveChain).toHaveBeenCalledWith(expect.anything(), { item: 11, reviewer });
 
-    const rejected = await review({ id: "sub-2", intent: "reject" });
+    const rejected = await review({ item: "12", intent: "reject" });
     expect((rejected as Response).headers.get("Location")).toBe("/admin/submissions");
-    expect(mocks.rejectSubmission).toHaveBeenCalledWith(expect.anything(), { id: "sub-2", reviewer });
+    expect(mocks.rejectChain).toHaveBeenCalledWith(expect.anything(), { item: 12, reviewer });
   });
 
   it("reports a failed approval", async () => {
     mocks.requireUser.mockResolvedValue(createUser({ role: "admin" }));
-    mocks.approveSubmission.mockResolvedValue({ ok: false, error: "route 100 no longer exists." });
+    mocks.approveChain.mockResolvedValue({ ok: false, error: "route 100 no longer exists." });
 
-    const response = await review({ id: "sub-1", intent: "approve" });
+    const response = await review({ item: "11", intent: "approve" });
 
     expect(getStatus(response)).toBe(409);
     expect(await readJson(response)).toEqual({ ok: false, error: "route 100 no longer exists." });
@@ -84,13 +99,14 @@ describe("admin.submissions action", () => {
 
   it("refuses members and malformed requests", async () => {
     mocks.requireUser.mockResolvedValue(createUser({ role: "member" }));
-    expect(getStatus(await review({ id: "sub-1", intent: "approve" }))).toBe(403);
+    expect(getStatus(await review({ item: "11", intent: "approve" }))).toBe(403);
 
     mocks.requireUser.mockResolvedValue(createUser({ role: "admin" }));
-    expect(getStatus(await review({ id: "sub-1", intent: "merge" }))).toBe(400);
+    expect(getStatus(await review({ item: "11", intent: "merge" }))).toBe(400);
+    expect(getStatus(await review({ item: "abc", intent: "approve" }))).toBe(400);
 
-    expect(mocks.approveSubmission).not.toHaveBeenCalled();
-    expect(mocks.rejectSubmission).not.toHaveBeenCalled();
+    expect(mocks.approveChain).not.toHaveBeenCalled();
+    expect(mocks.rejectChain).not.toHaveBeenCalled();
   });
 });
 
@@ -99,43 +115,38 @@ describe("admin.submissions loader", () => {
     vi.clearAllMocks();
   });
 
-  it("lists queued submissions without their payloads and describes the selected one", async () => {
+  it("lists pending chains and describes the one containing the selected object", async () => {
     mocks.requireUser.mockResolvedValue(createUser({ role: "admin" }));
-    const payload = { changes: [{ entity: "route", op: "update", id: 100, fields: { boltCount: 7 } }] };
-    mocks.getDB.mockReturnValue(createMockDb({
-      select: [{
-        execute: [{
-          id: "sub-1",
-          uid: "submitter",
-          source: "topobuilder",
-          payload: JSON.stringify(payload),
-          error: null,
-          createdAt: "2026-10-16 12:00:00",
-          submitterName: "Submitter",
-          submitterEmail: null,
-        }],
-      }],
-    }));
-    mocks.describeSubmissionChanges.mockResolvedValue([{ index: 0, title: "Edit route" }]);
+    mocks.getDB.mockReturnValue({});
+    const crag = createSubmissionObject({ entity: "crag", ref: "c1", fields: { name: "New Crag" }, receivedAt: "2026-10-16 12:00:00" });
+    const edit = createSubmissionObject({ entity: "route", targetId: 100, fields: { boltCount: 7 }, error: "Route is locked" });
+    const pending = chain([crag, edit]);
+    mocks.loadPendingChains.mockResolvedValue([pending]);
+    mocks.describeObjects.mockResolvedValue([{ key: edit.id, title: "Edit route" }]);
     const conflict = { fieldConflicts: [], overlaps: [], recordChanged: { kind: "unrecorded", updatedAt: "2026-10-16 13:00:00" } };
-    mocks.findConflicts.mockResolvedValue(new Map([[0, conflict]]));
+    mocks.findConflicts.mockResolvedValue(new Map([[edit.id, conflict]]));
 
     const response = await loader(createRouteArgs({
-      request: createGetRequest("https://example.com/admin/submissions?id=sub-1"),
+      request: createGetRequest(`https://example.com/admin/submissions?item=${edit.id}`),
       context: createContext(),
       params: {},
     }));
 
     const body = await readJson(response);
-    expect(body.submissions).toEqual([expect.objectContaining({
-      id: "sub-1",
-      counts: { creates: 0, edits: 1 },
+    expect(body.chains).toEqual([{
+      item: pending.key,
+      title: "New crag “New Crag”",
+      uid: "submitter",
+      source: "topobuilder",
+      error: "Route is locked",
+      receivedAt: "2026-10-16 12:00:00",
+      submitterName: "Submitter",
+      submitterEmail: "submitter@example.com",
+      counts: { creates: 1, edits: 1 },
       conflictCounts: { conflicts: 0, warnings: 1 },
-    })]);
-    expect(body.submissions[0]).not.toHaveProperty("payload");
-    expect(body.selected).toEqual({ id: "sub-1", changes: [{ index: 0, title: "Edit route" }], conflicts: { 0: conflict } });
-    expect(mocks.findConflicts).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: "sub-1", payload }), []);
-    expect(mocks.describeSubmissionChanges).toHaveBeenCalledWith(expect.anything(), payload);
+    }]);
+    expect(body.selected).toEqual({ item: pending.key, changes: [{ key: edit.id, title: "Edit route" }], conflicts: { [edit.id]: conflict } });
+    expect(mocks.describeObjects).toHaveBeenCalledWith(expect.anything(), [crag, edit]);
   });
 
   it("refuses members", async () => {
@@ -148,6 +159,6 @@ describe("admin.submissions loader", () => {
     }));
 
     expect(getStatus(response)).toBe(403);
-    expect(mocks.getDB).not.toHaveBeenCalled();
+    expect(mocks.loadPendingChains).not.toHaveBeenCalled();
   });
 });

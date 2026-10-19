@@ -4,7 +4,7 @@ import { expect } from "./test";
 
 /**
  * Plays the TopoBuilder app's side of the TABVAR APIs in e2e specs: connecting
- * an account, submitting route data, polling "my submissions", pulling the
+ * an account, proposing objects, reading their review state, pulling the
  * catalog, syncing issues, and (for admins) publishing topos directly.
  */
 
@@ -22,25 +22,19 @@ export function pngUpload(name: string) {
   return { name, mimeType: "image/png", buffer: PNG };
 }
 
-export type MySubmission =
-  | { id: string; status: "pending"; createdAt: string; error: string | null; changes: SubmissionChange[] }
-  | { id: string; status: "approved" | "rejected"; decidedAt: string; ids: Record<string, number> };
+/** One of the caller's objects, as listed by the submissions API. */
+export type MyObject = {
+  entity: string;
+  ref: string | null;
+  id: number | null;
+  state: "pending" | "published" | "rejected";
+  fields: Record<string, unknown>;
+  error: string | null;
+};
 
-type SubmissionChange = { ref?: string; entity: string; op: string; id?: number; fields: Record<string, unknown> };
-type MySubmissionList = { submissions: MySubmission[]; serverTime: string };
+type ReceivedObject = { entity: string; ref: string | null; id: number | null; state: string };
+type MyObjectList = { objects: MyObject[]; serverTime: string };
 type IssuePull = { issues: { id: number; status: string }[]; hiddenIssueIds: number[]; serverTime: string };
-
-/** Finds a submission in a "my submissions" list and checks its status. */
-export function findSubmission<S extends MySubmission["status"]>(
-  list: MySubmissionList,
-  id: string,
-  status: S,
-): MySubmission & { status: S } {
-  const found = list.submissions.find((submission) => submission.id === id);
-  expect(found?.status, `submission ${id}`).toBe(status);
-  return found as MySubmission & { status: S };
-}
-type SubmissionStatus = { id: string; status: string; ids?: Record<string, number>; error?: string | null };
 type Upload = ReturnType<typeof pngUpload>;
 
 /** Connects TopoBuilder as the page's user, the way the app does, and returns its API token. */
@@ -64,29 +58,26 @@ export function topobuilderApi(request: APIRequestContext, token: string) {
   const headers = { Authorization: `Bearer ${token}` };
   const withSince = (path: string, since?: string) => (since ? `${path}?since=${encodeURIComponent(since)}` : path);
 
-  return {
-    async submit(changes: unknown[], files: Record<string, Upload> = {}): Promise<string> {
+  const api = {
+    /** Proposes (or withdraws) objects; sending the same objects again is safe. */
+    async submit(objects: unknown[], files: Record<string, Upload> = {}): Promise<ReceivedObject[]> {
       const response = Object.keys(files).length > 0
         ? await request.post("/api/topobuilder/submissions", {
           headers,
-          multipart: { submission: JSON.stringify({ changes }), ...files },
+          multipart: { submission: JSON.stringify({ objects }), ...files },
         })
-        : await request.post("/api/topobuilder/submissions", { headers, data: { changes } });
-      return (await json<{ id: string }>(response, 201)).id;
+        : await request.post("/api/topobuilder/submissions", { headers, data: { objects } });
+      return (await json<{ objects: ReceivedObject[] }>(response)).objects;
     },
-    /** Replaces the caller's pending submission in place; it keeps its id. */
-    async resubmit(id: string, changes: unknown[], files: Record<string, Upload> = {}): Promise<string> {
-      const url = `/api/topobuilder/submissions?replace=${encodeURIComponent(id)}`;
-      const response = Object.keys(files).length > 0
-        ? await request.post(url, { headers, multipart: { submission: JSON.stringify({ changes }), ...files } })
-        : await request.post(url, { headers, data: { changes } });
-      return (await json<{ id: string }>(response, 200)).id;
+    myObjects(since?: string): Promise<MyObjectList> {
+      return request.get(withSince("/api/topobuilder/submissions", since), { headers }).then(json<MyObjectList>);
     },
-    status(id: string): Promise<SubmissionStatus> {
-      return request.get(`/api/topobuilder/submissions?id=${encodeURIComponent(id)}`, { headers }).then(json<SubmissionStatus>);
-    },
-    mySubmissions(since?: string): Promise<MySubmissionList> {
-      return request.get(withSince("/api/topobuilder/submissions", since), { headers }).then(json<MySubmissionList>);
+    /** One of the caller's objects, by its ref or (for an edit) its record. */
+    async object(key: { ref: string } | { entity: string; id: number }): Promise<MyObject | undefined> {
+      const { objects } = await api.myObjects();
+      return objects.find((object) => ("ref" in key
+        ? object.ref === key.ref
+        : object.entity === key.entity && object.id === key.id));
     },
     async route(id: number): Promise<{ id: number; sectorId: number | null; gradeYds: string | null; updatedAt: string }> {
       const { routes } = await request.get("/api/v1/routes", { headers }).then(json<{ routes: { id: number }[] }>);
@@ -94,7 +85,15 @@ export function topobuilderApi(request: APIRequestContext, token: string) {
     },
     async topo(uuid: string) {
       const { topo } = await request.get(`/api/v1/topos?uuid=${encodeURIComponent(uuid)}`, { headers })
-        .then(json<{ topo: { id: number; name: string; description: string | null; status: string; rasterImageUrl: string; routes: { routeId: number; label: string | null }[]; annotations: { version: number; items: Record<string, unknown>[] } } }>);
+        .then(json<{ topo: {
+          id: number;
+          name: string;
+          description: string | null;
+          status: string;
+          rasterImageUrl: string;
+          routes: { routeId: number; label: string | null }[];
+          annotations: { version: number; items: Record<string, unknown>[] };
+        } }>);
       return topo;
     },
     saveTopo(payload: unknown, files: Record<string, Upload> = {}): Promise<APIResponse> {
@@ -111,26 +110,41 @@ export function topobuilderApi(request: APIRequestContext, token: string) {
         headers,
         data: { op: "create", externalId: crypto.randomUUID(), fields: { routeId, issueType: "Bolts", description: "Spinner on bolt 2", ...fields } },
       });
-      return (await json<{ serverId: number; issue: { status: string; updatedAt: string } }>(response, 201));
+      return json<{ serverId: number; issue: { status: string; updatedAt: string } }>(response, 201);
     },
     async updateIssue(issueId: number, baseUpdatedAt: string, fields: Record<string, unknown>) {
       const response = await request.post("/api/v1/issues/sync", { headers, data: { op: "update", issueId, baseUpdatedAt, fields } });
       return json<{ status: string }>(response);
     },
   };
+  return api;
 }
 
-/** Approves a submission as an admin, the way the review page's Approve button does. */
-export async function approveSubmission(admin: Page, id: string) {
-  const response = await admin.request.post("/admin/submissions", { form: { id, intent: "approve" }, maxRedirects: 0 });
-  expect(response.status()).toBe(302);
+/**
+ * Opens a review item on /admin/submissions by its title (and submitter, when
+ * several accounts propose the same thing) and approves or rejects it.
+ */
+export async function reviewItem(admin: Page, title: string, decision: "Approve" | "Reject", submitter?: string) {
+  await admin.goto("/admin/submissions");
+  let item = admin.getByRole("link").filter({ hasText: title });
+  if (submitter) item = item.filter({ hasText: submitter });
+  await item.click();
+  await expect(admin).toHaveURL(/item=/);
+  const selected = admin.url();
+  await admin.getByRole("button", { name: decision }).click();
+  await expect(admin).not.toHaveURL(selected);
 }
 
-/** A new crag, sector, and route, as one submission's changes. */
-export function newRouteChanges(names: { crag: string; route: string }) {
-  return [
-    { ref: "c1", entity: "crag", op: "create", fields: { name: names.crag } },
-    { ref: "s1", entity: "sector", op: "create", fields: { name: "Main Wall", cragId: "c1" } },
-    { ref: "r1", entity: "route", op: "create", fields: { name: names.route, sectorId: "s1", gradeYds: "5.10a" } },
-  ];
+/** A new crag, sector, and route, with refs unique to this run so each test proposes its own objects. */
+export function newRouteObjects(names: { crag: string; route: string }) {
+  const run = crypto.randomUUID();
+  const refs = { crag: `crag-${run}`, sector: `sector-${run}`, route: `route-${run}` };
+  return {
+    refs,
+    objects: [
+      { entity: "crag", ref: refs.crag, fields: { name: names.crag } },
+      { entity: "sector", ref: refs.sector, fields: { name: "Main Wall", cragId: refs.crag } },
+      { entity: "route", ref: refs.route, fields: { name: names.route, sectorId: refs.sector, gradeYds: "5.10a" } },
+    ],
+  };
 }

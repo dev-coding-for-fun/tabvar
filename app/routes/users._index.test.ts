@@ -47,7 +47,7 @@ describe("user deletion with SQLite foreign keys", () => {
       "0002_initial_setup.sql", "0028_add_issue_audit_log.sql",
       "0053_add_goldencrowbar.sql", "0056_add_topobuilder_auth.sql",
       "0061_add_user_tags.sql", "0062_add_raw_topos.sql", "0070_add_audit_log.sql",
-      "0071_replace_topo_submission.sql",
+      "0072_submission_per_object.sql",
     ]) {
       sqlite.exec(readFileSync(resolve("migrations", migration), "utf8"));
     }
@@ -67,9 +67,9 @@ describe("user deletion with SQLite foreign keys", () => {
       INSERT INTO campaign (id, name, end_date) VALUES (1, 'Test campaign', '2099-01-01');
       INSERT INTO campaign_candidate (id, campaign_id, name) VALUES (1, 1, 'Test candidate');
       INSERT INTO vote (campaign_id, uid, campaign_candidate_id) VALUES (1, 'target', 1), (1, 'other', 1);
-      INSERT INTO submission (id, uid, source, payload)
-        VALUES ('owned', 'target', 'test', '{}'),
-               ('unrelated', 'other', 'test', '{}');
+      INSERT INTO submission (uid, source, entity, ref, fields, state, received_at, updated_at)
+        VALUES ('target', 'test', 'crag', 'owned', '{}', 'pending', '2026-10-01', '2026-10-01'),
+               ('other', 'test', 'crag', 'unrelated', '{}', 'pending', '2026-10-01', '2026-10-01');
       INSERT INTO audit_log (author_uid, author_name, reviewer_uid, source, entity, entity_id, action, changes)
         VALUES ('target', 'Former User', 'other', 'test', 'route', 1, 'update', '{}');
       INSERT INTO topo (uuid, name, background_image_url, raster_image_url) VALUES ('published', 'Published topo', 'bg.png', 'topo.png');
@@ -105,7 +105,7 @@ describe("user deletion with SQLite foreign keys", () => {
       { id: 1, reported_by_uid: null, approved_by_uid: "other", archived_by_uid: null, claimed_by_uid: null },
       { id: 2, reported_by_uid: "other", approved_by_uid: null, archived_by_uid: "other", claimed_by_uid: "other" },
     ]);
-    expect(await db.selectFrom("submission").select(["id", "uid"]).execute()).toEqual([{ id: "unrelated", uid: "other" }]);
+    expect(await db.selectFrom("submission").select(["ref", "uid"]).execute()).toEqual([{ ref: "unrelated", uid: "other" }]);
     expect(await db.selectFrom("audit_log").select(["author_uid", "author_name"]).execute()).toEqual([{ author_uid: "target", author_name: "Former User" }]);
     expect(await db.selectFrom("topo").select("uuid").execute()).toEqual([{ uuid: "published" }]);
     expect(await db.selectFrom("issue_audit_log").select(["uid", "user_display_name"]).execute()).toEqual([{ uid: "target", user_display_name: "Former User" }]);

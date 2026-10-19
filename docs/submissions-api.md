@@ -1,8 +1,16 @@
 # TABVAR Submissions API
 
-API for proposing new and edited route data (crags, sectors, routes, and topos) from an external client such as TopoBuilder. Proposals wait in a review queue until an admin approves or rejects them on `/admin/submissions`. Nothing is published until then.
+API for proposing new and edited route data (crags, sectors, routes, and topos) from an external client such as TopoBuilder. Proposals wait for review until an admin approves or rejects them on `/admin/submissions`. Nothing is published until then.
 
 Issue reports don't use this API; see [issue-sync-api.md](issue-sync-api.md). For how the TopoBuilder app fits this together with the sync APIs, see [topobuilder-integration.md](topobuilder-integration.md).
+
+## The model
+
+Submissions are **per object**. TABVAR keeps one record per account and object: the account's latest proposal for it, and, once it's published, the link between the app's own ID for the object (its `ref`) and the TABVAR record.
+
+- **Repeating is safe.** Send the same object as often as you like, alone or with others, in any grouping and any order. It's still one proposal. Retries after a lost response, overlapping exports (a crag, then its sectors), and resubmits all just work.
+- **New versions merge.** A resubmitted object is merged into its pending proposal field by field, with the newest value winning.
+- **Published objects aren't recreated.** Proposing an object that's already published makes it an edit of that record. An edit that changes nothing is dropped.
 
 ## Authentication
 
@@ -12,126 +20,126 @@ Every request needs a bearer token from the TopoBuilder connect flow ([api-auth-
 Authorization: Bearer <token>
 ```
 
-Any signed-in account can submit, including `anonymous` ones. Each caller only ever sees their own submissions, whatever their role.
+Any signed-in account can submit, including `anonymous` ones. Each caller only ever sees their own objects, whatever their role.
 
 Timestamps use the SQLite UTC format `YYYY-MM-DD HH:MM:SS`.
 
 ---
 
-## 1. Submit changes
+## 1. Propose objects
 
 ```http
 POST /api/topobuilder/submissions
-POST /api/topobuilder/submissions?replace=<submission id>
 ```
 
-Send the submission as a JSON body, or as `multipart/form-data` with the JSON in a `submission` field when it includes images.
-
-**Resubmitting.** With `?replace=<id>`, the caller's pending submission with that ID is overwritten with the new changes and files. It keeps its ID, its time becomes now, and the reviewer sees only the latest version. If there's no such pending submission, because it was already decided or belongs to someone else, a new submission is created instead. Send the complete set of changes each time; nothing is merged with the previous version.
+Send JSON, or `multipart/form-data` with the JSON in a `submission` field when it includes images.
 
 ```json
 {
-  "changes": [
-    { "ref": "c1", "entity": "crag", "op": "create", "fields": { "name": "New Crag" } },
-    { "ref": "s1", "entity": "sector", "op": "create", "fields": { "name": "Main Wall", "cragId": "c1" } },
-    { "ref": "r1", "entity": "route", "op": "create", "fields": { "name": "New Line", "sectorId": "s1", "gradeYds": "5.11a" } },
-    { "entity": "route", "op": "update", "id": 456, "baseUpdatedAt": "2026-06-09 10:00:00", "fields": { "boltCount": 7 } },
-    { "ref": "t1", "entity": "topo", "op": "create", "fields": {
-      "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "name": "Main Wall Left", "sectorId": "s1",
-      "background": "file:bg", "raster": "file:raster", "annotations": { "version": 1, "items": [] },
-      "routes": [{ "routeId": 456, "label": "1" }, { "routeId": "r1", "label": "2" }]
-    } }
+  "objects": [
+    { "entity": "crag",   "ref": "local-crag-17",  "fields": { "name": "New Crag" } },
+    { "entity": "sector", "ref": "local-sector-4", "fields": { "name": "Main Wall", "cragId": "local-crag-17" } },
+    { "entity": "route",  "ref": "local-route-88", "fields": { "name": "New Line", "sectorId": "local-sector-4", "gradeYds": "5.11a" } },
+    { "entity": "route",  "id": 456, "baseUpdatedAt": "2026-06-09 10:00:00", "fields": { "boltCount": 7 } },
+    { "entity": "topo",   "ref": "local-topo-3", "fields": {
+      "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "name": "Main Wall Left", "sectorId": "local-sector-4",
+      "background": "file:bg", "raster": "file:raster",
+      "annotations": { "version": 1, "items": [{ "id": "line-1", "routeId": "local-route-88" }] },
+      "routes": [{ "routeId": 456, "label": "1" }, { "routeId": "local-route-88", "label": "2" }]
+    } },
+    { "entity": "route",  "ref": "local-route-90", "withdraw": true }
   ]
 }
 ```
 
-- **Changes** are applied in order. `op` is `create` or `update`; there are no deletes. Retire a route or topo by setting its `status`.
-- **`ref`** names a create so later changes can point at it. Use the client's own local ID if that's convenient; the response to a status request maps each `ref` to its new TABVAR ID.
-- **Parent IDs** (`cragId`, `sectorId`, and `routeId` in a topo's `routes`) are an existing numeric ID or the `ref` of an earlier create.
-- **Annotations** are stored as given, except for `routeId` on an annotation item, such as a line drawn for a route. It follows the same rule: an existing route's numeric ID, or the `ref` of a route created earlier in the submission. Approval replaces refs with the new route IDs, so published annotations only contain TABVAR route IDs. An item without a route omits `routeId` or sets it to `null`.
-- **Updates** need the target's `id` and carry only the fields being changed. `null` clears a field. `baseUpdatedAt`, the record's `updatedAt` when the user last saw it, is optional; it helps the reviewer spot conflicts.
-- **Files** are multipart parts referenced as `file:<part name>`. They must be images.
-- **Editable fields** use the sync API's names:
+Each object names **either**:
+- **`ref`:** your own stable ID for an object you're proposing. It must be unique within your account, and it's the object's identity from then on.
+- **`id`:** an existing TABVAR record you're proposing an edit to.
 
-| Entity | Fields | Required to create |
+Other fields on an object:
+- **`fields`:** only the fields you're setting. Omitted fields keep the value from your pending proposal (or the record's current value), and `null` clears a field.
+- **`baseUpdatedAt`** *(optional, edits)*: the record's `updatedAt` when the user last saw it. It helps the reviewer spot conflicts.
+- **`withdraw: true`:** takes the object out of review. A new object's proposal is removed; an object you've already published stays published. You can't withdraw a parent while a pending child still points at it, so withdraw the children too.
+
+References inside `fields` work the same way: `cragId`, `sectorId`, a topo's `routes[].routeId`, and annotation items' `routeId`. Each is either an existing record's numeric `id`, or the `ref` of one of your objects, pending or published. A ref to an object you've published is stored as its record ID.
+
+Files are multipart parts referenced as `file:<part name>`. They must be JPEG, PNG, GIF, or WebP.
+
+### Editable fields
+
+| Entity | Fields | Required for a new object |
 | :--- | :--- | :--- |
 | `crag` | `name`, `notes`, `latitude`, `longitude` | `name` |
 | `sector` | `name`, `cragId`, `notes`, `latitude`, `longitude`, `sortOrder` | `name`, `cragId` |
 | `route` | `name`, `altNames`, `sectorId`, `gradeYds`, `climbStyle`, `boltCount`, `pitchCount`, `routeLength`, `firstAscentBy`, `firstAscentDate`, `routeBuiltDate`, `year`, `status`, `notes`, `sortOrder`, `latitude`, `longitude` | `name`, `sectorId` |
-| `topo` | `uuid` (create only), `name`, `description`, `cragId`, `sectorId`, `latitude`, `longitude`, `status`, `annotations`, `background`, `raster`, `routes` | `name`, `background`, `raster` |
+| `topo` | `uuid` (new topos only), `name`, `description`, `cragId`, `sectorId`, `latitude`, `longitude`, `status` (`Active`/`Deleted`), `annotations`, `background`, `raster`, `routes` | `name`, `background`, `raster` |
 
-**Response `201`** (new submission) **/ `200`** (replaced)
+There are no deletes; retire a route or topo by setting its `status`.
+
+Limits: 500 objects per request, 200 routes per topo.
+
+### Response `200`
+
+The state of each object you sent, in order:
 
 ```json
-{ "id": "6f1c…", "status": "pending", "replaced": false }
+{
+  "objects": [
+    { "entity": "crag",  "ref": "local-crag-17",  "id": null, "state": "pending" },
+    { "entity": "route", "ref": null,             "id": 456,  "state": "pending" },
+    { "entity": "route", "ref": "local-route-90", "id": null, "state": "withdrawn" }
+  ]
+}
 ```
 
-**Errors:**
-- `400 invalid_submission`: `message` lists what's wrong (up to 10 problems).
-- `409 conflict`: the submission named by `replace` can't be replaced, because an approval failed partway and some of its records may already be published. Wait for the review to finish.
-- `500 server_error`: the submission couldn't be stored; retrying is safe.
+| `state` | Meaning |
+| :--- | :--- |
+| `pending` | In review |
+| `unchanged` | Matches the published record, so nothing was queued |
+| `withdrawn` | Nothing of this object is in review |
 
-A failed or invalid request leaves the earlier version of a replaced submission unchanged.
+### Errors
+
+- **`400 invalid_submission`:** `message` lists the problems (up to 10), each naming the object and field, for example `objects[2].fields.sectorId refers to "s9", which isn't a sector you've proposed`. Nothing was stored.
+- **`500 server_error`:** nothing was stored; retrying is safe.
 
 ---
 
-## 2. List my submissions
+## 2. List my objects
 
 ```http
 GET /api/topobuilder/submissions
 GET /api/topobuilder/submissions?since=<serverTime>
 ```
 
-Returns the caller's own submissions:
-
-- **Every queued submission**, with its changes, on every call. Use these to mark the affected crags, sectors, routes, and topos as "in review".
-- **Decided submissions**: all of them on a first call, then only those decided since `since`. Pass back the `serverTime` from the previous call. The filter is inclusive, so dedupe by `id`.
-
-**Response `200`**
+Returns the caller's objects, all of them, or those that changed since `since`. Pass back the `serverTime` from the previous call. The filter is inclusive, so upsert by `ref` (or by `entity` + `id` for edits of other records).
 
 ```json
 {
-  "submissions": [
+  "objects": [
     {
-      "id": "6f1c…",
-      "submitterUid": "user-uid",
-      "status": "pending",
-      "createdAt": "2026-10-16 12:00:00",
+      "entity": "route",
+      "ref": "local-route-88",
+      "id": 3301,
+      "state": "published",
+      "fields": { "name": "New Line", "sectorId": 210, "gradeYds": "5.11a" },
       "error": null,
-      "changes": [{ "ref": "r1", "entity": "route", "op": "create", "fields": { "name": "New Line", "sectorId": 12 } }]
-    },
-    {
-      "id": "a2b9…",
-      "submitterUid": "user-uid",
-      "status": "approved",
-      "decidedAt": "2026-10-15 09:30:00",
-      "ids": { "c1": 41, "s1": 210, "r1": 3301 }
-    },
-    { "id": "d07e…", "submitterUid": "user-uid", "status": "rejected", "decidedAt": "2026-10-14 08:00:00", "ids": {} }
+      "receivedAt": "2026-10-16 12:00:00",
+      "decidedAt": "2026-10-16 15:30:00"
+    }
   ],
-  "serverTime": "2026-10-15 09:30:00"
+  "serverTime": "2026-10-16 15:30:00"
 }
 ```
 
-- `error` on a pending submission means an approval attempt failed and the submission is still queued. Changes made before the failure may already be published; their records show up in the regular sync APIs.
-- `ids` maps each `ref` to the record created for it. Link local records to these IDs so later submissions edit them instead of creating duplicates.
-- A rejected submission's records were never created; clear its "in review" markers. No reason is given.
+- `state` is `pending` (in review), `published` or `rejected`.
+- `id` is the TABVAR record once there is one. For a new object, it appears when the object is approved.
+- `fields` is the latest proposal.
+- `error` on a pending object means approving it failed; it stays in review.
+- Rejection doesn't give a reason. A rejected object can be proposed again, which starts a fresh proposal.
 
 ---
 
-## 3. Get one submission
+## How review works
 
-```http
-GET /api/topobuilder/submissions?id=<submission id>
-```
-
-**Response `200`**: `{ "id", "status", "error"? , "ids"? }`, the same status fields as in the list. Returns `404 not_found` if the caller has no submission with that ID.
-
----
-
-## Typical client flow
-
-1. Submit, and keep the returned `id` with the local records it covers.
-2. Poll `GET /api/topobuilder/submissions?since=<serverTime>` alongside the other sync pulls.
-3. While a submission is listed as `pending`, show its records as "in review".
-4. When it's `approved`, adopt the IDs in `ids` and pick up the published records from the crag, sector, route, and topo sync APIs. When it's `rejected`, drop the markers.
+The reviewer sees each account's pending objects grouped into **items**: objects linked by refs, such as a new crag with its new sectors, routes, and topos, plus any unrelated edit on its own. An item is approved or rejected as a whole, parents first. If approval fails partway, the objects before the failure are published and the rest stay pending until the item is approved again.

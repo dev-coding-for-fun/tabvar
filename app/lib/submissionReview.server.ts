@@ -1,8 +1,10 @@
 import type { Insertable, Kysely, Updateable } from "kysely";
 import type { AppLoadContext } from "react-router";
 import {
+  chunk,
   describeChange,
   loadAuditRows,
+  MAX_IDS_PER_QUERY,
   writeAudit,
   type AuditActor,
   type AuditChanges,
@@ -11,94 +13,146 @@ import {
 import { getDB } from "./db";
 import type { DB } from "./db.d";
 import { slugifyUnique } from "./slug";
-import { toStoredJson } from "./storedJson";
 import {
-  annotationItems,
+  mapReferences,
+  sortParentsFirst,
   SUBMISSION_FIELDS,
-  type SubmissionChange,
+  toSubmissionObject,
   type SubmissionEntity,
-  type SubmissionPayload,
+  type SubmissionObject,
   type SubmissionTopoRoute,
 } from "./submission.server";
 import { saveRawTopo, type SaveRawTopoPayload, type TopoStatus } from "./topo.server";
+import { formatSqliteTimestamp } from "./topoSync.server";
 
 /**
- * Approval and rejection of queued submissions. Each applied or rejected change
- * writes an audit row; the submission row is deleted once it's decided.
- * See docs/submissions-review-plan.md.
+ * Review of pending objects. An account's pending objects that reference each
+ * other by ref form a chain (a new crag with its new sectors, routes, and
+ * topos); a chain is approved or rejected together, parents first. Each object
+ * is applied and recorded on its own, so a failure leaves the objects before it
+ * published and the rest pending. See docs/submissions-review-plan.md.
  */
 
-export type ReviewResult =
-  | { ok: true; ids: Record<string, number> }
-  | { ok: false; error: string };
+export type ReviewResult = { ok: true } | { ok: false; error: string };
 
-type QueuedSubmission = {
-  id: string;
+/** A chain of one account's linked pending objects, parents first. */
+export type ReviewChain = {
+  /** The chain's smallest object id; any of its object ids identifies it. */
+  key: number;
   uid: string;
   source: string;
-  payload: SubmissionPayload;
   author: AuditActor;
+  authorEmail: string | null;
+  objects: SubmissionObject[];
 };
 
 class SubmissionApplyError extends Error {}
 
-async function loadQueuedSubmission(db: Kysely<DB>, id: string): Promise<QueuedSubmission | null> {
-  const row = await db.selectFrom("submission")
-    .leftJoin("user", "submission.uid", "user.uid")
-    .select(["submission.id", "submission.uid", "submission.source", "submission.payload", "user.display_name"])
-    .where("submission.id", "=", id)
-    .executeTakeFirst();
-  if (!row) return null;
+/** Groups objects into chains: objects of one account linked by refs, in either direction. */
+export function groupIntoChains(objects: SubmissionObject[]): SubmissionObject[][] {
+  const parent = new Map<number, number>(objects.map((object) => [object.id, object.id]));
+  const find = (id: number): number => {
+    const next = parent.get(id)!;
+    if (next === id) return id;
+    const root = find(next);
+    parent.set(id, root);
+    return root;
+  };
 
+  const byRef = new Map(objects.filter((o) => o.ref !== null).map((o) => [`${o.uid}:${o.ref}`, o]));
+  for (const object of objects) {
+    mapReferences(object.entity, object.fields, (value) => {
+      const referenced = typeof value === "string" ? byRef.get(`${object.uid}:${value}`) : undefined;
+      if (referenced) parent.set(find(object.id), find(referenced.id));
+      return value;
+    });
+  }
+
+  const chains = new Map<number, SubmissionObject[]>();
+  for (const object of objects) {
+    const root = find(object.id);
+    chains.set(root, [...(chains.get(root) ?? []), object]);
+  }
+  return [...chains.values()].map(sortParentsFirst);
+}
+
+async function loadPendingObjects(db: Kysely<DB>, uid?: string) {
+  const rows = await db.selectFrom("submission")
+    .leftJoin("user", "submission.uid", "user.uid")
+    .selectAll("submission")
+    .select(["user.display_name as authorName", "user.email as authorEmail"])
+    .where("submission.state", "=", "pending")
+    .$if(uid !== undefined, (qb) => qb.where("submission.uid", "=", uid!))
+    .orderBy("submission.id")
+    .execute();
+  const people = new Map(rows.map((row) => [row.uid, { name: row.authorName, email: row.authorEmail }]));
+  return { objects: rows.map(toSubmissionObject), people };
+}
+
+function toChain(objects: SubmissionObject[], people: Map<string, { name: string | null; email: string | null }>): ReviewChain {
+  const { uid, source } = objects[0];
   return {
-    id: row.id,
-    uid: row.uid,
-    source: row.source,
-    payload: JSON.parse(row.payload) as SubmissionPayload,
-    author: { uid: row.uid, displayName: row.display_name },
+    key: Math.min(...objects.map((object) => object.id)),
+    uid,
+    source,
+    author: { uid, displayName: people.get(uid)?.name ?? null },
+    authorEmail: people.get(uid)?.email ?? null,
+    objects,
   };
 }
 
-function resolveRef(value: unknown, refIds: Map<string, number>): unknown {
-  if (typeof value !== "string") return value;
-  const id = refIds.get(value);
-  if (id === undefined) {
-    throw new SubmissionApplyError(`The record created as "${value}" isn't available.`);
+/** Every pending chain, most recently received first. */
+export async function loadPendingChains(db: Kysely<DB>): Promise<ReviewChain[]> {
+  const { objects, people } = await loadPendingObjects(db);
+  const latest = (chain: ReviewChain) => chain.objects.reduce((max, o) => (o.receivedAt > max ? o.receivedAt : max), "");
+  return groupIntoChains(objects)
+    .map((chain) => toChain(chain, people))
+    .sort((a, b) => latest(b).localeCompare(latest(a)) || b.key - a.key);
+}
+
+/** The pending chain containing an object, or null once it's been decided. */
+export async function loadChain(db: Kysely<DB>, objectId: number): Promise<ReviewChain | null> {
+  const row = await db.selectFrom("submission").select(["uid", "state"]).where("id", "=", objectId).executeTakeFirst();
+  if (!row || row.state !== "pending") return null;
+  const { objects, people } = await loadPendingObjects(db, row.uid);
+  const chain = groupIntoChains(objects).find((candidate) => candidate.some((object) => object.id === objectId));
+  return chain ? toChain(chain, people) : null;
+}
+
+/** Record ids for the refs a chain uses, from the account's published objects. */
+async function publishedRefIds(db: Kysely<DB>, chain: ReviewChain) {
+  const refs = new Set<string>();
+  for (const object of chain.objects) {
+    mapReferences(object.entity, object.fields, (value) => {
+      if (typeof value === "string") refs.add(value);
+      return value;
+    });
   }
-  return id;
-}
-
-/** Maps a change's fields to columns, replacing refs with the ids created for them. */
-function toColumns(change: SubmissionChange, refIds: Map<string, number>): Record<string, unknown> {
-  const columns: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(change.fields)) {
-    const spec = SUBMISSION_FIELDS[change.entity][name];
-    columns[spec.column] = spec.kind === "parent" || spec.kind === "optionalParent"
-      ? resolveRef(value, refIds)
-      : value;
+  const ids = new Map<string, number>();
+  for (const refChunk of chunk([...refs], MAX_IDS_PER_QUERY)) {
+    const rows = await db.selectFrom("submission")
+      .select(["ref", "target_id"])
+      .where("uid", "=", chain.uid)
+      .where("ref", "in", refChunk)
+      .where("target_id", "is not", null)
+      .execute();
+    rows.forEach((row) => ids.set(row.ref!, row.target_id!));
   }
-  return columns;
+  return ids;
 }
 
-/** Annotations with each route ref (an item's `routeId`) replaced by the id created for it. */
-function topoAnnotations(change: SubmissionChange, refIds: Map<string, number>): SaveRawTopoPayload["annotations"] {
-  const resolveItem = (item: unknown) =>
-    item && typeof item === "object" && typeof (item as { routeId?: unknown }).routeId === "string"
-      ? { ...item, routeId: resolveRef((item as { routeId: string }).routeId, refIds) }
-      : item;
-  const value = change.fields.annotations;
-  if (Array.isArray(value)) return value.map(resolveItem);
-  const document = value as { version?: number };
-  return { version: document.version ?? 1, items: annotationItems(value).map(resolveItem) };
+/** An object's fields with every ref replaced by its record id. */
+function resolvedFields(object: SubmissionObject, refIds: Map<string, number>) {
+  return mapReferences(object.entity, object.fields, (value) => {
+    if (typeof value === "number") return value;
+    const id = refIds.get(value);
+    if (id === undefined) throw new SubmissionApplyError(`The ${object.entity} "${object.ref ?? object.targetId}" depends on "${value}", which isn't published.`);
+    return id;
+  });
 }
 
-function topoRoutes(change: SubmissionChange, refIds: Map<string, number>) {
-  const routes = change.fields.routes as SubmissionTopoRoute[] | undefined;
-  return routes?.map((link) => ({
-    routeId: resolveRef(link.routeId, refIds) as number,
-    label: link.label ?? null,
-    ...(link.sortOrder !== undefined ? { sortOrder: link.sortOrder } : {}),
-  }));
+function toColumns(entity: SubmissionEntity, fields: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(fields).map(([name, value]) => [SUBMISSION_FIELDS[entity][name].column, value]));
 }
 
 async function insertRecord(db: Kysely<DB>, entity: Exclude<SubmissionEntity, "topo">, values: Record<string, unknown>) {
@@ -110,171 +164,151 @@ async function insertRecord(db: Kysely<DB>, entity: Exclude<SubmissionEntity, "t
   return Number(row.id);
 }
 
-async function updateRecord(db: Kysely<DB>, entity: Exclude<SubmissionEntity, "topo">, id: number, values: Record<string, unknown>) {
-  await db.updateTable(entity).set(values as Updateable<DB[typeof entity]>).where("id", "=", id).execute();
-}
-
-async function saveTopo(
-  context: AppLoadContext,
-  submission: QueuedSubmission,
-  change: SubmissionChange,
-  existingName: string | undefined,
-  refIds: Map<string, number>,
-) {
-  const columns = toColumns(change, refIds);
-  const fields = change.fields;
+async function saveTopo(context: AppLoadContext, uid: string, targetId: number | null, fields: Record<string, unknown>, existingName: unknown) {
   const payload: SaveRawTopoPayload = {
-    ...(change.op === "update" ? { id: change.id } : {}),
+    ...(targetId !== null ? { id: targetId } : {}),
     ...(typeof fields.uuid === "string" ? { uuid: fields.uuid } : {}),
-    // saveRawTopo requires a name; an update that doesn't rename keeps the current one.
-    name: (fields.name as string | undefined) ?? existingName ?? "",
+    // saveRawTopo requires a name; an edit that doesn't rename keeps the current one.
+    name: (fields.name as string | undefined) ?? (existingName as string | undefined) ?? "",
     ...("description" in fields ? { description: fields.description as string | null } : {}),
-    ...("cragId" in fields ? { cragId: columns.crag_id as number | null } : {}),
-    ...("sectorId" in fields ? { sectorId: columns.sector_id as number | null } : {}),
+    ...("cragId" in fields ? { cragId: fields.cragId as number | null } : {}),
+    ...("sectorId" in fields ? { sectorId: fields.sectorId as number | null } : {}),
     ...("latitude" in fields ? { latitude: fields.latitude as number | null } : {}),
     ...("longitude" in fields ? { longitude: fields.longitude as number | null } : {}),
     ...("status" in fields ? { status: fields.status as TopoStatus } : {}),
     ...("background" in fields ? { backgroundUrl: fields.background as string } : {}),
     ...("raster" in fields ? { rasterUrl: fields.raster as string } : {}),
-    ...("annotations" in fields ? { annotations: topoAnnotations(change, refIds) } : {}),
-    ...("routes" in fields ? { routes: topoRoutes(change, refIds) } : {}),
+    ...("annotations" in fields ? { annotations: fields.annotations as SaveRawTopoPayload["annotations"] } : {}),
+    ...("routes" in fields ? { routes: (fields.routes as SubmissionTopoRoute[]).map((link) => ({ ...link, routeId: link.routeId as number })) } : {}),
   };
-  const topo = await saveRawTopo(context, { uid: submission.uid, payload });
-  return topo.id;
+  return (await saveRawTopo(context, { uid, payload })).id;
 }
 
-async function applyChange(
+async function applyObject(
   context: AppLoadContext,
   db: Kysely<DB>,
-  submission: QueuedSubmission,
-  change: SubmissionChange,
+  object: SubmissionObject,
   refIds: Map<string, number>,
 ): Promise<{ id: number; changes: AuditChanges | null }> {
-  const before = change.op === "update"
-    ? (await loadAuditRows(db, change.entity, [change.id!])).get(change.id!)
+  const fields = resolvedFields(object, refIds);
+  const before = object.targetId !== null
+    ? (await loadAuditRows(db, object.entity, [object.targetId])).get(object.targetId)
     : undefined;
-  if (change.op === "update" && !before) {
-    throw new SubmissionApplyError(`${change.entity} ${change.id} no longer exists.`);
+  if (object.targetId !== null && !before) {
+    throw new SubmissionApplyError(`${object.entity} ${object.targetId} no longer exists.`);
   }
 
   let id: number;
-  if (change.entity === "topo") {
-    id = await saveTopo(context, submission, change, before?.name as string | undefined, refIds);
-  } else if (change.op === "create") {
-    id = await insertRecord(db, change.entity, toColumns(change, refIds));
+  if (object.entity === "topo") {
+    id = await saveTopo(context, object.uid, object.targetId, fields, before?.name);
+  } else if (object.targetId === null) {
+    id = await insertRecord(db, object.entity, toColumns(object.entity, fields));
   } else {
-    id = change.id!;
-    await updateRecord(db, change.entity, id, toColumns(change, refIds));
+    id = object.targetId;
+    await db.updateTable(object.entity)
+      .set(toColumns(object.entity, fields) as Updateable<DB[typeof object.entity]>)
+      .where("id", "=", id)
+      .execute();
   }
 
-  const after = (await loadAuditRows(db, change.entity, [id])).get(id);
-  return { id, changes: describeChange(change.entity, before, after)?.changes ?? null };
+  const after = (await loadAuditRows(db, object.entity, [id])).get(id);
+  return { id, changes: describeChange(object.entity, before, after)?.changes ?? null };
 }
 
 /**
- * Applies a submission's changes in order and deletes it. If a change fails, the
- * submission stays queued with the error and the ids created so far, so approving
- * again continues without repeating creates.
+ * Publishes a chain, parents first. Each object is saved as published, with its
+ * record id, as soon as it's applied, so approving again after a failure or a
+ * crash continues with the objects still pending.
  */
-export async function approveSubmission(
+export async function approveChain(
   context: AppLoadContext,
-  { id, reviewer }: { id: string; reviewer: AuditActor },
+  { item, reviewer }: { item: number; reviewer: AuditActor },
 ): Promise<ReviewResult> {
   const db = getDB(context);
-  const submission = await loadQueuedSubmission(db, id);
-  if (!submission) {
-    return { ok: false, error: "This submission has already been decided or doesn't exist." };
+  const chain = await loadChain(db, item);
+  if (!chain) {
+    return { ok: false, error: "This has already been decided or doesn't exist." };
   }
 
-  const refIds = new Map<string, number>();
+  const refIds = await publishedRefIds(db, chain);
+  for (const object of chain.objects) {
+    try {
+      const applied = await applyObject(context, db, object, refIds);
+      const now = formatSqliteTimestamp();
+      await db.updateTable("submission")
+        .set({ target_id: applied.id, state: "published", error: null, decided_at: now, updated_at: now })
+        .where("id", "=", object.id)
+        .execute();
+      if (object.ref !== null) refIds.set(object.ref, applied.id);
 
-  try {
-    for (const change of submission.payload.changes) {
-      if (change.applied) {
-        if (change.ref && change.id) refIds.set(change.ref, change.id);
-        continue;
-      }
-
-      const applied = await applyChange(context, db, submission, change, refIds);
-      if (change.op === "create") {
-        change.id = applied.id;
-        if (change.ref) refIds.set(change.ref, applied.id);
-      }
-
-      // Written even when nothing changed, so every approved change has a row and the
-      // submitter's status lookup can find the decision.
       await writeAudit(db, [{
-        author: submission.author,
+        author: chain.author,
         reviewer,
         decision: "approved",
-        source: submission.source,
-        entity: change.entity,
+        source: object.source,
+        entity: object.entity,
         entityId: applied.id,
-        action: change.op,
+        action: object.targetId === null ? "create" : "update",
+        // Written even when nothing changed, so every approval is on record.
         changes: applied.changes ?? {},
-        submissionId: id,
-        ref: change.ref ?? null,
+        submissionId: String(object.id),
+        ref: object.ref,
       }]);
-      change.applied = true;
-      // Saved after every change, not only on failure, so approving again after a crash
-      // or timeout (when the catch below never runs) skips what's already applied.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Approving submission object ${object.id} failed:`, error);
       await db.updateTable("submission")
-        .set({ payload: toStoredJson(submission.payload) })
-        .where("id", "=", id)
+        .set({ error: message, updated_at: formatSqliteTimestamp() })
+        .where("id", "=", object.id)
         .execute();
+      return { ok: false, error: message };
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Approving submission ${id} failed:`, error);
-    await db.updateTable("submission")
-      .set({ payload: toStoredJson(submission.payload), error: message })
-      .where("id", "=", id)
-      .execute();
-    return { ok: false, error: message };
   }
-
-  await db.deleteFrom("submission").where("id", "=", id).execute();
-  return { ok: true, ids: Object.fromEntries(refIds) };
+  return { ok: true };
 }
 
-/** Records each change not yet applied as rejected in the audit log, then deletes the submission. */
-export async function rejectSubmission(
+/** Rejects every object in a chain, recording each proposal against the current values. */
+export async function rejectChain(
   context: AppLoadContext,
-  { id, reviewer }: { id: string; reviewer: AuditActor },
+  { item, reviewer }: { item: number; reviewer: AuditActor },
 ): Promise<ReviewResult> {
   const db = getDB(context);
-  const submission = await loadQueuedSubmission(db, id);
-  if (!submission) {
-    return { ok: false, error: "This submission has already been decided or doesn't exist." };
+  const chain = await loadChain(db, item);
+  if (!chain) {
+    return { ok: false, error: "This has already been decided or doesn't exist." };
   }
 
-  // Changes applied by an earlier, partly failed approval stay applied.
-  const remaining = submission.payload.changes.filter((change) => !change.applied);
   const entries: AuditEntry[] = [];
-  for (const change of remaining) {
-    const current = change.op === "update"
-      ? (await loadAuditRows(db, change.entity, [change.id!])).get(change.id!)
+  for (const object of chain.objects) {
+    const current = object.targetId !== null
+      ? (await loadAuditRows(db, object.entity, [object.targetId])).get(object.targetId)
       : undefined;
     const changes: AuditChanges = {};
-    for (const [name, value] of Object.entries(change.fields)) {
-      const column = SUBMISSION_FIELDS[change.entity][name].column;
+    for (const [name, value] of Object.entries(object.fields)) {
+      const column = SUBMISSION_FIELDS[object.entity][name].column;
       changes[column] = [current?.[column] ?? null, value];
     }
     entries.push({
-      author: submission.author,
+      author: chain.author,
       reviewer,
       decision: "rejected",
-      source: submission.source,
-      entity: change.entity,
-      entityId: change.op === "update" ? change.id! : null,
-      action: change.op,
+      source: object.source,
+      entity: object.entity,
+      entityId: object.targetId,
+      action: object.targetId === null ? "create" : "update",
       changes,
-      submissionId: id,
-      ref: change.ref ?? null,
+      submissionId: String(object.id),
+      ref: object.ref,
     });
   }
 
   await writeAudit(db, entries);
-  await db.deleteFrom("submission").where("id", "=", id).execute();
-  return { ok: true, ids: {} };
+  const now = formatSqliteTimestamp();
+  for (const idChunk of chunk(chain.objects.map((object) => object.id), MAX_IDS_PER_QUERY)) {
+    await db.updateTable("submission")
+      .set({ state: "rejected", error: null, decided_at: now, updated_at: now })
+      .where("id", "in", idChunk)
+      .execute();
+  }
+  return { ok: true };
 }
