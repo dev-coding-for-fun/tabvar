@@ -1,5 +1,6 @@
 import type { AppLoadContext } from "react-router";
 import { getDB } from "./db";
+import { ImageSizeError, measureImage } from "./imageSize.server";
 import { uploadFileToR2 } from "./s3.server";
 import { toStoredJson } from "./storedJson";
 import { formatSqliteTimestamp, serverTimeFromUpdatedRows } from "./topoSync.server";
@@ -96,6 +97,7 @@ export interface SaveRawTopoPayload {
   longitude?: number | null;
   backgroundUrl?: string;
   rasterUrl?: string;
+  /** The size of `backgroundUrl`, measured when it was uploaded. Never taken from clients. */
   imageWidth?: number | null;
   imageHeight?: number | null;
   imageFileSize?: number | null;
@@ -225,8 +227,6 @@ export function parseSaveRawTopoPayload(data: unknown): SaveRawTopoPayload {
     ),
     backgroundUrl: obj.backgroundUrl as string | undefined,
     rasterUrl: obj.rasterUrl as string | undefined,
-    imageWidth: optionalNumber(obj.imageWidth, "imageWidth"),
-    imageHeight: optionalNumber(obj.imageHeight, "imageHeight"),
     imageFileSize: optionalNumber(obj.imageFileSize, "imageFileSize"),
     annotations: obj.annotations === undefined
       ? undefined
@@ -317,8 +317,8 @@ export async function saveRawTopo(
   let backgroundHash = sameBackground ? existing!.background_image_hash : hashFromUrl(backgroundUrl);
   let rasterUrl = payload.rasterUrl ?? existing?.raster_image_url ?? null;
   let rasterHash = sameRaster ? existing!.raster_image_hash : hashFromUrl(rasterUrl);
-  const imageWidth = payload.imageWidth ?? (sameBackground ? existing?.image_width : null) ?? null;
-  const imageHeight = payload.imageHeight ?? (sameBackground ? existing?.image_height : null) ?? null;
+  let imageWidth = payload.imageWidth ?? (sameBackground ? existing?.image_width : null) ?? null;
+  let imageHeight = payload.imageHeight ?? (sameBackground ? existing?.image_height : null) ?? null;
   let imageFileSize = payload.imageFileSize ?? (sameBackground ? existing?.image_file_size : null) ?? null;
 
   if (!backgroundUrl && !(backgroundFile && backgroundFile.size > 0)) {
@@ -326,6 +326,18 @@ export async function saveRawTopo(
   }
   if (!rasterUrl && !(rasterFile && rasterFile.size > 0)) {
     throw new TopoValidationError("Raster image is required.");
+  }
+
+  // Uploaded images are measured before anything is stored; the topo's size is its background's.
+  for (const [field, file] of [["background", backgroundFile], ["raster", rasterFile]] as const) {
+    if (!file || file.size === 0) continue;
+    try {
+      const size = await measureImage(file);
+      if (field === "background") ({ width: imageWidth, height: imageHeight } = size);
+    } catch (error) {
+      if (!(error instanceof ImageSizeError)) throw error;
+      throw new TopoValidationError(`The ${field} image ${error.message}.`);
+    }
   }
 
   // 1. Upload background file if provided

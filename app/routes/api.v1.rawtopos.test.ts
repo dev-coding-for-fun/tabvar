@@ -12,6 +12,7 @@ import {
   createContext,
   createFormRequest,
   createGetRequest,
+  createImageFile,
   createMockDb,
   createRouteArgs,
   readJson,
@@ -183,7 +184,7 @@ describe("api.v1.topos endpoint", () => {
     let sqlite: InstanceType<typeof Sqlite>;
     let db: Kysely<DB>;
 
-    const image = (name: string) => new File(["image-bytes"], name, { type: "image/jpeg" });
+    const image = (name: string) => createImageFile(name);
 
     function post(payload: unknown, files: Record<string, File> = {}) {
       const request = Object.keys(files).length > 0
@@ -240,8 +241,9 @@ describe("api.v1.topos endpoint", () => {
 
     it("creates a topo from uploaded images, linked to existing routes", async () => {
       const response = await post(
-        { uuid: "topo-new", name: "New Topo", sectorId: 10, routes: [{ routeId: 101, label: "A" }, { routeId: 100 }] },
-        { background: image("bg.jpg"), raster: image("raster.jpg") },
+        // Dimensions sent by the client are ignored; they're measured from the background.
+        { uuid: "topo-new", name: "New Topo", sectorId: 10, imageWidth: 1, imageHeight: 1, routes: [{ routeId: 101, label: "A" }, { routeId: 100 }] },
+        { background: createImageFile("bg.jpg", { width: 4032, height: 3024 }), raster: image("raster.jpg") },
       );
 
       expect(response.status).toBe(201);
@@ -251,6 +253,8 @@ describe("api.v1.topos endpoint", () => {
         sectorId: 10,
         backgroundImageUrl: "https://topos.example.com/topos/raw/rawhash123.jpg",
         rasterImageUrl: "https://topos.example.com/topos/raster/rasterhash456.jpg",
+        imageWidth: 4032,
+        imageHeight: 3024,
         status: "Active",
       });
       expect(topo.routes.map((route: { routeId: number }) => route.routeId)).toEqual([101, 100]);
@@ -312,6 +316,14 @@ describe("api.v1.topos endpoint", () => {
       expect((await readJson(response)).message).toContain(message);
       expect(mocks.uploadFileToR2).not.toHaveBeenCalled();
       expect(await topoRow()).toMatchObject({ name: "Topo", sector_id: 10 });
+    });
+
+    it("rejects an image it can't measure, before uploading anything", async () => {
+      const response = await post({ id: 7 }, { background: new File(["not an image"], "bg.jpg", { type: "image/jpeg" }) });
+
+      expect(response.status).toBe(400);
+      expect((await readJson(response)).message).toContain("The background image isn't a readable image");
+      expect(mocks.uploadFileToR2).not.toHaveBeenCalled();
     });
 
     it("soft-deletes a topo, and returns 404 for one that doesn't exist", async () => {

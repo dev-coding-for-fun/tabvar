@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { Kysely, SqliteDialect, type SqliteDatabase } from "kysely";
 import type { DB } from "~/lib/db.d";
-import { createContext } from "~/test/helpers";
+import { createContext, createImageFile } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
@@ -32,7 +32,7 @@ import {
 const Sqlite = createRequire(import.meta.url)("better-sqlite3") as new (path: string) =>
   SqliteDatabase & Pick<DatabaseSync, "exec">;
 
-const image = (name: string, type = "image/jpeg") => new File(["image-bytes"], name, { type });
+const image = (name: string, type = "image/jpeg") => createImageFile(name, { type });
 
 const newCrag = { entity: "crag", ref: "c1", fields: { name: "New Crag" } };
 const newSector = { entity: "sector", ref: "s1", fields: { name: "Main Wall", cragId: "c1" } };
@@ -102,7 +102,7 @@ describe("submission intake", () => {
           },
         },
       ],
-      { files: new Map([["bg", image("bg.jpg")], ["raster", image("raster.png", "image/png")]]) },
+      { files: new Map([["bg", createImageFile("bg.jpg", { width: 4032, height: 3024 })], ["raster", image("raster.png", "image/png")]]) },
     );
 
     expect(result.map((object) => object.state)).toEqual(["pending", "pending", "pending", "pending", "pending"]);
@@ -119,6 +119,8 @@ describe("submission intake", () => {
     expect(rows[4].fields).toMatchObject({
       background: "https://topos.example.com/submissions/submitter/bg.jpg",
       raster: "https://topos.example.com/submissions/submitter/raster.png",
+      imageWidth: 4032,
+      imageHeight: 3024,
     });
   });
 
@@ -227,6 +229,7 @@ describe("submission intake", () => {
     ["a new topo reusing an existing uuid", [{ entity: "topo", ref: "t9", fields: { uuid: "topo-existing", name: "Again", background: "file:bg", raster: "file:raster" } }], '"topo-existing" belongs to topo 7'],
     ["a topo uuid change", [{ entity: "topo", id: 7, fields: { uuid: "other" } }], "fields.uuid can't be changed"],
     ["an unknown topo status", [{ entity: "topo", id: 7, fields: { status: "Retired" } }], "fields.status must be one of Active, Deleted"],
+    ["an image size sent by the app", [{ entity: "topo", id: 7, fields: { imageWidth: 800 } }], "fields.imageWidth is measured from the background image"],
   ])("rejects %s, storing nothing", async (_label, objects, message) => {
     const attempt = submit(objects as unknown[], { files: new Map([["bg", image("bg.jpg")], ["raster", image("raster.jpg")]]) });
 
@@ -234,6 +237,16 @@ describe("submission intake", () => {
     await expect(attempt).rejects.toThrow(message);
     expect(mocks.uploadFileToR2).not.toHaveBeenCalled();
     expect(await stored()).toEqual([]);
+  });
+
+  it("rejects an image it can't measure, before storing anything", async () => {
+    const attempt = submit(
+      [{ entity: "topo", id: 7, fields: { background: "file:bg" } }],
+      { files: new Map([["bg", new File(["not an image"], "bg.jpg", { type: "image/jpeg" })]]) },
+    );
+
+    await expect(attempt).rejects.toThrow("objects[0].fields.background isn't a readable image");
+    expect(mocks.uploadFileToR2).not.toHaveBeenCalled();
   });
 
   it("rejects files that aren't images", async () => {

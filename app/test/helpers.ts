@@ -54,6 +54,32 @@ export function createUser(overrides: Partial<User> = {}): User {
   };
 }
 
+/**
+ * A minimal image file with real headers, so it can be measured: a PNG for
+ * `image/png`, otherwise a JPEG.
+ */
+export function createImageFile(
+  name: string,
+  { type = "image/jpeg", width = 640, height = 480 }: { type?: string; width?: number; height?: number } = {},
+): File {
+  const u16 = (value: number) => [value >> 8, value & 0xff];
+  const u32 = (value: number) => [...u16(value >>> 16), ...u16(value & 0xffff)];
+  let bytes: number[];
+  if (type === "image/png") {
+    bytes = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...u32(13), 0x49, 0x48, 0x44, 0x52, ...u32(width), ...u32(height), 8, 2, 0, 0, 0, ...u32(0)];
+  } else {
+    const jfif = [0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, ...u16(1), ...u16(1), 0, 0];
+    const startOfFrame = [8, ...u16(height), ...u16(width), 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1];
+    bytes = [
+      0xff, 0xd8,
+      0xff, 0xe0, ...u16(jfif.length + 2), ...jfif,
+      0xff, 0xc0, ...u16(startOfFrame.length + 2), ...startOfFrame,
+      0xff, 0xd9,
+    ];
+  }
+  return new File([new Uint8Array(bytes)], name, { type });
+}
+
 let nextSubmissionObjectId = 1;
 
 /** A pending submission object: a new object with a `ref`, or an edit with a `targetId`. */

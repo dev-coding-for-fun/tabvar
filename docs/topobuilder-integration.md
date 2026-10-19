@@ -95,7 +95,9 @@ How to fill in each object:
 - **Edits** carry **only the fields the user changed**. `null` clears a field. Send `baseUpdatedAt`, the record's `updatedAt` from the last pull, so the reviewer is warned if TABVAR changed the record since then.
 - **The app's own objects after they're published** can still be sent by `ref`. TABVAR turns that into an edit of the published record, and drops it as `unchanged` if nothing differs. Switching to the TABVAR `id` once known is fine too.
 - **Linking an unchanged catalog route** to a topo needs no object for that route; just use its ID in the topo's `routes`.
-- **Topos** need a stable `uuid`, and when new, the `background` (clean photo) and `raster` (rendered topo) images. Send each image as a multipart part and reference it as `file:<part name>`. JPEG, PNG, GIF, and WebP are accepted. `annotations` is `{ version, items }`.
+- **Topos** need a stable `uuid`, and when new, the `background` (clean photo) and `raster` (rendered topo) images. Send each image as a multipart part and reference it as `file:<part name>`. JPEG, PNG, GIF, and WebP are accepted.
+- **Image size:** TABVAR measures the background itself and returns its size as `imageWidth`/`imageHeight`, so the normalized annotation points line up with what's displayed. Don't send the size.
+- **Annotations** are `{ version, items }`.
 - **Annotation route references:** set each item's `routeId` to the TABVAR ID for a catalog route, or to the route's local ID for one of the app's own routes. On approval, TABVAR rewrites local IDs to TABVAR IDs, so annotations pulled from `/api/v1/topos` always hold TABVAR IDs. The app maps them back through the IDs it adopted (§4). Other item fields are stored untouched.
 - **No deletes.** Retire a route or topo by setting `status`. Topo `status` is `Active` or `Deleted`.
 - **Limits:** 500 objects per request, 200 routes per topo. Field names and editable fields are listed in [submissions-api.md](submissions-api.md).

@@ -81,6 +81,8 @@ const FIELD_LABELS: Record<string, string> = {
   annotations: "Annotations",
   background: "Background image",
   raster: "Topo image",
+  imageWidth: "Image width (px)",
+  imageHeight: "Image height (px)",
   routes: "Routes on topo",
 };
 

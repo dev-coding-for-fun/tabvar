@@ -4,6 +4,7 @@ import { chunk, loadAuditRows, MAX_IDS_PER_QUERY, sameValue, type AuditEntity } 
 import { IMAGE_TYPES } from "./constants";
 import { getDB } from "./db";
 import type { DB, Submission } from "./db.d";
+import { ImageSizeError, measureImage, type ImageSize } from "./imageSize.server";
 import { deleteFromR2, uploadFileToR2 } from "./s3.server";
 import { toStoredJson } from "./storedJson";
 import { TOPO_STATUSES, type TopoStatus } from "./topo.server";
@@ -84,6 +85,7 @@ type FieldKind =
   | "parent"
   | "optionalParent"
   | "file"
+  | "measured"
   | "annotations"
   | "routes";
 
@@ -145,6 +147,9 @@ export const SUBMISSION_FIELDS: Record<SubmissionEntity, Record<string, FieldSpe
     background: { column: "background_image_url", kind: "file" },
     raster: { column: "raster_image_url", kind: "file" },
     routes: { column: "routes", kind: "routes" },
+    // Set by intake from the background image, which annotations are positioned on.
+    imageWidth: { column: "image_width", kind: "measured" },
+    imageHeight: { column: "image_height", kind: "measured" },
   },
 };
 
@@ -343,6 +348,9 @@ function checkFieldValue(
       }
       return;
     }
+    case "measured":
+      problems.add(`${path} is measured from the background image, so it can't be sent`);
+      return;
     case "annotations":
       if (!Array.isArray(value) && !(isRecord(value) && Array.isArray(value.items))) {
         problems.add(`${path} must be an annotation document`);
@@ -566,6 +574,23 @@ export async function receiveObjects(
   const incoming = parseObjects(payload, files);
   const problems = new Problems();
 
+  // Images are measured before anything is stored; a topo's size is its background's.
+  const sizes = new Map<string, ImageSize>();
+  for (const object of incoming) {
+    for (const [field, value] of Object.entries(object.fields)) {
+      if (SUBMISSION_FIELDS[object.entity][field].kind !== "file") continue;
+      const fileName = (value as string).slice(FILE_PLACEHOLDER_PREFIX.length);
+      if (sizes.has(fileName)) continue;
+      try {
+        sizes.set(fileName, await measureImage(files.get(fileName)!));
+      } catch (error) {
+        if (!(error instanceof ImageSizeError)) throw error;
+        problems.add(`${object.path}.fields.${field} ${error.message}`);
+      }
+    }
+  }
+  problems.throwIfAny();
+
   // Everything the request names, and everything it references, by ref or by record.
   const refs = incoming.flatMap((object) => (object.ref ? [object.ref] : []));
   const targets = new Map<SubmissionEntity, number[]>();
@@ -737,6 +762,11 @@ export async function receiveObjects(
           uploaded.set(fileName, stored);
         }
         working.fields[field] = stored.url;
+        if (field === "background") {
+          const { width, height } = sizes.get(fileName)!;
+          working.fields.imageWidth = width;
+          working.fields.imageHeight = height;
+        }
       }
     }
 

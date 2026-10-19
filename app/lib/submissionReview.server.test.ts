@@ -99,6 +99,8 @@ describe("submission review", () => {
       sectorId: "s1",
       background: "https://topos.example.com/submissions/submitter/bg.jpg",
       raster: "https://topos.example.com/submissions/submitter/raster.png",
+      imageWidth: 4032,
+      imageHeight: 3024,
       annotations: { version: 1, items: [{ id: "line-1", routeId: "r1" }, { id: "line-2", routeId: 100 }] },
       routes: [{ routeId: 100, label: "1" }, { routeId: "r1", label: "2" }],
     }, { ref: "t1" });
@@ -114,6 +116,7 @@ describe("submission review", () => {
     expect(newCrag.slug).toBe("new-crag");
     expect(newSector.crag_id).toBe(newCrag.id);
     expect(newRoute).toMatchObject({ sector_id: newSector.id, grade_yds: "5.11a" });
+    expect(newTopo).toMatchObject({ image_width: 4032, image_height: 3024 });
     expect(JSON.parse(newTopo.annotations_json).items).toEqual([
       { id: "line-1", routeId: newRoute.id },
       { id: "line-2", routeId: 100 },

@@ -65,6 +65,8 @@ References inside `fields` work the same way: `cragId`, `sectorId`, a topo's `ro
 
 Files are multipart parts referenced as `file:<part name>`. They must be JPEG, PNG, GIF, or WebP.
 
+TABVAR measures a topo's background when it arrives and adds its size to the proposal as `imageWidth` and `imageHeight`. Annotations are positioned relative to that image. Don't send these two fields; they're set from the file.
+
 ### Editable fields
 
 | Entity | Fields | Required for a new object |
@@ -134,7 +136,7 @@ Returns the caller's objects, all of them, or those that changed since `since`. 
 
 - `state` is `pending` (in review), `published` or `rejected`.
 - `id` is the TABVAR record once there is one. For a new object, it appears when the object is approved.
-- `fields` is the latest proposal.
+- `fields` is the latest proposal, including the measured `imageWidth` and `imageHeight` of a topo's background.
 - `error` on a pending object means approving it failed; it stays in review.
 - Rejection doesn't give a reason. A rejected object can be proposed again, which starts a fresh proposal.
 

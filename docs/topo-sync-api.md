@@ -58,6 +58,8 @@ Creates a topo, or updates one matched by `id` or `uuid`.
 | `raster` | File (`image/*`) | The rendered topo with lines and badges. Required to create a topo unless `rasterUrl` is given. |
 | `payload` | String (JSON) | The topo fields below. |
 
+Images must be JPEG, PNG, GIF, or WebP. TABVAR measures the uploaded background and stores its size as `imageWidth` and `imageHeight`, the space annotations are positioned in; clients don't send them.
+
 ### `payload` JSON
 
 ```json
@@ -99,6 +101,8 @@ Creates a topo, or updates one matched by `id` or `uuid`.
     "longitude": -115.3421,
     "backgroundImageUrl": "https://files.tabvar.org/topos/raw/abc123hash.jpg",
     "rasterImageUrl": "https://files.tabvar.org/topos/raster/def456hash.jpg",
+    "imageWidth": 4032,
+    "imageHeight": 3024,
     "status": "Active",
     "annotations": { "version": 1, "items": [] },
     "createdAt": "2026-09-12 12:00:00",

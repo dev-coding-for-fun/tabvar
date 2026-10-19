@@ -57,6 +57,7 @@
     "date-fns-tz": "^3.2.0",
     "dayjs": "^1.11.23",
     "he": "^1.2.0",
+    "image-size": "^2.0.4",
     "isbot": "^5.1.39",
     "kysely": "^0.28.17",
     "mantine-datatable": "^8.3.13",

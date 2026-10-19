@@ -177,6 +177,7 @@ async function saveTopo(context: AppLoadContext, uid: string, targetId: number |
     ...("longitude" in fields ? { longitude: fields.longitude as number | null } : {}),
     ...("status" in fields ? { status: fields.status as TopoStatus } : {}),
     ...("background" in fields ? { backgroundUrl: fields.background as string } : {}),
+    ...("imageWidth" in fields ? { imageWidth: fields.imageWidth as number, imageHeight: fields.imageHeight as number } : {}),
     ...("raster" in fields ? { rasterUrl: fields.raster as string } : {}),
     ...("annotations" in fields ? { annotations: fields.annotations as SaveRawTopoPayload["annotations"] } : {}),
     ...("routes" in fields ? { routes: (fields.routes as SubmissionTopoRoute[]).map((link) => ({ ...link, routeId: link.routeId as number })) } : {}),
