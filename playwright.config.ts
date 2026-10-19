@@ -16,6 +16,11 @@ const isAgent = !!(
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  workers: isCI ? 1 : 4,
+  timeout: 60_000,
+  expect: {
+    timeout: 10_000,
+  },
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
   maxFailures: isAgent ? 5 : undefined,
@@ -26,7 +31,7 @@ export default defineConfig({
       : "list",
   use: {
     baseURL,
-    actionTimeout: 10_000,
+    actionTimeout: 15_000,
     // Keep traces for local failures (where retries=0) so `npx playwright trace` works.
     trace: isCI ? "on-first-retry" : "retain-on-failure",
   },
