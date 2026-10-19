@@ -19,6 +19,8 @@ export const personas = {
   member: { role: "member" },
   /** Signed in, but no elevated role (the default for new accounts). */
   anonymous: { role: "anonymous" },
+  /** TopoBuilder app contributor: signed in with no elevated role, isolated from `anonymous`. */
+  contributor: { role: "anonymous" },
   discountManager: { role: "member", tags: [DISCOUNT_MANAGER_TAG] },
 } satisfies Record<string, PersonaDefinition>;
 

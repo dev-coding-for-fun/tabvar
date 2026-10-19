@@ -16,7 +16,12 @@ const config = defineConfig(async (configEnv) => {
       // IPv4 loopback so adb reverse (tcp:PORT tcp:PORT) can reach the dev server.
       host: "127.0.0.1",
       watch: {
-        ignored: ["**/.wrangler/**"],
+        ignored: [
+          "**/.wrangler/**",
+          "**/e2e/.auth/**",
+          "**/test-results/**",
+          "**/.playwright-cli/**",
+        ],
       },
     },
     optimizeDeps: {

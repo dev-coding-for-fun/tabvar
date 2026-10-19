@@ -5,6 +5,7 @@ import { connectTopobuilder, newRouteObjects, reviewItem, topobuilderApi } from 
 // /admin/submissions. Nothing here uploads files, so nothing goes to R2.
 
 test.describe("submission review", () => {
+  test.describe.configure({ mode: "serial" });
   test.use({ persona: "member" });
 
   test("a member's new crag, sector, and route are published once an admin approves them", async ({
@@ -22,10 +23,12 @@ test.describe("submission review", () => {
 
     const admin = await pageAs("admin");
     await admin.goto("/admin/submissions");
-    await admin.getByRole("link").filter({ hasText: `New crag “${crag}”` }).click();
+    const item = admin.getByRole("link").filter({ hasText: `New crag “${crag}”` });
+    await item.click();
     await expect(admin.getByText("New sector “Main Wall”").first()).toBeVisible();
     await expect(admin.getByText(`New route “${route}”`)).toBeVisible();
     await admin.getByRole("button", { name: "Approve" }).click();
+    await expect(item).toBeHidden();
     await expect(admin.getByText(`New route “${route}”`)).toBeHidden();
 
     const published = await api.object({ ref: refs.crag });
@@ -60,14 +63,16 @@ test.describe("submission review", () => {
     const title = `Edit route #${routeId}`;
     await admin.goto("/admin/submissions");
     await admin.getByRole("link").filter({ hasText: title }).filter({ hasText: "E2E member" }).click();
-    await expect(admin.getByRole("cell", { name: "5.10a" })).toBeVisible();
-    await expect(admin.getByRole("cell", { name: "5.10b" })).toBeVisible();
+    const table = admin.getByRole("table");
+    await expect(table.getByRole("cell", { name: "5.10a" })).toBeVisible();
+    await expect(table.getByRole("cell", { name: "5.10b" })).toBeVisible();
     await expect(admin.getByRole("alert").filter({ hasText: "Conflicts" })).toContainText("Grade is also edited in");
 
     await admin.getByRole("link", { name: "a submission from E2E anonymous" }).click();
-    await expect(admin.getByRole("cell", { name: "5.10c" })).toBeVisible();
+    await expect(table.getByRole("cell", { name: "5.10c" })).toBeVisible();
     await admin.getByRole("button", { name: "Reject" }).click();
-    await expect(admin.getByRole("cell", { name: "5.10c" })).toBeHidden();
+    await expect(table.getByRole("cell", { name: "5.10c" })).toBeHidden();
+    await expect(table.getByRole("cell", { name: "5.10b" })).toBeVisible();
 
     await reviewItem(admin, title, "Approve", "E2E member");
 

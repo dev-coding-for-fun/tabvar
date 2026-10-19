@@ -13,7 +13,8 @@ import {
 // catalog. Topo images are uploaded to the remote -dev R2 bucket (see docs/e2e-testing.md).
 
 test.describe("as the TopoBuilder app", () => {
-  test.use({ persona: "anonymous" });
+  test.describe.configure({ mode: "serial" });
+  test.use({ persona: "contributor" });
 
   test("an anonymous contributor's objects show as in review, then publish under new ids", async ({
     page,

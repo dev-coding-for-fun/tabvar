@@ -133,6 +133,7 @@ export async function reviewItem(admin: Page, title: string, decision: "Approve"
   const selected = admin.url();
   await admin.getByRole("button", { name: decision }).click();
   await expect(admin).not.toHaveURL(selected);
+  await expect(item).toBeHidden();
 }
 
 /** A new crag, sector, and route, with refs unique to this run so each test proposes its own objects. */

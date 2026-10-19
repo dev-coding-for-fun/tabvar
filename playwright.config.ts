@@ -53,6 +53,6 @@ export default defineConfig({
     reuseExistingServer: !isCI,
     timeout: 120_000,
     stdout: "ignore",
-    stderr: isAgent ? "ignore" : "pipe",
+    stderr: "pipe",
   },
 });
