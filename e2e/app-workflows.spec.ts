@@ -26,34 +26,40 @@ test.describe("as the TopoBuilder app", () => {
     const admin = await pageAs("admin");
     const route = uniqueName("Route");
     const topoUuid = crypto.randomUUID();
+    const crag = uniqueName("Crag");
+    const changesFor = (topoName: string) => [
+      ...newRouteChanges({ crag, route }),
+      {
+        ref: "t1",
+        entity: "topo",
+        op: "create",
+        fields: {
+          uuid: topoUuid,
+          name: topoName,
+          sectorId: "s1",
+          background: "file:bg",
+          raster: "file:raster",
+          annotations: { version: 1, items: [] },
+          routes: [{ routeId: "r1", label: "1" }],
+        },
+      },
+    ];
+    const images = { bg: pngUpload("bg.png"), raster: pngUpload("raster.png") };
 
     const { serverTime: before } = await app.mySubmissions();
-    const submissionId = await app.submit(
-      [
-        ...newRouteChanges({ crag: uniqueName("Crag"), route }),
-        {
-          ref: "t1",
-          entity: "topo",
-          op: "create",
-          fields: {
-            uuid: topoUuid,
-            name: uniqueName("Topo"),
-            sectorId: "s1",
-            background: "file:bg",
-            raster: "file:raster",
-            annotations: { version: 1, items: [] },
-            routes: [{ routeId: "r1", label: "1" }],
-          },
-        },
-      ],
-      { bg: pngUpload("bg.png"), raster: pngUpload("raster.png") },
-    );
+    const submissionId = await app.submit(changesFor(uniqueName("Topo")), images);
+
+    // The user edits the topo before review; resubmitting replaces the pending submission.
+    const topoName = uniqueName("Topo");
+    expect(await app.resubmit(submissionId, changesFor(topoName), images)).toBe(submissionId);
 
     // In review: the app sees its pending changes, with uploaded images stored for review.
     const pending = findSubmission(await app.mySubmissions(before), submissionId, "pending");
     expect(pending.error).toBeNull();
     const topoChange = pending.changes.find((change) => change.entity === "topo");
-    expect(topoChange?.fields.raster).toContain(`/submissions/${submissionId}/`);
+    expect(topoChange?.fields).toMatchObject({ name: topoName, raster: expect.stringContaining(`/submissions/${submissionId}/`) });
+    expect((await app.mySubmissions(before)).submissions.filter((submission) => submission.status === "pending"
+      && submission.changes.some((change) => change.fields.uuid === topoUuid))).toHaveLength(1);
     expect((await memberApp.mySubmissions()).submissions.map((submission) => submission.id)).not.toContain(submissionId);
 
     await approveSubmission(admin, submissionId);
@@ -65,7 +71,7 @@ test.describe("as the TopoBuilder app", () => {
     // The catalog pulls return the published records under those ids.
     expect(await app.route(ids.r1)).toMatchObject({ id: ids.r1, sectorId: ids.s1 });
     const topo = await app.topo(topoUuid);
-    expect(topo).toMatchObject({ id: ids.t1, status: "Active" });
+    expect(topo).toMatchObject({ id: ids.t1, name: topoName, status: "Active" });
     expect(topo.routes).toEqual([expect.objectContaining({ routeId: ids.r1, label: "1" })]);
   });
 

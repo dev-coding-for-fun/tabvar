@@ -170,6 +170,14 @@ export class SubmissionValidationError extends Error {
   }
 }
 
+/** The submission to replace can't be replaced in its current state. */
+export class SubmissionConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SubmissionConflictError";
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -489,18 +497,50 @@ function fileFieldNames(entity: SubmissionEntity) {
     .map(([name]) => name);
 }
 
+function fileUrls(payload: SubmissionPayload) {
+  return new Set(payload.changes.flatMap((change) => fileFieldNames(change.entity)
+    .map((field) => change.fields[field])
+    .filter((value): value is string => typeof value === "string")));
+}
+
 /**
  * Validates and queues a submission. Referenced files are stored in R2 under
  * `submissions/<id>/`, and their placeholders are replaced with the stored URLs.
+ *
+ * With `replace`, the caller's pending submission with that id is overwritten in
+ * place (same id, and its time becomes now). If there's no such submission, for
+ * example because it was already decided, a new one is created instead.
  */
 export async function createSubmission(
   context: AppLoadContext,
-  { uid, source, payload, files }: { uid: string; source: string; payload: unknown; files: Map<string, File> },
-): Promise<SubmissionStatus> {
+  { uid, source, payload, files, replace }: {
+    uid: string;
+    source: string;
+    payload: unknown;
+    files: Map<string, File>;
+    replace?: string | null;
+  },
+): Promise<SubmissionStatus & { replaced: boolean }> {
   const db = getDB(context);
   const env = context.cloudflare.env as unknown as Env;
   const submission = await validateSubmission(db, payload, files);
-  const id = crypto.randomUUID();
+
+  const existing = replace
+    ? await db.selectFrom("submission")
+      .select(["id", "error", "payload"])
+      .where("id", "=", replace)
+      .where("uid", "=", uid)
+      .executeTakeFirst()
+    : undefined;
+  if (existing?.error) {
+    throw new SubmissionConflictError(
+      "This submission is partly applied after a failed approval, so it can't be replaced. Wait for it to be reviewed.",
+    );
+  }
+  const id = existing?.id ?? crypto.randomUUID();
+  // Files are content-addressed, so a replacement can reuse one the current version
+  // already references; those must survive a failed replacement.
+  const keep = existing ? fileUrls(JSON.parse(existing.payload) as SubmissionPayload) : new Set<string>();
   const uploaded = new Map<string, { url: string; key: string }>();
 
   try {
@@ -526,12 +566,21 @@ export async function createSubmission(
       }
     }
 
-    await db.insertInto("submission")
-      .values({ id, uid, source, payload: toStoredJson(submission) })
-      .execute();
+    if (existing) {
+      await db.updateTable("submission")
+        .set({ payload: toStoredJson(submission), created_at: formatSqliteTimestamp() })
+        .where("id", "=", id)
+        .execute();
+    } else {
+      await db.insertInto("submission")
+        .values({ id, uid, source, payload: toStoredJson(submission) })
+        .execute();
+    }
   } catch (error) {
     const cleanup = await Promise.allSettled(
-      [...uploaded.values()].map((stored) => deleteFromR2(context, env.TOPOS_BUCKET_NAME, stored.key)),
+      [...uploaded.values()]
+        .filter((stored) => !keep.has(stored.url))
+        .map((stored) => deleteFromR2(context, env.TOPOS_BUCKET_NAME, stored.key)),
     );
     cleanup
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
@@ -539,7 +588,7 @@ export async function createSubmission(
     throw error;
   }
 
-  return { id, status: "pending" };
+  return { id, status: "pending", replaced: Boolean(existing) };
 }
 
 /**

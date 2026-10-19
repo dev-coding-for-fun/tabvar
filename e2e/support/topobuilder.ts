@@ -74,6 +74,14 @@ export function topobuilderApi(request: APIRequestContext, token: string) {
         : await request.post("/api/topobuilder/submissions", { headers, data: { changes } });
       return (await json<{ id: string }>(response, 201)).id;
     },
+    /** Replaces the caller's pending submission in place; it keeps its id. */
+    async resubmit(id: string, changes: unknown[], files: Record<string, Upload> = {}): Promise<string> {
+      const url = `/api/topobuilder/submissions?replace=${encodeURIComponent(id)}`;
+      const response = Object.keys(files).length > 0
+        ? await request.post(url, { headers, multipart: { submission: JSON.stringify({ changes }), ...files } })
+        : await request.post(url, { headers, data: { changes } });
+      return (await json<{ id: string }>(response, 200)).id;
+    },
     status(id: string): Promise<SubmissionStatus> {
       return request.get(`/api/topobuilder/submissions?id=${encodeURIComponent(id)}`, { headers }).then(json<SubmissionStatus>);
     },

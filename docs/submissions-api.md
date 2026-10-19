@@ -2,7 +2,7 @@
 
 API for proposing new and edited route data (crags, sectors, routes, and topos) from an external client such as TopoBuilder. Proposals wait in a review queue until an admin approves or rejects them on `/admin/submissions`. Nothing is published until then.
 
-Issue reports don't use this API; see [issue-sync-api.md](issue-sync-api.md).
+Issue reports don't use this API; see [issue-sync-api.md](issue-sync-api.md). For how the TopoBuilder app fits this together with the sync APIs, see [topobuilder-integration.md](topobuilder-integration.md).
 
 ## Authentication
 
@@ -22,9 +22,12 @@ Timestamps use the SQLite UTC format `YYYY-MM-DD HH:MM:SS`.
 
 ```http
 POST /api/topobuilder/submissions
+POST /api/topobuilder/submissions?replace=<submission id>
 ```
 
 Send the submission as a JSON body, or as `multipart/form-data` with the JSON in a `submission` field when it includes images.
+
+**Resubmitting.** With `?replace=<id>`, the caller's pending submission with that ID is overwritten with the new changes and files. It keeps its ID, its time becomes now, and the reviewer sees only the latest version. If there's no such pending submission, because it was already decided or belongs to someone else, a new submission is created instead. Send the complete set of changes each time; nothing is merged with the previous version.
 
 ```json
 {
@@ -56,13 +59,18 @@ Send the submission as a JSON body, or as `multipart/form-data` with the JSON in
 | `route` | `name`, `altNames`, `sectorId`, `gradeYds`, `climbStyle`, `boltCount`, `pitchCount`, `routeLength`, `firstAscentBy`, `firstAscentDate`, `routeBuiltDate`, `year`, `status`, `notes`, `sortOrder`, `latitude`, `longitude` | `name`, `sectorId` |
 | `topo` | `uuid` (create only), `name`, `description`, `cragId`, `sectorId`, `latitude`, `longitude`, `status`, `annotations`, `background`, `raster`, `routes` | `name`, `background`, `raster` |
 
-**Response `201`**
+**Response `201`** (new submission) **/ `200`** (replaced)
 
 ```json
-{ "id": "6f1c…", "status": "pending" }
+{ "id": "6f1c…", "status": "pending", "replaced": false }
 ```
 
-**Errors:** `400 invalid_submission` with a `message` listing what's wrong (up to 10 problems), or `500 server_error` if the submission couldn't be stored; retrying is safe.
+**Errors:**
+- `400 invalid_submission`: `message` lists what's wrong (up to 10 problems).
+- `409 conflict`: the submission named by `replace` can't be replaced, because an approval failed partway and some of its records may already be published. Wait for the review to finish.
+- `500 server_error`: the submission couldn't be stored; retrying is safe.
+
+A failed or invalid request leaves the earlier version of a replaced submission unchanged.
 
 ---
 

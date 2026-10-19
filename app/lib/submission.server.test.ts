@@ -27,6 +27,7 @@ import {
   getSubmissionStatus,
   listMySubmissions,
   parseSubmissionRequest,
+  SubmissionConflictError,
   SubmissionValidationError,
 } from "./submission.server";
 
@@ -100,7 +101,7 @@ describe("submission intake", () => {
       files: files(),
     });
 
-    expect(result).toEqual({ id: expect.any(String), status: "pending" });
+    expect(result).toEqual({ id: expect.any(String), status: "pending", replaced: false });
     const row = await db.selectFrom("submission").selectAll().executeTakeFirstOrThrow();
     expect(row).toEqual(expect.objectContaining({ id: result.id, uid: "submitter", source: "topobuilder", error: null }));
 
@@ -236,6 +237,79 @@ describe("submission intake", () => {
       expect(await getSubmissionStatus(createContext(), { uid: "submitter", id: "declined" }))
         .toEqual({ id: "declined", status: "rejected", ids: {} });
       expect(await getSubmissionStatus(createContext(), { uid: "someone-else", id: "done" })).toBeNull();
+    });
+  });
+
+  describe("replacing a pending submission", () => {
+    const edit = (boltCount: number) => ({ changes: [{ entity: "route", op: "update", id: 100, fields: { boltCount } }] });
+    const submit = (payload: unknown, options: { uid?: string; replace?: string; files?: Map<string, File> } = {}) =>
+      createSubmission(createContext(), {
+        uid: options.uid ?? "submitter",
+        source: "topobuilder",
+        payload,
+        files: options.files ?? new Map(),
+        replace: options.replace,
+      });
+    const rows = () => db.selectFrom("submission").select(["id", "uid", "payload", "created_at"]).orderBy("uid").execute();
+
+    it("overwrites the caller's pending submission in place, as a fresh submission", async () => {
+      const { id } = await submit(edit(7));
+      sqlite.exec(`UPDATE submission SET created_at = '2026-01-01 00:00:00' WHERE id = '${id}'`);
+
+      expect(await submit(edit(8), { replace: id })).toEqual({ id, status: "pending", replaced: true });
+
+      const [row] = await rows();
+      expect(await rows()).toHaveLength(1);
+      expect(JSON.parse(row.payload).changes[0].fields).toEqual({ boltCount: 8 });
+      expect(row.created_at > "2026-01-01 00:00:00").toBe(true);
+    });
+
+    it("creates a new submission when there's no pending one of the caller's to replace", async () => {
+      const { id: theirs } = await submit(edit(7), { uid: "someone-else" });
+
+      const forOthers = await submit(edit(8), { replace: theirs });
+      const forUnknown = await submit(edit(9), { replace: "decided-or-unknown" });
+
+      expect(forOthers).toMatchObject({ replaced: false });
+      expect(forOthers.id).not.toBe(theirs);
+      expect(forUnknown).toMatchObject({ replaced: false });
+      expect((await rows()).map((row) => row.id).sort()).toEqual([theirs, forOthers.id, forUnknown.id].sort());
+    });
+
+    it("refuses to replace a submission a failed approval left partly applied", async () => {
+      const { id } = await submit(edit(7));
+      sqlite.exec(`UPDATE submission SET error = 'route 100 is gone' WHERE id = '${id}'`);
+
+      await expect(submit(edit(8), { replace: id })).rejects.toBeInstanceOf(SubmissionConflictError);
+      expect(JSON.parse((await rows())[0].payload).changes[0].fields).toEqual({ boltCount: 7 });
+    });
+
+    it("leaves the current version intact when the replacement is invalid or fails", async () => {
+      const files = new Map([["raster", image("raster.png", "image/png")]]);
+      const topoEdit = { changes: [{ entity: "topo", op: "update", id: 7, fields: { raster: "file:raster" } }] };
+      const { id } = await submit(topoEdit, { files });
+
+      await expect(submit({ changes: [] }, { replace: id })).rejects.toBeInstanceOf(SubmissionValidationError);
+
+      // The replacement reuses the stored raster, then a later upload fails.
+      mocks.uploadFileToR2.mockClear();
+      mocks.uploadFileToR2
+        .mockImplementationOnce(async (_context, file: File, _bucket, domain: string, options) => ({
+          url: `${domain}/${options.keyPrefix}/${file.name}`,
+          name: `${options.keyPrefix}/${file.name}`,
+          type: file.type,
+        }))
+        .mockRejectedValueOnce(new Error("R2 unavailable"));
+      const failing = {
+        changes: [{ entity: "topo", op: "update", id: 7, fields: { raster: "file:raster", background: "file:bg" } }],
+      };
+      await expect(submit(failing, { replace: id, files: new Map([...files, ["bg", image("bg.jpg")]]) }))
+        .rejects.toThrow("R2 unavailable");
+
+      expect(mocks.deleteFromR2).not.toHaveBeenCalledWith(expect.anything(), "topos", `submissions/${id}/raster.png`);
+      expect(JSON.parse((await rows())[0].payload).changes[0].fields).toEqual({
+        raster: `https://topos.example.com/submissions/${id}/raster.png`,
+      });
     });
   });
 

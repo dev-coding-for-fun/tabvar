@@ -27,13 +27,14 @@ TABVAR enforces role-based access control (RBAC) at the API layer. The caller's 
 | Capability | Anonymous (`anonymous`) | Member (`member`) | Admin / Super (`admin`, `super`) |
 | :--- | :---: | :---: | :---: |
 | **Pull Routes, Crags, Sectors** | ✅ Full access | ✅ Full access | ✅ Full access |
-| **Pull Public Issues** | ✅ Full access | ✅ Full access | ✅ Full access |
+| **Pull Issues** | ✅ Public issues + own reports in moderation | ✅ All issues | ✅ All issues |
 | **Report New Issue** | ✅ Forced to `In Moderation` | ✅ Any status (`Reported`, etc.) | ✅ Any status |
 | **Upload Issue Photos** | ✅ To own reported issue | ✅ To any issue | ✅ To any issue |
 | **Edit Issue Content** | ❌ 403 Forbidden | ✅ Full access | ✅ Full access |
 | **Change Issue Status** | ❌ 403 Forbidden | ✅ Full access (`Claimed`, `Completed`, etc.) | ✅ Full access |
 | **Soft-Delete Issue** | ❌ 403 Forbidden | ✅ Full access | ✅ Full access |
-| **Save / Delete Topos** | ❌ 403 Forbidden | ✅ Full access | ✅ Full access |
+| **Submit Route Data & Track Own Submissions** | ✅ Full access | ✅ Full access | ✅ Full access |
+| **Save / Delete Topos Directly** | ❌ 403 (use submissions) | ❌ 403 (use submissions) | ✅ Full access |
 
 ### The `anonymous` Role Workflow
 * Third parties that allow unauthenticated or guest users to submit bolt reports should use tokens linked to `anonymous` users.
@@ -216,3 +217,4 @@ All API endpoints return errors in a standardized JSON envelope:
 * [route-sync-api.md](file:///x:/Documents/GitHub/tabvar/docs/route-sync-api.md): Specification for pulling crag, sector, and route catalogs.
 * [topo-sync-api.md](file:///x:/Documents/GitHub/tabvar/docs/topo-sync-api.md): Specification for synchronizing visual topos and SVG annotations.
 * [submissions-api.md](file:///x:/Documents/GitHub/tabvar/docs/submissions-api.md): Proposing new and edited route data for review, and tracking your own submissions.
+* [topobuilder-integration.md](file:///x:/Documents/GitHub/tabvar/docs/topobuilder-integration.md): How the TopoBuilder app should use all of these APIs together.

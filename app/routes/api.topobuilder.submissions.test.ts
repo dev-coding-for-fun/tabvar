@@ -24,7 +24,7 @@ vi.mock("~/lib/submission.server", async (importOriginal) => ({
   parseSubmissionRequest: mocks.parseSubmissionRequest,
 }));
 
-import { SubmissionValidationError } from "~/lib/submission.server";
+import { SubmissionConflictError, SubmissionValidationError } from "~/lib/submission.server";
 import { action, loader } from "./api.topobuilder.submissions";
 
 const post = () => createRouteArgs({
@@ -41,18 +41,41 @@ describe("api.topobuilder.submissions", () => {
   });
 
   it("queues a submission for the token's user", async () => {
-    mocks.createSubmission.mockResolvedValue({ id: "s-1", status: "pending" });
+    mocks.createSubmission.mockResolvedValue({ id: "s-1", status: "pending", replaced: false });
 
     const response = await action(post());
 
     expect(response.status).toBe(201);
-    expect(await readJson(response)).toEqual({ id: "s-1", status: "pending" });
+    expect(await readJson(response)).toEqual({ id: "s-1", status: "pending", replaced: false });
     expect(mocks.createSubmission).toHaveBeenCalledWith(expect.anything(), {
       uid: "submitter",
       source: "topobuilder",
       payload: { changes: [] },
       files: new Map(),
+      replace: null,
     });
+  });
+
+  it("replaces the submission named by ?replace", async () => {
+    mocks.createSubmission.mockResolvedValue({ id: "s-1", status: "pending", replaced: true });
+
+    const response = await action(createRouteArgs({
+      request: new Request("https://example.com/api/topobuilder/submissions?replace=s-1", { method: "POST", body: "{}" }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.createSubmission).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ replace: "s-1" }));
+  });
+
+  it("returns 409 when the submission can't be replaced", async () => {
+    mocks.createSubmission.mockRejectedValue(new SubmissionConflictError("partly applied"));
+
+    const response = await action(post());
+
+    expect(response.status).toBe(409);
+    expect(await readJson(response)).toEqual({ error: "conflict", message: "partly applied" });
   });
 
   it("returns 400 with the validation message for an invalid submission", async () => {

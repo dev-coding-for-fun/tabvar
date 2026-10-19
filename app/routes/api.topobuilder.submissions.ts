@@ -4,6 +4,7 @@ import {
   getSubmissionStatus,
   listMySubmissions,
   parseSubmissionRequest,
+  SubmissionConflictError,
   SubmissionValidationError,
 } from "~/lib/submission.server";
 import {
@@ -58,12 +59,17 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
       source: SOURCE,
       payload,
       files,
+      // Overwrites the caller's pending submission with this id, if there is one.
+      replace: new URL(request.url).searchParams.get("replace"),
     });
 
-    return jsonResponse(submission, { status: 201, headers });
+    return jsonResponse(submission, { status: submission.replaced ? 200 : 201, headers });
   } catch (error) {
     if (error instanceof SubmissionValidationError) {
       return apiError("invalid_submission", 400, error.message, headers);
+    }
+    if (error instanceof SubmissionConflictError) {
+      return apiError("conflict", 409, error.message, headers);
     }
 
     console.error("Error creating submission:", error);
