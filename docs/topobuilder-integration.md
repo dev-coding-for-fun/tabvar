@@ -89,6 +89,7 @@ How to build one from the app's local data:
 - **Edits** carry **only the fields the user changed**. `null` clears a field. Send `baseUpdatedAt`, the record's `updatedAt` from the last pull, so the reviewer is warned if TABVAR changed the record since then.
 - **Linking an unchanged catalog route** to a topo needs no change for that route; just use its ID in the topo's `routes`.
 - **Topos** need a stable `uuid`, and on create the `background` (clean photo) and `raster` (rendered topo) images. Send each image as a multipart part and reference it as `file:<part name>`. JPEG, PNG, GIF, and WebP are accepted. `annotations` is `{ version, items }`.
+- **Annotation route references:** set each item's `routeId` to the TABVAR ID for a catalog route, or to the route's `ref` (its local ID) for a route created in the same submission. Never use a local ID for a route that isn't in the submission; intake rejects it. On approval, TABVAR rewrites refs to the new route IDs, so annotations pulled from `/api/v1/topos` always hold TABVAR IDs. The app maps them back to its local routes through the IDs it adopted (§4). Other item fields are stored untouched.
 - **No deletes.** Retire a route or topo by setting `status`. Topo `status` is `Active` or `Deleted`.
 - **Limits:** 500 changes per submission, 200 routes per topo. Field names and editable fields are listed in [submissions-api.md](submissions-api.md).
 

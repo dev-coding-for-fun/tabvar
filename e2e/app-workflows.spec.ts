@@ -39,7 +39,7 @@ test.describe("as the TopoBuilder app", () => {
           sectorId: "s1",
           background: "file:bg",
           raster: "file:raster",
-          annotations: { version: 1, items: [] },
+          annotations: { version: 1, items: [{ id: "line-1", kind: "climbLine", routeId: "r1", points: [] }] },
           routes: [{ routeId: "r1", label: "1" }],
         },
       },
@@ -73,6 +73,7 @@ test.describe("as the TopoBuilder app", () => {
     const topo = await app.topo(topoUuid);
     expect(topo).toMatchObject({ id: ids.t1, name: topoName, status: "Active" });
     expect(topo.routes).toEqual([expect.objectContaining({ routeId: ids.r1, label: "1" })]);
+    expect(topo.annotations.items).toEqual([expect.objectContaining({ id: "line-1", routeId: ids.r1 })]);
   });
 
   test("only admins publish topos directly, and their edits keep what they leave out", async ({

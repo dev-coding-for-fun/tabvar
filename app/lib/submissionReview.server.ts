@@ -13,6 +13,7 @@ import type { DB } from "./db.d";
 import { slugifyUnique } from "./slug";
 import { toStoredJson } from "./storedJson";
 import {
+  annotationItems,
   SUBMISSION_FIELDS,
   type SubmissionChange,
   type SubmissionEntity,
@@ -79,6 +80,18 @@ function toColumns(change: SubmissionChange, refIds: Map<string, number>): Recor
   return columns;
 }
 
+/** Annotations with each route ref (an item's `routeId`) replaced by the id created for it. */
+function topoAnnotations(change: SubmissionChange, refIds: Map<string, number>): SaveRawTopoPayload["annotations"] {
+  const resolveItem = (item: unknown) =>
+    item && typeof item === "object" && typeof (item as { routeId?: unknown }).routeId === "string"
+      ? { ...item, routeId: resolveRef((item as { routeId: string }).routeId, refIds) }
+      : item;
+  const value = change.fields.annotations;
+  if (Array.isArray(value)) return value.map(resolveItem);
+  const document = value as { version?: number };
+  return { version: document.version ?? 1, items: annotationItems(value).map(resolveItem) };
+}
+
 function topoRoutes(change: SubmissionChange, refIds: Map<string, number>) {
   const routes = change.fields.routes as SubmissionTopoRoute[] | undefined;
   return routes?.map((link) => ({
@@ -123,7 +136,7 @@ async function saveTopo(
     ...("status" in fields ? { status: fields.status as TopoStatus } : {}),
     ...("background" in fields ? { backgroundUrl: fields.background as string } : {}),
     ...("raster" in fields ? { rasterUrl: fields.raster as string } : {}),
-    ...("annotations" in fields ? { annotations: fields.annotations as SaveRawTopoPayload["annotations"] } : {}),
+    ...("annotations" in fields ? { annotations: topoAnnotations(change, refIds) } : {}),
     ...("routes" in fields ? { routes: topoRoutes(change, refIds) } : {}),
   };
   const topo = await saveRawTopo(context, { uid: submission.uid, payload });

@@ -84,6 +84,7 @@ Creates a topo, or updates one matched by `id` or `uuid`.
 - `routes` replaces all of the topo's route links when present; omit it to leave the links alone. Each entry needs the `routeId` of an existing route, and a route can only be linked once. New routes can't be created here; propose them through the [Submissions API](submissions-api.md), or add them in the crag editor.
 - `backgroundUrl` and `rasterUrl` may name images already stored by TABVAR instead of uploading files. Other hosts are rejected.
 - `status` must be `Active` or `Deleted`.
+- `annotations` is `{ version, items }`, stored as given. An item's `routeId` holds a TABVAR route ID: topos published from submissions have local refs replaced on approval, and direct saves should use TABVAR IDs too.
 
 ### Response `201 Created` (new topo) / `200 OK` (update)
 

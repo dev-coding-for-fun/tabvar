@@ -48,6 +48,7 @@ Send the submission as a JSON body, or as `multipart/form-data` with the JSON in
 - **Changes** are applied in order. `op` is `create` or `update`; there are no deletes. Retire a route or topo by setting its `status`.
 - **`ref`** names a create so later changes can point at it. Use the client's own local ID if that's convenient; the response to a status request maps each `ref` to its new TABVAR ID.
 - **Parent IDs** (`cragId`, `sectorId`, and `routeId` in a topo's `routes`) are an existing numeric ID or the `ref` of an earlier create.
+- **Annotations** are stored as given, except for `routeId` on an annotation item, such as a line drawn for a route. It follows the same rule: an existing route's numeric ID, or the `ref` of a route created earlier in the submission. Approval replaces refs with the new route IDs, so published annotations only contain TABVAR route IDs. An item without a route omits `routeId` or sets it to `null`.
 - **Updates** need the target's `id` and carry only the fields being changed. `null` clears a field. `baseUpdatedAt`, the record's `updatedAt` when the user last saw it, is optional; it helps the reviewer spot conflicts.
 - **Files** are multipart parts referenced as `file:<part name>`. They must be images.
 - **Editable fields** use the sync API's names:

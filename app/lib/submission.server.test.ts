@@ -51,7 +51,7 @@ const fullSubmission = {
         sectorId: "s1",
         background: "file:bg",
         raster: "file:raster",
-        annotations: { version: 1, items: [] },
+        annotations: { version: 1, items: [{ id: "a1", routeId: "r1" }, { id: "a2", routeId: 100 }, { id: "a3", routeId: null }] },
         routes: [{ routeId: 100, label: "1" }, { routeId: "r1", label: "2", sortOrder: 2 }],
       },
     },
@@ -160,6 +160,12 @@ describe("submission intake", () => {
       uuid: "topo-existing", name: "Again", background: "file:bg", raster: "file:raster",
     } }] }, '"topo-existing" belongs to an existing topo'],
     ["a topo uuid change", { changes: [{ entity: "topo", op: "update", id: 7, fields: { uuid: "other" } }] }, "fields.uuid can't be changed"],
+    ["an annotation naming a route by an unknown local id", { changes: [{ entity: "topo", op: "update", id: 7, fields: {
+      annotations: { version: 1, items: [{ id: "a1", routeId: "local-route-9" }] },
+    } }] }, 'fields.annotations.items[0].routeId refers to "local-route-9"'],
+    ["an annotation naming a route that doesn't exist", { changes: [{ entity: "topo", op: "update", id: 7, fields: {
+      annotations: { version: 1, items: [{ id: "a1", routeId: 404 }] },
+    } }] }, "fields.annotations.items[0].routeId refers to route 404"],
     ["an unknown topo status", { changes: [{ entity: "topo", op: "update", id: 7, fields: { status: "Retired" } }] }, "fields.status must be one of Active, Deleted"],
   ])("rejects %s", async (_label, payload, message) => {
     const attempt = createSubmission(createContext(), { uid: "submitter", source: "topobuilder", payload, files: files() });

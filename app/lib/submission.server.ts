@@ -215,6 +215,12 @@ export async function parseSubmissionRequest(request: Request): Promise<{ payloa
   }
 }
 
+/** The items of an annotation document, which may also be sent as a bare array. */
+export function annotationItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  return isRecord(value) && Array.isArray(value.items) ? value.items : [];
+}
+
 type ExistenceCheck = { entity: SubmissionEntity; id: number; path: string };
 
 class Problems {
@@ -313,11 +319,19 @@ function checkField(
       }
       return;
     }
-    case "annotations":
+    case "annotations": {
       if (!Array.isArray(value) && !(isRecord(value) && Array.isArray(value.items))) {
         problems.add(`${path} must be an annotation document`);
+        return;
       }
+      // An annotation drawn for a route names it like a topo route link does.
+      annotationItems(value).forEach((item, index) => {
+        if (isRecord(item) && item.routeId !== undefined && item.routeId !== null) {
+          checkParent(item.routeId, `${path}.items[${index}].routeId`, "route", refs, checks, problems);
+        }
+      });
       return;
+    }
     case "routes":
       if (!Array.isArray(value)) {
         problems.add(`${path} must be an array`);

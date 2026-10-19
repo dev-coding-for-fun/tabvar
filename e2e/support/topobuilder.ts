@@ -94,7 +94,7 @@ export function topobuilderApi(request: APIRequestContext, token: string) {
     },
     async topo(uuid: string) {
       const { topo } = await request.get(`/api/v1/topos?uuid=${encodeURIComponent(uuid)}`, { headers })
-        .then(json<{ topo: { id: number; name: string; description: string | null; status: string; rasterImageUrl: string; routes: { routeId: number; label: string | null }[] } }>);
+        .then(json<{ topo: { id: number; name: string; description: string | null; status: string; rasterImageUrl: string; routes: { routeId: number; label: string | null }[]; annotations: { version: number; items: Record<string, unknown>[] } } }>);
       return topo;
     },
     saveTopo(payload: unknown, files: Record<string, Upload> = {}): Promise<APIResponse> {

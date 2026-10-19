@@ -39,7 +39,7 @@ const multiLevel = {
         sectorId: "s1",
         background: "https://topos.example.com/submissions/sub/bg.jpg",
         raster: "https://topos.example.com/submissions/sub/raster.png",
-        annotations: { version: 1, items: [{ id: "line-1", routeId: 100 }] },
+        annotations: { version: 1, items: [{ id: "line-1", routeId: 100 }, { id: "line-2", kind: "climbLine", routeId: "r1" }, { id: "walkoff-1" }] },
         routes: [{ routeId: 100, label: "1" }, { routeId: "r1", label: "2" }],
       },
     },
@@ -94,9 +94,10 @@ describe("submission review", () => {
     expect(sector.crag_id).toBe(crag.id);
     expect(route).toEqual(expect.objectContaining({ sector_id: sector.id, grade_yds: "5.11a" }));
     expect(topo).toEqual(expect.objectContaining({ sector_id: sector.id, raster_image_url: "https://topos.example.com/submissions/sub/raster.png" }));
+    // Annotations drawn for a new route point at its published id, not the submission's ref.
     expect(JSON.parse(topo.annotations_json)).toEqual({
       version: 1,
-      items: [{ id: "line-1", routeId: 100 }],
+      items: [{ id: "line-1", routeId: 100 }, { id: "line-2", kind: "climbLine", routeId: route.id }, { id: "walkoff-1" }],
     });
     expect(await db.selectFrom("route_topo").select(["route_id", "label"]).orderBy("sort_order").execute())
       .toEqual([{ route_id: 100, label: "1" }, { route_id: route.id, label: "2" }]);
