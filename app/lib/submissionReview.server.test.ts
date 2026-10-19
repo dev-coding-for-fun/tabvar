@@ -151,6 +151,43 @@ describe("submission review", () => {
     expect(await db.selectFrom("submission").select("id").execute()).toEqual([]);
   });
 
+  it("resumes without repeating creates after a crash that skipped the error save", async () => {
+    queue("sub", {
+      changes: [
+        { ref: "c1", entity: "crag", op: "create", fields: { name: "New Crag" } },
+        { ref: "s1", entity: "sector", op: "create", fields: { name: "Main Wall", cragId: "c1" } },
+        { entity: "route", op: "update", id: 100, fields: { boltCount: 7 } },
+      ],
+    });
+    // The last change fails, and saving the error fails too, as if the worker died
+    // mid-approval: only the progress saved after each change survives.
+    sqlite.exec(`
+      CREATE TRIGGER block_route_update BEFORE UPDATE ON route BEGIN SELECT RAISE(ABORT, 'Route is locked'); END;
+      CREATE TRIGGER block_error_save BEFORE UPDATE ON submission WHEN NEW.error IS NOT NULL
+        BEGIN SELECT RAISE(ABORT, 'Worker stopped'); END;
+    `);
+
+    await expect(approveSubmission(createContext(), { id: "sub", reviewer })).rejects.toThrow("Worker stopped");
+    const queued = await db.selectFrom("submission").selectAll().executeTakeFirstOrThrow();
+    expect(queued.error).toBeNull();
+    expect(JSON.parse(queued.payload).changes.map((change: { applied?: boolean }) => change.applied ?? false))
+      .toEqual([true, true, false]);
+
+    sqlite.exec("DROP TRIGGER block_route_update; DROP TRIGGER block_error_save;");
+    const result = await approveSubmission(createContext(), { id: "sub", reviewer });
+
+    const crags = await db.selectFrom("crag").select("id").where("name", "=", "New Crag").execute();
+    const sectors = await db.selectFrom("sector").select(["id", "crag_id"]).where("name", "=", "Main Wall").execute();
+    expect(crags).toHaveLength(1);
+    expect(sectors).toEqual([{ id: expect.any(Number), crag_id: crags[0].id }]);
+    expect(result).toEqual({ ok: true, ids: { c1: crags[0].id, s1: sectors[0].id } });
+    expect((await auditRows()).map((row) => [row.entity, row.action])).toEqual([
+      ["crag", "create"],
+      ["sector", "create"],
+      ["route", "update"],
+    ]);
+  });
+
   it("fails clearly when an edited record was removed after the submission arrived", async () => {
     queue("sub", { changes: [{ entity: "route", op: "update", id: 100, fields: { boltCount: 7 } }] });
     sqlite.exec("DELETE FROM route WHERE id = 100");

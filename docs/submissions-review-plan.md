@@ -90,9 +90,9 @@ Approve runs through the changes in order:
 - **update:** set only the fields in the change.
 - **topo:** call the existing `saveRawTopo` with the stored image URLs and the resolved route IDs.
 
-Each applied change writes an audit row as soon as it succeeds. When every change has succeeded, delete the submission row.
+Each applied change writes an audit row as soon as it succeeds, then the payload is saved with that change marked `applied` (and, for a create, its new ID). When every change has succeeded, delete the submission row.
 
-If a change fails, stop. Save the payload with the IDs created so far, set `error`, and keep the row in the queue. Approving again skips creates that already have an ID, and doesn't write their audit rows a second time. Rejecting at that point doesn't undo the changes that were already applied.
+If a change fails, stop, set `error`, and keep the row in the queue. Approving again skips changes already marked `applied` and doesn't write their audit rows a second time. Because progress is saved after every change, this also holds after a crash or timeout that never reached the error handler; at most the one change in flight at that moment can be repeated. Rejecting at that point doesn't undo the changes that were already applied.
 
 Reject writes one audit row per remaining change with `decision = 'rejected'`, then deletes the row. It doesn't touch the main tables. Uploaded files stay in R2, so rejected audit rows still point at them.
 

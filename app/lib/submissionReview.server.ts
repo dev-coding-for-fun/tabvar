@@ -216,6 +216,12 @@ export async function approveSubmission(
         ref: change.ref ?? null,
       }]);
       change.applied = true;
+      // Saved after every change, not only on failure, so approving again after a crash
+      // or timeout (when the catch below never runs) skips what's already applied.
+      await db.updateTable("submission")
+        .set({ payload: toStoredJson(submission.payload) })
+        .where("id", "=", id)
+        .execute();
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
