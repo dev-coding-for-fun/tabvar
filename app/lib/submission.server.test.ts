@@ -239,6 +239,15 @@ describe("submission intake", () => {
     expect(await stored()).toEqual([]);
   });
 
+  it("stores a rotated photo's size as it displays", async () => {
+    await submit(
+      [{ entity: "topo", id: 7, fields: { background: "file:bg" } }],
+      { files: new Map([["bg", createImageFile("bg.jpg", { width: 4032, height: 3024, orientation: 6 })]]) },
+    );
+
+    expect((await stored())[0].fields).toMatchObject({ imageWidth: 3024, imageHeight: 4032 });
+  });
+
   it("rejects an image it can't measure, before storing anything", async () => {
     const attempt = submit(
       [{ entity: "topo", id: 7, fields: { background: "file:bg" } }],

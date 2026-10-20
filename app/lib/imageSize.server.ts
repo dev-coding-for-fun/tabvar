@@ -12,7 +12,14 @@ export class ImageSizeError extends Error {
 // image-size's names for the formats in IMAGE_TYPES.
 const MEASURABLE_TYPES = new Set(["jpg", "png", "gif", "webp"]);
 
-/** Measures an uploaded image from its own header. Topo annotations are placed relative to the background's size. */
+// EXIF orientations 5–8 rotate the image a quarter turn, so it displays with width and height swapped.
+const QUARTER_TURN_ORIENTATIONS = new Set([5, 6, 7, 8]);
+
+/**
+ * Measures an uploaded image from its own header, as it displays: browsers and
+ * the app apply a JPEG's EXIF orientation, and topo annotations are placed
+ * relative to the background as displayed.
+ */
 export async function measureImage(file: Blob): Promise<ImageSize> {
   let size;
   try {
@@ -26,5 +33,7 @@ export async function measureImage(file: Blob): Promise<ImageSize> {
   if (!(size.width > 0 && size.height > 0)) {
     throw new ImageSizeError("has no width or height");
   }
-  return { width: size.width, height: size.height };
+  return size.orientation !== undefined && QUARTER_TURN_ORIENTATIONS.has(size.orientation)
+    ? { width: size.height, height: size.width }
+    : { width: size.width, height: size.height };
 }

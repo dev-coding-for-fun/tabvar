@@ -56,11 +56,16 @@ export function createUser(overrides: Partial<User> = {}): User {
 
 /**
  * A minimal image file with real headers, so it can be measured: a PNG for
- * `image/png`, otherwise a JPEG.
+ * `image/png`, otherwise a JPEG, optionally with an EXIF orientation.
  */
 export function createImageFile(
   name: string,
-  { type = "image/jpeg", width = 640, height = 480 }: { type?: string; width?: number; height?: number } = {},
+  { type = "image/jpeg", width = 640, height = 480, orientation }: {
+    type?: string;
+    width?: number;
+    height?: number;
+    orientation?: number;
+  } = {},
 ): File {
   const u16 = (value: number) => [value >> 8, value & 0xff];
   const u32 = (value: number) => [...u16(value >>> 16), ...u16(value & 0xffff)];
@@ -68,11 +73,19 @@ export function createImageFile(
   if (type === "image/png") {
     bytes = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...u32(13), 0x49, 0x48, 0x44, 0x52, ...u32(width), ...u32(height), 8, 2, 0, 0, 0, ...u32(0)];
   } else {
-    const jfif = [0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, ...u16(1), ...u16(1), 0, 0];
+    // An EXIF APP1 segment when there's an orientation, else a plain JFIF APP0.
+    const header = orientation === undefined
+      ? [0xff, 0xe0, ...u16(16), 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, ...u16(1), ...u16(1), 0, 0]
+      : (() => {
+        // Big-endian TIFF with one IFD entry: tag 274 (orientation), SHORT, count 1.
+        const tiff = [0x4d, 0x4d, 0, 0x2a, ...u32(8), ...u16(1), ...u16(274), ...u16(3), ...u32(1), ...u16(orientation), 0, 0, ...u32(0)];
+        const exif = [0x45, 0x78, 0x69, 0x66, 0, 0, ...tiff];
+        return [0xff, 0xe1, ...u16(exif.length + 2), ...exif];
+      })();
     const startOfFrame = [8, ...u16(height), ...u16(width), 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1];
     bytes = [
       0xff, 0xd8,
-      0xff, 0xe0, ...u16(jfif.length + 2), ...jfif,
+      ...header,
       0xff, 0xc0, ...u16(startOfFrame.length + 2), ...startOfFrame,
       0xff, 0xd9,
     ];

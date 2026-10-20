@@ -10,6 +10,18 @@ describe("measureImage", () => {
       .resolves.toEqual({ width: 3024, height: 4032 });
   });
 
+  it("reports a JPEG's size as displayed after its EXIF orientation", async () => {
+    // A phone photo stored landscape, tagged to display rotated a quarter turn.
+    for (const orientation of [5, 6, 7, 8]) {
+      await expect(measureImage(createImageFile("a.jpg", { width: 4032, height: 3024, orientation })))
+        .resolves.toEqual({ width: 3024, height: 4032 });
+    }
+    for (const orientation of [1, 2, 3, 4]) {
+      await expect(measureImage(createImageFile("a.jpg", { width: 4032, height: 3024, orientation })))
+        .resolves.toEqual({ width: 4032, height: 3024 });
+    }
+  });
+
   it("refuses files that aren't images", async () => {
     await expect(measureImage(new File(["not an image"], "a.jpg", { type: "image/jpeg" }))).rejects.toThrow(ImageSizeError);
     await expect(measureImage(new File(["not an image"], "a.jpg", { type: "image/jpeg" }))).rejects.toThrow(/isn't a readable image/);

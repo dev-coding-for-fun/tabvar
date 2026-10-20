@@ -58,7 +58,7 @@ Creates a topo, or updates one matched by `id` or `uuid`.
 | `raster` | File (`image/*`) | The rendered topo with lines and badges. Required to create a topo unless `rasterUrl` is given. |
 | `payload` | String (JSON) | The topo fields below. |
 
-Images must be JPEG, PNG, GIF, or WebP. TABVAR measures the uploaded background and stores its size as `imageWidth` and `imageHeight`, the space annotations are positioned in; clients don't send them.
+Images must be JPEG, PNG, GIF, or WebP. TABVAR measures the uploaded background and stores its size as `imageWidth` and `imageHeight`, the space annotations are positioned in; clients don't send them. The size is the image as displayed, after any EXIF orientation: a quarter-turn orientation (5–8) swaps width and height.
 
 ### `payload` JSON
 

@@ -65,7 +65,7 @@ References inside `fields` work the same way: `cragId`, `sectorId`, a topo's `ro
 
 Files are multipart parts referenced as `file:<part name>`. They must be JPEG, PNG, GIF, or WebP.
 
-TABVAR measures a topo's background when it arrives and adds its size to the proposal as `imageWidth` and `imageHeight`. Annotations are positioned relative to that image. Don't send these two fields; they're set from the file.
+TABVAR measures a topo's background when it arrives and adds its size to the proposal as `imageWidth` and `imageHeight`. The size is the image as displayed: a JPEG whose EXIF orientation turns it a quarter turn has its width and height swapped. Annotations are positioned relative to that image. Don't send these two fields; they're set from the file.
 
 ### Editable fields
 
