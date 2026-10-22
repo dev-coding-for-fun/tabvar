@@ -6,12 +6,23 @@ export interface UploadFileResult {
   type: string;
   hash?: string;
   size?: number;
+  /** False when a content-hashed object was already stored, so nothing was written. */
+  created: boolean;
 }
 
 export interface UploadFileOptions {
   keyPrefix?: string;
   useContentHash?: boolean;
 }
+
+// Content-hashed keys take their extension from the type, so the same image sent
+// as "photo.JPG", "photo.jpeg", or an unnamed blob is stored once.
+const CONTENT_HASH_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+};
 
 /**
  * Computes a SHA-1 hash of an ArrayBuffer using the native Web Crypto API.
@@ -115,14 +126,17 @@ export async function uploadFileToR2(
   const fileSize = arrayBuffer.byteLength;
 
   let objectKey: string;
+  let created = true;
   if (options.useContentHash) {
     const extMatch = decodedFileName.match(/\.([a-zA-Z0-9]+)$/);
-    const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '';
+    const typeExt = CONTENT_HASH_EXTENSIONS[contentType];
+    const ext = typeExt ? `.${typeExt}` : extMatch ? `.${extMatch[1].toLowerCase()}` : '';
     const hashFileName = `${fileHash}${ext}`;
     objectKey = normalizedPrefix ? `${normalizedPrefix}/${hashFileName}` : hashFileName;
 
     // Avoid redundant writes if object already exists in R2
     const existing = await bucket.head(objectKey);
+    created = !existing;
     if (!existing) {
       await bucket.put(objectKey, arrayBuffer, {
         httpMetadata: {
@@ -149,6 +163,7 @@ export async function uploadFileToR2(
     type: contentType,
     hash: fileHash,
     size: fileSize,
+    created,
   };
 }
 

@@ -5,21 +5,15 @@ import { resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { Kysely, SqliteDialect, type SqliteDatabase } from "kysely";
 import type { DB } from "~/lib/db.d";
-import { createContext, createImageFile } from "~/test/helpers";
+import { calculateFileHash } from "~/lib/s3.server";
+import { createContext, createImageFile, createMemoryR2Bucket } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
-  uploadFileToR2: vi.fn(),
-  deleteFromR2: vi.fn(),
 }));
 
 vi.mock("~/lib/db", () => ({
   getDB: mocks.getDB,
-}));
-
-vi.mock("~/lib/s3.server", () => ({
-  uploadFileToR2: mocks.uploadFileToR2,
-  deleteFromR2: mocks.deleteFromR2,
 }));
 
 import {
@@ -34,6 +28,12 @@ const Sqlite = createRequire(import.meta.url)("better-sqlite3") as new (path: st
 
 const image = (name: string, type = "image/jpeg") => createImageFile(name, { type });
 
+/** Where intake stores a file: its content hash, under the prefix for its kind. */
+async function keyFor(prefix: "topos/raw" | "topos/raster", file: File) {
+  return `${prefix}/${await calculateFileHash(await file.arrayBuffer())}.${file.type === "image/png" ? "png" : "jpg"}`;
+}
+const urlOf = (key: string) => `https://topos.example.com/${key}`;
+
 const newCrag = { entity: "crag", ref: "c1", fields: { name: "New Crag" } };
 const newSector = { entity: "sector", ref: "s1", fields: { name: "Main Wall", cragId: "c1" } };
 const newRoute = { entity: "route", ref: "r1", fields: { name: "New Line", sectorId: "s1", gradeYds: "5.11a" } };
@@ -41,9 +41,10 @@ const newRoute = { entity: "route", ref: "r1", fields: { name: "New Line", secto
 describe("submission intake", () => {
   let sqlite: InstanceType<typeof Sqlite>;
   let db: Kysely<DB>;
+  let bucket: ReturnType<typeof createMemoryR2Bucket>;
 
   const submit = (objects: unknown[], options: { uid?: string; files?: Map<string, File> } = {}) =>
-    receiveObjects(createContext(), {
+    receiveObjects(createContext({ TABVAR_TOPOS: bucket as unknown as R2Bucket }), {
       uid: options.uid ?? "submitter",
       source: "topobuilder",
       payload: { objects },
@@ -79,14 +80,12 @@ describe("submission intake", () => {
       INSERT INTO topo (id, uuid, name, background_image_url, raster_image_url) VALUES (7, 'topo-existing', 'Topo', 'bg.jpg', 'raster.jpg');
     `);
     mocks.getDB.mockReturnValue(db);
-    mocks.uploadFileToR2.mockImplementation(async (_context, file: File, _bucket, domain: string, options) => ({
-      url: `${domain}/${options.keyPrefix}/${file.name}`,
-      name: `${options.keyPrefix}/${file.name}`,
-      type: file.type,
-    }));
+    bucket = createMemoryR2Bucket();
   });
 
   it("stores one pending proposal per object, with uploaded files and refs to new parents", async () => {
+    const bg = createImageFile("bg.jpg", { width: 4032, height: 3024 });
+    const raster = image("raster.png", "image/png");
     const result = await submit(
       [
         newCrag,
@@ -102,7 +101,7 @@ describe("submission intake", () => {
           },
         },
       ],
-      { files: new Map([["bg", createImageFile("bg.jpg", { width: 4032, height: 3024 })], ["raster", image("raster.png", "image/png")]]) },
+      { files: new Map([["bg", bg], ["raster", raster]]) },
     );
 
     expect(result.map((object) => object.state)).toEqual(["pending", "pending", "pending", "pending", "pending"]);
@@ -117,10 +116,94 @@ describe("submission intake", () => {
     expect(rows[1].fields).toEqual({ name: "Main Wall", cragId: "c1" });
     expect(rows[3]).toMatchObject({ fields: { boltCount: 7 }, base_updated_at: "2026-06-09 10:00:00" });
     expect(rows[4].fields).toMatchObject({
-      background: "https://topos.example.com/submissions/submitter/bg.jpg",
-      raster: "https://topos.example.com/submissions/submitter/raster.png",
+      background: urlOf(await keyFor("topos/raw", bg)),
+      raster: urlOf(await keyFor("topos/raster", raster)),
       imageWidth: 4032,
       imageHeight: 3024,
+    });
+  });
+
+  describe("images", () => {
+    const storedKeys = () => [...bucket.objects.keys()].sort();
+    const annotations = { version: 1, items: [{ id: "a1", x: 0.5, y: 0.25 }] };
+
+    it("stores each image once, however often and under whatever name it's sent, keeping only the latest raster", async () => {
+      const bg = createImageFile("bg.jpg", { width: 4032, height: 3024 });
+      const sameBgRenamed = new File([await bg.arrayBuffer()], "IMG_0001.JPEG", { type: "image/jpeg" });
+      const firstRaster = createImageFile("raster.png", { type: "image/png", width: 800 });
+      const secondRaster = createImageFile("raster.png", { type: "image/png", width: 801 });
+      const topo = (background: string, raster: string) => ({
+        entity: "topo", ref: "t1", fields: { uuid: "topo-new", name: "Main Wall Left", background, raster, annotations },
+      });
+
+      await submit([topo("file:bg", "file:raster")], { files: new Map([["bg", bg], ["raster", firstRaster]]) });
+      await submit([topo("file:photo", "file:render")], { files: new Map([["photo", sameBgRenamed], ["render", secondRaster]]) });
+      await submit([topo("file:photo", "file:render")], { files: new Map([["photo", sameBgRenamed], ["render", secondRaster]]) });
+
+      const backgroundKey = await keyFor("topos/raw", bg);
+      const rasterKey = await keyFor("topos/raster", secondRaster);
+      expect(storedKeys()).toEqual([backgroundKey, rasterKey].sort());
+      expect((await stored()).map((row) => row.fields)).toEqual([
+        expect.objectContaining({ background: urlOf(backgroundKey), raster: urlOf(rasterKey) }),
+      ]);
+    });
+
+    it("drops a published topo sent again with nothing new but a fresh rendering", async () => {
+      const bg = createImageFile("bg.jpg");
+      sqlite.exec(`
+        UPDATE topo SET background_image_url = '${urlOf(await keyFor("topos/raw", bg))}',
+          annotations_json = '${JSON.stringify(annotations)}' WHERE id = 7;
+      `);
+      publish("topo", "t7", 7);
+
+      const result = await submit(
+        // The same annotations, with keys in another order.
+        [{ entity: "topo", ref: "t7", fields: { background: "file:bg", raster: "file:raster", annotations: { items: [{ y: 0.25, x: 0.5, id: "a1" }], version: 1 } } }],
+        { files: new Map([["bg", bg], ["raster", image("raster.png", "image/png")]]) },
+      );
+
+      expect(result).toEqual([{ entity: "topo", ref: "t7", id: 7, state: "unchanged" }]);
+      expect((await stored())[0].state).toBe("published");
+      expect(storedKeys()).toEqual([]);
+    });
+
+    it("proposes the record's own background when an edit sends the same photo again", async () => {
+      const bg = createImageFile("bg.jpg");
+      const raster = image("raster.png", "image/png");
+      sqlite.exec(`
+        UPDATE topo SET background_image_url = 'https://legacy.example.com/bg.jpg',
+          background_image_hash = '${await calculateFileHash(await bg.arrayBuffer())}' WHERE id = 7;
+      `);
+
+      await submit(
+        [{ entity: "topo", id: 7, fields: { name: "Renamed", background: "file:bg", raster: "file:raster" } }],
+        { files: new Map([["bg", bg], ["raster", raster]]) },
+      );
+
+      expect((await stored())[0].fields).toEqual({
+        name: "Renamed",
+        background: "https://legacy.example.com/bg.jpg",
+        raster: urlOf(await keyFor("topos/raster", raster)),
+      });
+      expect(storedKeys()).toEqual([await keyFor("topos/raster", raster)]);
+    });
+
+    it("deletes a withdrawn proposal's raster unless a topo uses it, and keeps its background", async () => {
+      const bg = createImageFile("bg.jpg");
+      const raster = image("raster.png", "image/png");
+      const sharedRaster = createImageFile("shared.png", { type: "image/png", width: 900 });
+      sqlite.exec(`UPDATE topo SET raster_image_url = '${urlOf(await keyFor("topos/raster", sharedRaster))}' WHERE id = 7`);
+      await submit(
+        [
+          { entity: "topo", ref: "t1", fields: { uuid: "topo-1", name: "One", background: "file:bg", raster: "file:raster" } },
+          { entity: "topo", ref: "t2", fields: { uuid: "topo-2", name: "Two", background: "file:bg", raster: "file:shared" } },
+        ],
+        { files: new Map([["bg", bg], ["raster", raster], ["shared", sharedRaster]]) },
+      );
+
+      await submit([{ entity: "topo", ref: "t1", withdraw: true }, { entity: "topo", ref: "t2", withdraw: true }]);
+
+      expect(storedKeys()).toEqual([await keyFor("topos/raw", bg), await keyFor("topos/raster", sharedRaster)].sort());
     });
   });
 
@@ -235,7 +318,7 @@ describe("submission intake", () => {
 
     await expect(attempt).rejects.toBeInstanceOf(SubmissionValidationError);
     await expect(attempt).rejects.toThrow(message);
-    expect(mocks.uploadFileToR2).not.toHaveBeenCalled();
+    expect(bucket.put).not.toHaveBeenCalled();
     expect(await stored()).toEqual([]);
   });
 
@@ -255,7 +338,7 @@ describe("submission intake", () => {
     );
 
     await expect(attempt).rejects.toThrow("objects[0].fields.background isn't a readable image");
-    expect(mocks.uploadFileToR2).not.toHaveBeenCalled();
+    expect(bucket.put).not.toHaveBeenCalled();
   });
 
   it("rejects files that aren't images", async () => {
@@ -267,14 +350,20 @@ describe("submission intake", () => {
     await expect(attempt).rejects.toThrow('unsupported file type "application/pdf"');
   });
 
-  it("removes newly uploaded files when the proposals can't be stored", async () => {
+  it("removes newly uploaded files when the proposals can't be stored, keeping ones stored before", async () => {
+    const bg = image("bg.jpg");
+    const raster = image("raster.png", "image/png");
+    const backgroundKey = await keyFor("topos/raw", bg);
+    bucket.objects.set(backgroundKey, await bg.arrayBuffer());
+
     const attempt = submit(
-      [{ entity: "topo", id: 7, fields: { raster: "file:raster" } }],
-      { uid: "no-such-user", files: new Map([["raster", image("raster.png", "image/png")]]) },
+      [{ entity: "topo", id: 7, fields: { name: "Renamed", background: "file:bg", raster: "file:raster" } }],
+      { uid: "no-such-user", files: new Map([["bg", bg], ["raster", raster]]) },
     );
 
     await expect(attempt).rejects.toThrow("FOREIGN KEY");
-    expect(mocks.deleteFromR2).toHaveBeenCalledWith(expect.anything(), "topos", "submissions/no-such-user/raster.png");
+    expect(bucket.put).toHaveBeenCalledWith(await keyFor("topos/raster", raster), expect.anything(), expect.anything());
+    expect([...bucket.objects.keys()]).toEqual([backgroundKey]);
   });
 
   it("reads a JSON body or a multipart submission with file parts", async () => {

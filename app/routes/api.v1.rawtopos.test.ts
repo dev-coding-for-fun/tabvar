@@ -213,7 +213,7 @@ describe("api.v1.topos endpoint", () => {
       db = new Kysely<DB>({ dialect: new SqliteDialect({ database: sqlite }) });
       sqlite.exec(readFileSync(resolve("migrations", "0002_initial_setup.sql"), "utf8"));
       sqlite.exec("ALTER TABLE route ADD COLUMN updated_at TIMESTAMP");
-      for (const migration of ["0062_add_raw_topos.sql", "0063_add_topo_coordinates.sql"]) {
+      for (const migration of ["0062_add_raw_topos.sql", "0063_add_topo_coordinates.sql", "0072_submission_per_object.sql"]) {
         sqlite.exec(readFileSync(resolve("migrations", migration), "utf8"));
       }
       sqlite.exec(`

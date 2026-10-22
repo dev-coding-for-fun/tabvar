@@ -154,7 +154,23 @@ describe("s3.server (R2 native binding)", () => {
     });
 
     expect(result.hash).toBe(expectedHash);
+    expect(result.created).toBe(false);
     expect(env.TABVAR_ISSUES_UPLOADS.head).toHaveBeenCalledWith(`issues/${expectedHash}.jpg`);
     expect(env.TABVAR_ISSUES_UPLOADS.put).not.toHaveBeenCalled();
+  });
+
+  it("gives the same image one content-hashed key whatever its file name", async () => {
+    const context = createContext();
+    const upload = (name: string) => uploadFileToR2(
+      context,
+      new File(["test content"], name, { type: "image/jpeg" }),
+      "issues",
+      "https://issues.example.com",
+      { keyPrefix: "issues", useContentHash: true },
+    );
+
+    const keys = await Promise.all(["photo.JPG", "photo.jpeg", "blob"].map(async (name) => (await upload(name)).name));
+
+    expect(new Set(keys)).toEqual(new Set(["issues/1eebdf4fdc9fc7bf283031b93f9aef3338de9052.jpg"]));
   });
 });

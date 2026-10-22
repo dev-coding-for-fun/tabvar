@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { Kysely, SqliteDialect, type SqliteDatabase } from "kysely";
 import type { DB } from "~/lib/db.d";
-import { createContext } from "~/test/helpers";
+import { createContext, createMemoryR2Bucket } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
   getDB: vi.fn(),
@@ -191,5 +191,45 @@ describe("submission review", () => {
       expect(await review(createContext(), { item: published, reviewer }))
         .toEqual({ ok: false, error: "This has already been decided or doesn't exist." });
     }
+  });
+
+  describe("topo images", () => {
+    const key = (prefix: string, digit: string, ext = "png") => `${prefix}/${digit.repeat(40)}.${ext}`;
+    const url = (objectKey: string) => `https://topos.example.com/${objectKey}`;
+    const oldBackground = key("topos/raw", "a", "jpg");
+    const oldRaster = key("topos/raster", "b");
+    const newBackground = key("topos/raw", "c", "jpg");
+    const newRaster = key("topos/raster", "d");
+    let bucket: ReturnType<typeof createMemoryR2Bucket>;
+    const context = () => createContext({ TABVAR_TOPOS: bucket as unknown as R2Bucket });
+
+    beforeEach(() => {
+      bucket = createMemoryR2Bucket();
+      for (const objectKey of [oldBackground, oldRaster, newBackground, newRaster]) bucket.objects.set(objectKey, new ArrayBuffer(1));
+      sqlite.exec(`
+        INSERT INTO topo (id, uuid, name, background_image_url, raster_image_url)
+        VALUES (7, 'topo-7', 'Topo', '${url(oldBackground)}', '${url(oldRaster)}');
+      `);
+    });
+
+    it("deletes the raster an approved edit replaces, and archives the old background", async () => {
+      const edit = await propose(
+        "topo",
+        { background: url(newBackground), raster: url(newRaster), imageWidth: 800, imageHeight: 600 },
+        { targetId: 7 },
+      );
+
+      expect(await approveChain(context(), { item: edit, reviewer })).toEqual({ ok: true });
+
+      expect([...bucket.objects.keys()].sort()).toEqual([oldBackground, newBackground, newRaster].sort());
+    });
+
+    it("deletes a rejected proposal's raster and keeps its background", async () => {
+      const edit = await propose("topo", { background: url(newBackground), raster: url(newRaster) }, { targetId: 7 });
+
+      expect(await rejectChain(context(), { item: edit, reviewer })).toEqual({ ok: true });
+
+      expect([...bucket.objects.keys()].sort()).toEqual([oldBackground, oldRaster, newBackground].sort());
+    });
   });
 });

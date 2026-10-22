@@ -72,7 +72,7 @@ Unique indexes on `(uid, ref)` and `(uid, entity, target_id)` keep one row per a
   - topo: `uuid`, `name`, `description`, `cragId`, `sectorId`, `latitude`, `longitude`, `status`, `annotations`, `background`, `raster`, `routes`
 - **Only changed fields** are sent. `null` clears a field.
 - **References** (`cragId`, `sectorId`, a topo's `routes[].routeId`, annotation items' `routeId`) are an existing numeric ID or the `ref` of one of the account's objects.
-- **Files** are multipart parts referenced as `file:<part name>`. Intake stores them in R2 under `submissions/<uid>/`, content-hashed, and saves the stored URL in place of each placeholder. From then on, rows and audit rows point at real files.
+- **Files** are multipart parts referenced as `file:<part name>`. Intake stores them in R2 with the topo images, content-hashed (`topos/raw/` for backgrounds, `topos/raster/` for rasters), and saves the stored URL in place of each placeholder. Rasters nothing uses any more are deleted; backgrounds are kept. From then on, rows and audit rows point at real files.
 - **Image size** is measured from a topo's background as it arrives and stored with the proposal as `imageWidth`/`imageHeight`; clients can't send it. Annotations are positioned on the background as displayed, so a JPEG's EXIF orientation is applied: orientations 5–8 swap width and height. Direct `/api/v1/topos` uploads are measured the same way.
 - **No deletes:** retire a route or topo by setting `status`. Moves and reordering are ordinary edits to `cragId`, `sectorId`, or `sortOrder`. Existing DB triggers keep denormalized names, search, and issue crag IDs in sync.
 

@@ -3,6 +3,7 @@ import { getDB } from "./db";
 import { ImageSizeError, measureImage } from "./imageSize.server";
 import { uploadFileToR2 } from "./s3.server";
 import { toStoredJson } from "./storedJson";
+import { BACKGROUND_KEY_PREFIX, hashFromUrl, RASTER_KEY_PREFIX, removeUnusedTopoFiles } from "./topoFiles.server";
 import { formatSqliteTimestamp, serverTimeFromUpdatedRows } from "./topoSync.server";
 import type {
   Topo,
@@ -236,11 +237,6 @@ export function parseSaveRawTopoPayload(data: unknown): SaveRawTopoPayload {
   };
 }
 
-function hashFromUrl(url: string | null): string | null {
-  const match = url?.match(/\/([0-9a-f]{40})(?:\.[a-z0-9]+)?$/i);
-  return match ? match[1].toLowerCase() : null;
-}
-
 async function findMissingIds(db: ReturnType<typeof getDB>, table: "crag" | "sector" | "route", ids: number[]) {
   const found = new Set<number>();
   for (const idChunk of chunk([...new Set(ids)], MAX_IDS_PER_QUERY)) {
@@ -347,7 +343,7 @@ export async function saveRawTopo(
       backgroundFile,
       env.TOPOS_BUCKET_NAME,
       env.TOPOS_BUCKET_DOMAIN,
-      { keyPrefix: "topos/raw", useContentHash: true },
+      { keyPrefix: BACKGROUND_KEY_PREFIX, useContentHash: true },
     );
     backgroundUrl = uploadResult.url;
     backgroundHash = uploadResult.hash ?? null;
@@ -361,7 +357,7 @@ export async function saveRawTopo(
       rasterFile,
       env.TOPOS_BUCKET_NAME,
       env.TOPOS_BUCKET_DOMAIN,
-      { keyPrefix: "topos/raster", useContentHash: true },
+      { keyPrefix: RASTER_KEY_PREFIX, useContentHash: true },
     );
     rasterUrl = uploadResult.url;
     rasterHash = uploadResult.hash ?? null;
@@ -451,6 +447,18 @@ export async function saveRawTopo(
     for (const rowChunk of chunk(routeRows, MAX_LINKS_PER_INSERT)) {
       await db.insertInto("route_topo").values(rowChunk).execute();
     }
+  }
+
+  // A replaced raster is garbage, as is a replaced background stored again under
+  // another key. Other replaced backgrounds are kept as an archive.
+  if (existing) {
+    await removeUnusedTopoFiles(context, [
+      existing.raster_image_url !== rasterUrl ? existing.raster_image_url : null,
+      existing.background_image_url !== backgroundUrl && backgroundHash !== null
+        && hashFromUrl(existing.background_image_url) === backgroundHash
+        ? existing.background_image_url
+        : null,
+    ]);
   }
 
   return (await loadTopoById(context, topoId))!;

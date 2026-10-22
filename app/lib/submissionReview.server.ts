@@ -23,6 +23,7 @@ import {
   type SubmissionTopoRoute,
 } from "./submission.server";
 import { saveRawTopo, type SaveRawTopoPayload, type TopoStatus } from "./topo.server";
+import { removeUnusedTopoFiles } from "./topoFiles.server";
 import { formatSqliteTimestamp } from "./topoSync.server";
 
 /**
@@ -311,5 +312,7 @@ export async function rejectChain(
       .where("id", "in", idChunk)
       .execute();
   }
+  // Rejected rasters are garbage; rejected backgrounds stay, as the audit log shows them.
+  await removeUnusedTopoFiles(context, chain.objects.map((object) => object.fields.raster as string | undefined));
   return { ok: true };
 }

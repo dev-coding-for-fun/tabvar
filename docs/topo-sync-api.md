@@ -85,6 +85,7 @@ Images must be JPEG, PNG, GIF, or WebP. TABVAR measures the uploaded background 
 - `cragId` and `sectorId` must refer to existing records.
 - `routes` replaces all of the topo's route links when present; omit it to leave the links alone. Each entry needs the `routeId` of an existing route, and a route can only be linked once. New routes can't be created here; propose them through the [Submissions API](submissions-api.md), or add them in the crag editor.
 - `backgroundUrl` and `rasterUrl` may name images already stored by TABVAR instead of uploading files. Other hosts are rejected.
+- Uploaded images are stored once by content. Replacing a topo's raster deletes the old one unless something else uses it; a replaced background is kept.
 - `status` must be `Active` or `Deleted`.
 - `annotations` is `{ version, items }`, stored as given. An item's `routeId` holds a TABVAR route ID: topos published from submissions have local refs replaced on approval, and direct saves should use TABVAR IDs too.
 

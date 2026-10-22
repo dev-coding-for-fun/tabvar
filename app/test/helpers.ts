@@ -125,6 +125,22 @@ export function createMockR2Bucket() {
   };
 }
 
+/** An R2 bucket that keeps objects in memory, so tests can check what's stored. */
+export function createMemoryR2Bucket() {
+  const objects = new Map<string, ArrayBuffer>();
+  return {
+    objects,
+    head: vi.fn(async (key: string) => (objects.has(key) ? { key } : null)),
+    put: vi.fn(async (key: string, value: ArrayBuffer) => {
+      objects.set(key, value);
+      return { key };
+    }),
+    delete: vi.fn(async (key: string) => {
+      objects.delete(key);
+    }),
+  };
+}
+
 export function createMockEmail() {
   return {
     send: vi.fn().mockResolvedValue(undefined),

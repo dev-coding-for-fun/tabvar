@@ -5,9 +5,11 @@ import { IMAGE_TYPES } from "./constants";
 import { getDB } from "./db";
 import type { DB, Submission } from "./db.d";
 import { ImageSizeError, measureImage, type ImageSize } from "./imageSize.server";
-import { deleteFromR2, uploadFileToR2 } from "./s3.server";
+import type { TopoAnnotationDocument } from "./models";
+import { calculateFileHash, uploadFileToR2 } from "./s3.server";
 import { toStoredJson } from "./storedJson";
-import { TOPO_STATUSES, type TopoStatus } from "./topo.server";
+import { normalizeAnnotationDocument, TOPO_STATUSES, type TopoStatus } from "./topo.server";
+import { BACKGROUND_KEY_PREFIX, hashFromUrl, RASTER_KEY_PREFIX, removeUnusedTopoFiles } from "./topoFiles.server";
 import { formatSqliteTimestamp } from "./topoSync.server";
 
 /**
@@ -153,6 +155,15 @@ export const SUBMISSION_FIELDS: Record<SubmissionEntity, Record<string, FieldSpe
   },
 };
 
+/**
+ * How a topo's file fields are stored. The raster is rendered from the background
+ * and annotations, so it's `derived`: a new raster alone isn't a change.
+ */
+const TOPO_FILES: Record<string, { keyPrefix: string; hashColumn: string; derived: boolean }> = {
+  background: { keyPrefix: BACKGROUND_KEY_PREFIX, hashColumn: "background_image_hash", derived: false },
+  raster: { keyPrefix: RASTER_KEY_PREFIX, hashColumn: "raster_image_hash", derived: true },
+};
+
 const REQUIRED_ON_CREATE: Record<SubmissionEntity, string[]> = {
   crag: ["name"],
   sector: ["name", "cragId"],
@@ -258,12 +269,28 @@ export function recordFieldValue(entity: SubmissionEntity, field: string, row: R
   return value;
 }
 
-/** Whether a proposed value equals a record's current one. Route links compare by route and label. */
+/** A JSON value with object keys sorted, so key order doesn't affect comparison. */
+function sortedKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortedKeys);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortedKeys(value[key])]));
+}
+
+/**
+ * Whether a proposed value equals a record's current one. Route links compare by
+ * route and label; annotations as the stored document, whatever their key order.
+ */
 export function sameFieldValue(entity: SubmissionEntity, field: string, current: unknown, proposed: unknown) {
-  const comparable = (value: unknown) =>
-    SUBMISSION_FIELDS[entity][field].kind === "routes" && Array.isArray(value)
-      ? (value as SubmissionTopoRoute[]).map((link) => [link.routeId, link.label ?? null])
-      : value;
+  const { kind } = SUBMISSION_FIELDS[entity][field];
+  const comparable = (value: unknown) => {
+    if (kind === "routes" && Array.isArray(value)) {
+      return (value as SubmissionTopoRoute[]).map((link) => [link.routeId, link.label ?? null]);
+    }
+    if (kind === "annotations" && value !== null && value !== undefined) {
+      return sortedKeys(normalizeAnnotationDocument(value as TopoAnnotationDocument | unknown[]));
+    }
+    return value;
+  };
   return sameValue(comparable(current), comparable(proposed));
 }
 
@@ -563,7 +590,9 @@ export type ReceivedObject = {
  * field by field into that object's pending proposal (newest value wins), or
  * starts one. An object the account already published becomes an edit of its
  * record; a proposal that matches the record is dropped; `withdraw` takes an
- * object out of review. Referenced files are stored under `submissions/<uid>/`.
+ * object out of review. Files are stored once per content hash, with the topo
+ * images (see topoFiles.server.ts); a raster no proposal or topo uses any more is
+ * deleted.
  */
 export async function receiveObjects(
   context: AppLoadContext,
@@ -574,15 +603,18 @@ export async function receiveObjects(
   const incoming = parseObjects(payload, files);
   const problems = new Problems();
 
-  // Images are measured before anything is stored; a topo's size is its background's.
+  // Images are measured and hashed before anything is stored; a topo's size is its background's.
   const sizes = new Map<string, ImageSize>();
+  const hashes = new Map<string, string>();
   for (const object of incoming) {
     for (const [field, value] of Object.entries(object.fields)) {
       if (SUBMISSION_FIELDS[object.entity][field].kind !== "file") continue;
       const fileName = (value as string).slice(FILE_PLACEHOLDER_PREFIX.length);
       if (sizes.has(fileName)) continue;
+      const file = files.get(fileName)!;
       try {
-        sizes.set(fileName, await measureImage(files.get(fileName)!));
+        sizes.set(fileName, await measureImage(file));
+        hashes.set(fileName, await calculateFileHash(await file.arrayBuffer()));
       } catch (error) {
         if (!(error instanceof ImageSizeError)) throw error;
         problems.add(`${object.path}.fields.${field} ${error.message}`);
@@ -690,8 +722,25 @@ export async function receiveObjects(
     if ("uuid" in working.fields && working.fields.uuid !== record.uuid) {
       problems.add(`${path}.fields.uuid can't be changed`);
     }
+    // An image the record already has, by content, is proposed as the record's own file.
+    for (const [field, value] of Object.entries(working.fields)) {
+      if (SUBMISSION_FIELDS[working.entity][field].kind !== "file" || typeof value !== "string") continue;
+      const current = record[SUBMISSION_FIELDS[working.entity][field].column] as string;
+      const currentHash = hashFromUrl(current) ?? (record[TOPO_FILES[field].hashColumn] as string | null);
+      const proposedHash = value.startsWith(FILE_PLACEHOLDER_PREFIX)
+        ? hashes.get(value.slice(FILE_PLACEHOLDER_PREFIX.length))
+        : hashFromUrl(value);
+      if (currentHash === null || proposedHash !== currentHash) continue;
+      working.fields[field] = current;
+      if (field === "background") {
+        // The record's size stays with its background.
+        delete working.fields.imageWidth;
+        delete working.fields.imageHeight;
+      }
+    }
     const unchanged = Object.entries(working.fields).every(([field, value]) =>
-      sameFieldValue(working.entity, field, recordFieldValue(working.entity, field, record), value));
+      TOPO_FILES[field]?.derived
+      || sameFieldValue(working.entity, field, recordFieldValue(working.entity, field, record), value));
     if (unchanged) {
       const original = working.original;
       if (original?.state === "pending") {
@@ -739,9 +788,9 @@ export async function receiveObjects(
   }
   problems.throwIfAny();
 
-  // Store files, then the proposals. Files are content-addressed per account, so a
-  // failed request only removes files no stored proposal uses.
-  const uploaded = new Map<string, { url: string; key: string }>();
+  // Store files, then the proposals. Files are content-addressed, so sending one
+  // again reuses the stored copy.
+  const uploaded = new Map<string, { url: string; created: boolean }>();
   const now = formatSqliteTimestamp();
   try {
     for (const working of workings.filter((w) => w.received)) {
@@ -749,17 +798,18 @@ export async function receiveObjects(
         if (SUBMISSION_FIELDS[working.entity][field].kind !== "file" || typeof value !== "string") continue;
         if (!value.startsWith(FILE_PLACEHOLDER_PREFIX)) continue;
         const fileName = value.slice(FILE_PLACEHOLDER_PREFIX.length);
-        let stored = uploaded.get(fileName);
+        const { keyPrefix } = TOPO_FILES[field];
+        let stored = uploaded.get(`${keyPrefix}/${fileName}`);
         if (!stored) {
           const result = await uploadFileToR2(
             context,
             files.get(fileName)!,
             env.TOPOS_BUCKET_NAME,
             env.TOPOS_BUCKET_DOMAIN,
-            { keyPrefix: `submissions/${uid}`, useContentHash: true },
+            { keyPrefix, useContentHash: true },
           );
-          stored = { url: result.url, key: result.name };
-          uploaded.set(fileName, stored);
+          stored = { url: result.url, created: result.created };
+          uploaded.set(`${keyPrefix}/${fileName}`, stored);
         }
         working.fields[field] = stored.url;
         if (field === "background") {
@@ -793,17 +843,21 @@ export async function receiveObjects(
       }
     }
   } catch (error) {
-    const inUse = new Set(workings.flatMap((w) => Object.values(w.original?.fields ?? {}).filter((v) => typeof v === "string")));
-    const cleanup = await Promise.allSettled(
-      [...uploaded.values()]
-        .filter((stored) => !inUse.has(stored.url))
-        .map((stored) => deleteFromR2(context, env.TOPOS_BUCKET_NAME, stored.key)),
-    );
-    cleanup
-      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-      .forEach((result) => console.error("Failed to remove a file from a failed submission:", result.reason));
+    // Only files this request added, and only if nothing stored uses them.
+    await removeUnusedTopoFiles(context, [...uploaded.values()].filter((stored) => stored.created).map((stored) => stored.url));
     throw error;
   }
+
+  // Rasters the account's proposals no longer use, and copies of an image now
+  // stored under another key. Replaced backgrounds are otherwise kept.
+  await removeUnusedTopoFiles(context, workings.flatMap(({ original, entity, fields }) =>
+    Object.entries(original?.fields ?? {}).flatMap(([field, value]) => {
+      if (SUBMISSION_FIELDS[entity][field].kind !== "file" || typeof value !== "string") return [];
+      const replacement = fields[field];
+      const copied = typeof replacement === "string" && replacement !== value
+        && hashFromUrl(value) !== null && hashFromUrl(value) === hashFromUrl(replacement);
+      return TOPO_FILES[field].derived || copied ? [value] : [];
+    })));
 
   return results.map(({ object, working }) => ({
     entity: object.entity,
