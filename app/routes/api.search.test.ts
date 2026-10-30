@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createRequire } from "node:module";
+import { Kysely, SqliteDialect, type SqliteDatabase } from "kysely";
+import type { DB } from "~/lib/db.d";
 import { createRouteArgs, createContext, createGetRequest, createMockDb, readJson, getStatus } from "~/test/helpers";
 
 const mocks = vi.hoisted(() => ({
@@ -11,6 +14,8 @@ vi.mock("~/lib/db", () => ({
 
 import { loader } from "./api.search";
 
+const Sqlite = createRequire(import.meta.url)("better-sqlite3") as new (path: string) => SqliteDatabase;
+
 describe("api.search loader", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -19,6 +24,24 @@ describe("api.search loader", () => {
   it("returns 400 when query is missing", async () => {
     const response = await loader(createRouteArgs({
       request: createGetRequest("https://example.com/api/search"),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(getStatus(response)).toBe(400);
+    expect(await readJson(response)).toEqual({
+      error: "parameter <query> is required",
+    });
+    expect(mocks.getDB).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["empty query", "https://example.com/api/search?query="],
+    ["whitespace-only query", "https://example.com/api/search?query=%20%20%20"],
+    ["only unsupported characters", "https://example.com/api/search?query=!!%23"],
+  ])("returns 400 for %s", async (_label, url) => {
+    const response = await loader(createRouteArgs({
+      request: createGetRequest(url),
       context: createContext(),
       params: {},
     }));
@@ -80,8 +103,6 @@ describe("api.search loader", () => {
 
     if (_mode === "allObjects") {
       expect(db.__queries[0].limit).toHaveBeenCalledWith(10);
-      expect(db.__queries[1].limit).toHaveBeenCalledWith(10);
-      expect(db.__queries[2].limit).toHaveBeenCalledWith(10);
     }
   });
 
@@ -96,5 +117,86 @@ describe("api.search loader", () => {
     }));
 
     expect(db.__queries[0].where).toHaveBeenCalledWith(expect.anything(), "match", '"ace" *');
+  });
+
+  describe("real SQLite execution", () => {
+    function setupRealDb() {
+      const sqlite = new Sqlite(":memory:") as any;
+      sqlite.exec(`
+        CREATE TABLE crag (id INTEGER PRIMARY KEY, slug TEXT, name TEXT);
+        CREATE VIRTUAL TABLE route_search USING fts5(
+          name,
+          alt_names,
+          sector_name,
+          crag_name,
+          sector_id UNINDEXED,
+          crag_id UNINDEXED,
+          grade_yds UNINDEXED,
+          bolt_count UNINDEXED,
+          pitch_count UNINDEXED
+        );
+        INSERT INTO crag (id, slug, name) VALUES (1, 'cougar-canyon', 'Cougar Canyon');
+        INSERT INTO route_search (rowid, name, alt_names, sector_name, crag_name, sector_id, crag_id, grade_yds, bolt_count, pitch_count)
+        VALUES (101, 'Cougar Bait', NULL, 'Cougar Sector', 'Cougar Canyon', 11, 1, '5.10a', 5, 1);
+      `);
+
+      return new Kysely<DB>({
+        dialect: new SqliteDialect({
+          database: sqlite,
+        }),
+      });
+    }
+
+    it("executes allObjects search without syntax error", async () => {
+      const realDb = setupRealDb();
+      mocks.getDB.mockReturnValue(realDb);
+
+      const response = await loader(createRouteArgs({
+        request: createGetRequest("https://example.com/api/search?query=cougar&searchMode=allObjects"),
+        context: createContext(),
+        params: {},
+      }));
+
+      expect(getStatus(response)).toBe(200);
+      const results = await readJson(response);
+      expect(results).toHaveLength(3);
+      expect(results).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "crag", cragName: "Cougar Canyon" }),
+        expect.objectContaining({ type: "sector", sectorName: "Cougar Sector" }),
+        expect.objectContaining({ type: "route", routeName: "Cougar Bait" }),
+      ]));
+    });
+
+    it("executes routesOnly search without syntax error", async () => {
+      const realDb = setupRealDb();
+      mocks.getDB.mockReturnValue(realDb);
+
+      const response = await loader(createRouteArgs({
+        request: createGetRequest("https://example.com/api/search?query=cougar&searchMode=routesOnly"),
+        context: createContext(),
+        params: {},
+      }));
+
+      expect(getStatus(response)).toBe(200);
+      const results = await readJson(response);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ type: "route", routeName: "Cougar Bait" });
+    });
+
+    it("executes global search without syntax error", async () => {
+      const realDb = setupRealDb();
+      mocks.getDB.mockReturnValue(realDb);
+
+      const response = await loader(createRouteArgs({
+        request: createGetRequest("https://example.com/api/search?query=cougar"),
+        context: createContext(),
+        params: {},
+      }));
+
+      expect(getStatus(response)).toBe(200);
+      const results = await readJson(response);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ type: "route", routeName: "Cougar Bait" });
+    });
   });
 });

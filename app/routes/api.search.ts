@@ -8,7 +8,7 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
     const url = new URL(request.url);
     const searchMode = url.searchParams.get('searchMode') || 'global';
     const limit: number = Number(url.searchParams.get('limit')) || 10;
-    const query = url.searchParams.get('query')?.replace(/[^a-zA-Z0-9\s]/g, '') || null;
+    const query = url.searchParams.get('query')?.replace(/[^a-zA-Z0-9\s]/g, '').trim() || null;
     if (!query) {
         return data({ error: 'parameter <query> is required' }, { status: 400 });
     }
@@ -34,7 +34,6 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
                     sql<string>`NULL`.as('boltCount'),
                     sql<string>`NULL`.as('pitchCount')
                 ])
-                .limit(limit)
                 .unionAll(
                     db.selectFrom('route_search')
                         .distinct()
@@ -53,7 +52,6 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
                             sql<string>`NULL`.as('boltCount'),
                             sql<string>`NULL`.as('pitchCount')
                         ])
-                        .limit(limit)
                 )
                 .unionAll(
                     db.selectFrom('route_search')
@@ -72,7 +70,6 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
                             sql<string>`bolt_count`.as('boltCount'),
                             sql<string>`pitch_count`.as('pitchCount')
                         ])
-                        .limit(limit)
                 )
                 .limit(limit)
                 .execute();
