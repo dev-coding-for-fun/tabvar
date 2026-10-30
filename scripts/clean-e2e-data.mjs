@@ -166,6 +166,10 @@ export function cleanE2EData(options = {}) {
       `,
     },
     {
+      table: "vote",
+      query: `DELETE FROM vote WHERE uid IN (SELECT uid FROM user WHERE email LIKE '%@e2e.test')`,
+    },
+    {
       table: "api_token",
       query: `DELETE FROM api_token WHERE uid IN (SELECT uid FROM user WHERE email LIKE '%@e2e.test')`,
     },

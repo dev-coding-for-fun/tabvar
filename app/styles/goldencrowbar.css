@@ -1,0 +1,95 @@
+/* Golden Crowbar award pages. Mantine supplies layout and type; this adds the award accent and the ballot cards. */
+.crowbar-page {
+  --crowbar-gold: #e2a72e;
+  --crowbar-gold-deep: #94650c;
+  --crowbar-cream: #fcf7ea;
+  --crowbar-line: #eadbb4;
+}
+
+.crowbar-hero {
+  background: var(--crowbar-cream);
+  border-bottom: 1px solid var(--crowbar-line);
+  padding: 48px 0 44px;
+}
+.crowbar-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 48px;
+  align-items: center;
+}
+.crowbar-medal { background: var(--crowbar-gold); color: #2f2208; }
+.crowbar-eyebrow { color: var(--crowbar-gold-deep); }
+.crowbar-title { font-size: clamp(2.25rem, 5vw, 3.25rem); font-weight: 900; line-height: 1.05; letter-spacing: -0.01em; }
+.crowbar-title span { color: var(--crowbar-gold-deep); }
+.crowbar-intro { max-width: 600px; color: var(--mantine-color-gray-8); line-height: 1.6; }
+.crowbar-back { display: inline-block; margin-bottom: 20px; }
+
+.crowbar-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--mantine-color-gray-5); }
+.crowbar-dot.is-open { background: var(--mantine-color-green-6); box-shadow: 0 0 0 4px var(--mantine-color-green-1); }
+.crowbar-voted { color: var(--mantine-color-green-8); }
+.crowbar-voted svg { flex: none; }
+
+.crowbar-section-heading { margin-bottom: 20px; scroll-margin-top: 24px; }
+
+.crowbar-card {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--mantine-color-gray-3);
+  border-radius: var(--mantine-radius-md);
+  padding: 20px 22px;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+.crowbar-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.crowbar-card-text { margin-top: 8px; color: var(--mantine-color-gray-7); line-height: 1.6; }
+/* Topo links sit above the stretched radio input so they stay clickable. */
+.crowbar-card-text a { position: relative; z-index: 1; }
+.crowbar-card-text a, .crowbar-winner a { color: var(--mantine-color-blue-7); text-underline-offset: 2px; }
+
+.crowbar-card.is-selectable { cursor: pointer; }
+.crowbar-card.is-selectable:hover { border-color: var(--crowbar-gold); }
+.crowbar-card-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.crowbar-card:has(.crowbar-card-input:focus-visible) { outline: 2px solid var(--mantine-color-blue-6); outline-offset: 2px; }
+.crowbar-radio {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--mantine-color-gray-4);
+  border-radius: 50%;
+  color: transparent;
+  background: #fff;
+}
+.crowbar-card.is-selected, .crowbar-card.is-voted {
+  border-color: var(--crowbar-gold);
+  background: var(--crowbar-cream);
+  box-shadow: 0 0 0 1px var(--crowbar-gold);
+}
+.crowbar-card.is-selected .crowbar-radio { border-color: var(--crowbar-gold); background: var(--crowbar-gold); color: #2f2208; }
+
+.crowbar-votebar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  border: 1px solid var(--crowbar-line);
+}
+.crowbar-votebar > :first-child { flex: 1; min-width: 0; }
+.crowbar-votebar > button { flex: none; }
+
+.crowbar-archive { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+
+.crowbar-winner { border-left: 4px solid var(--crowbar-gold); }
+.crowbar-winner.is-runner-up { border-left-color: var(--mantine-color-gray-5); }
+.crowbar-winner ul { margin: 6px 0 0; padding-left: 20px; line-height: 1.6; }
+.crowbar-winner li + li { margin-top: 4px; }
+
+@media (max-width: 860px) {
+  .crowbar-hero { padding: 32px 0; }
+  .crowbar-hero-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .crowbar-archive { flex-direction: column; align-items: stretch; }
+}

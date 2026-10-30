@@ -31,6 +31,7 @@ export const loader: LoaderFunction = async ({ context }) => {
       .filter((crag): crag is { slug: string } => Boolean(crag.slug))
       .map((crag) => urlEntry(`/topos/${encodeURIComponent(crag.slug)}`)),
     urlEntry("/goldencrowbar"),
+    urlEntry("/goldencrowbar/2025"),
     urlEntry("/goldencrowbar/winner"),
   ];
 

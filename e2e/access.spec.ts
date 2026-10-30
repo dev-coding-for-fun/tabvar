@@ -15,6 +15,7 @@ const accessRules: { path: string; allowedRoles: string[] }[] = [
   { path: "/topos/importmanager", allowedRoles: ["admin"] },
   { path: "/topos/jsonimport", allowedRoles: ["admin"] },
   { path: "/admin/submissions", allowedRoles: ["admin", "super"] },
+  { path: "/goldencrowbar/results", allowedRoles: ["admin"] },
   { path: "/issues/manage", allowedRoles: ["admin", "super", "member"] },
   { path: "/discount", allowedRoles: ["admin", "super", "member", "anonymous"] },
   { path: "/issues/create", allowedRoles: ["admin", "super", "member", "anonymous"] },
