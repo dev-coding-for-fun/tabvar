@@ -29,7 +29,24 @@
 .crowbar-voted { color: var(--mantine-color-green-8); }
 .crowbar-voted svg { flex: none; }
 
-.crowbar-section-heading { margin-bottom: 20px; scroll-margin-top: 24px; }
+.crowbar-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+  scroll-margin-top: 24px;
+}
+/* Decorative stage beside the heading; it rises into the section's top padding. */
+.crowbar-dancer {
+  display: block;
+  flex: 0 1 330px;
+  min-width: 0;
+  height: 118px;
+  margin-top: -40px;
+  color: #2b2418;
+  pointer-events: none;
+}
 
 .crowbar-card {
   position: relative;
@@ -92,4 +109,9 @@
   .crowbar-hero { padding: 32px 0; }
   .crowbar-hero-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .crowbar-archive { flex-direction: column; align-items: stretch; }
+}
+
+@media (max-width: 560px) {
+  .crowbar-section-heading { flex-direction: column-reverse; align-items: stretch; gap: 4px; }
+  .crowbar-dancer { flex-basis: auto; width: 100%; height: 96px; margin-top: -24px; }
 }

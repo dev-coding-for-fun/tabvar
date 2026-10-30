@@ -5,6 +5,8 @@ import { Alert, Anchor, Badge, Button, Container, Group, Paper, SimpleGrid, Text
 import { IconArrowDown, IconArrowRight, IconCheck, IconCircleCheckFilled } from "@tabler/icons-react";
 import { sql } from "kysely";
 import nomineeCopy from "../../docs/golden-crowbar-2026-nominees.md?raw";
+import { CrowbarDancer } from "~/components/CrowbarDancer";
+import { HELMETS } from "~/components/crowbarDance";
 import { CROWBAR_GOLD, GoldenCrowbarHero } from "~/components/GoldenCrowbarHero";
 import { getSessionUser, requireUser } from "~/lib/auth.server";
 import { getDB } from "~/lib/db";
@@ -126,6 +128,9 @@ export default function GoldenCrowbar() {
   const votedFor = ballot.find((nominee) => nominee.id === vote);
   const selectedNominee = ballot.find((nominee) => nominee.id === selected);
   const submitting = navigation.state !== "idle";
+  // The dancer wears the helmet of whoever you've picked or voted for.
+  const chosenIndex = ballot.findIndex((nominee) => nominee.id !== null && nominee.id === (vote ?? selected));
+  const helmet = chosenIndex === -1 ? null : HELMETS[chosenIndex % HELMETS.length];
 
   // The vote is cast from the floating bar near the bottom of the page; bring the outcome into view.
   useEffect(() => {
@@ -159,8 +164,11 @@ export default function GoldenCrowbar() {
     <Container size="lg" py={48}>
       <Form method="post">
         <div id="nominees" className="crowbar-section-heading">
-          <Title order={2}>The nominees</Title>
-          <Text c="dimmed" mt={4}>{voting ? "Select one nominee, then cast your vote." : `${ballot.length} nominees for 2026.`}</Text>
+          <div>
+            <Title order={2}>The nominees</Title>
+            <Text c="dimmed" mt={4}>{voting ? "Select one nominee, then cast your vote." : `${ballot.length} nominees for 2026.`}</Text>
+          </div>
+          <CrowbarDancer className="crowbar-dancer" helmet={helmet} />
         </div>
 
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
