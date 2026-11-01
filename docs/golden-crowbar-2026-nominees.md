@@ -36,7 +36,7 @@ Daniel helped build up [Birdwatcher's Crag](https://app.tabvar.org/topos/birdwat
 
 ## Sara Lilley
 
-Sara replaced 26 aging bolts on [Premature Ejaculation](https://app.tabvar.org/topos/ha-ling-peak#route-3959) on Ha Ling, putting in the work to maintain an existing multipitch route.
+Sara replaced 26 aging bolts on [Premature](https://app.tabvar.org/topos/ha-ling-peak#route-3959) on Ha Ling, putting in the work to maintain an existing multipitch route.
 
 ## Chris Perry
 
