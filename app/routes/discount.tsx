@@ -33,11 +33,13 @@ import {
   IconShield,
   IconTrash,
   IconUserMinus,
+  IconUsers,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import {
   data,
   Form,
+  Link,
   useActionData,
   useLoaderData,
   useNavigation,
@@ -460,9 +462,21 @@ export default function DiscountPage() {
                     </Text>
                   </div>
                 </Group>
-                <Badge color="violet" variant="light" size="sm">
-                  Management
-                </Badge>
+                <Group gap="xs">
+                  <Button
+                    component={Link}
+                    to="/users"
+                    variant="light"
+                    color="violet"
+                    size="xs"
+                    leftSection={<IconUsers size={14} />}
+                  >
+                    View supporters
+                  </Button>
+                  <Badge color="violet" variant="light" size="sm">
+                    Management
+                  </Badge>
+                </Group>
               </Group>
 
               <Paper withBorder p="md" radius="sm">

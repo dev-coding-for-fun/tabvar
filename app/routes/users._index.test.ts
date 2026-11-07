@@ -132,7 +132,8 @@ describe("users._index loader", () => {
     vi.clearAllMocks();
   });
 
-  it("returns 403 data for non-admin users", async () => {
+  it("returns 403 data for non-admin users without the supporter manager tag", async () => {
+    mocks.getDB.mockReturnValue(createMockDb({ select: [{ executeTakeFirst: undefined }] }));
     mocks.requireUser.mockResolvedValue(createUser({ role: "member" }));
 
     const response = await loader(createRouteArgs({
@@ -164,6 +165,7 @@ describe("users._index loader", () => {
     }));
 
     expect(await readJson(response)).toEqual({
+      readOnly: false,
       users: [{ ...users[0], tags: [] }],
       invites: [{ ...invites[0], tags: [] }],
       tags: [],
@@ -216,6 +218,58 @@ describe("users._index loader", () => {
         isExpired: false,
       },
     ]);
+  });
+});
+
+describe("users._index loader for supporter program managers", () => {
+  let db: Kysely<DB>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const sqlite = new Sqlite(":memory:");
+    db = new Kysely<DB>({ dialect: new SqliteDialect({ database: sqlite }) });
+    for (const migration of ["0002_initial_setup.sql", "0061_add_user_tags.sql"]) {
+      sqlite.exec(readFileSync(resolve("migrations", migration), "utf8"));
+    }
+    sqlite.exec(`
+      INSERT INTO user (uid, email) VALUES
+        ('manager', 'manager@example.com'), ('super', 'super@example.com'),
+        ('old', 'old@example.com'), ('beta', 'beta@example.com'), ('plain', 'plain@example.com');
+      INSERT INTO user_tag (id, name) VALUES
+        (1, 'supporter_prog_manager'), (2, 'super_supporter_2026'), (3, 'supporter_2025'), (4, 'beta_tester');
+      INSERT INTO user_tag_assignment (uid, tag_id, expires_at) VALUES
+        ('manager', 1, NULL), ('super', 2, NULL), ('super', 4, NULL),
+        ('old', 3, '2025-12-31T00:00:00.000Z'), ('beta', 4, NULL);
+    `);
+    mocks.getDB.mockReturnValue(db);
+    mocks.requireUser.mockResolvedValue(createUser({ uid: "manager", role: "member" }));
+  });
+
+  afterEach(async () => {
+    await db.destroy();
+  });
+
+  it("lists only users with supporter tags, read-only and without invites", async () => {
+    const response = await loader(createRouteArgs({
+      request: createGetRequest("https://example.com/users"),
+      context: createContext(),
+      params: {},
+    }));
+
+    const result = await readJson<{ readOnly: boolean; users: Array<{ uid: string }>; invites: unknown[] }>(response);
+    expect(result.readOnly).toBe(true);
+    expect(result.users.map((u) => u.uid).sort()).toEqual(["old", "super"]);
+    expect(result.invites).toEqual([]);
+  });
+
+  it("still rejects managers from the action", async () => {
+    const response = await action(createRouteArgs({
+      request: createFormRequest("https://example.com/users", { action: "remove_tag", assignment_id: "2" }),
+      context: createContext(),
+      params: {},
+    }));
+
+    expect(getStatus(response)).toBe(403);
   });
 });
 

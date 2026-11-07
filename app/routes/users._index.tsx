@@ -51,19 +51,28 @@ import { useErrorNotification } from "~/components/useErrorNotification";
 import { requireUser } from "~/lib/auth.server";
 import { PERMISSION_ERROR, userRoles } from "~/lib/constants";
 import { getDB } from "~/lib/db";
+import { canManageDiscounts, DISCOUNT_MANAGER_TAG } from "~/lib/discounts.server";
 import { privatePageMeta } from "~/lib/seo";
 import { addInviteTags, getInviteTagsMap } from "~/lib/tags.server";
 
 export const loader = async (args: LoaderFunctionArgs) => {
     const user: User = await requireUser(args);
-    if (user.role !== 'admin') {
+    const db = getDB(args.context);
+    // Supporter program managers get a read-only list limited to supporters.
+    if (!(await canManageDiscounts(db, user))) {
         return data({ users: [], invites: [], tags: [], error: PERMISSION_ERROR }, { status: 403 });
     }
-    const db = getDB(args.context);
-    const users = await db.selectFrom('user')
-        .selectAll()
-        .execute();
-    const invites = await db.selectFrom('user_invite')
+    const readOnly = user.role !== 'admin';
+    let usersQuery = db.selectFrom('user').selectAll();
+    if (readOnly) {
+        usersQuery = usersQuery.where('uid', 'in', db.selectFrom('user_tag_assignment as a')
+            .innerJoin('user_tag as t', 'a.tag_id', 't.id')
+            .select('a.uid')
+            .where('t.name', 'like', '%supporter%')
+            .where('t.name', '!=', DISCOUNT_MANAGER_TAG));
+    }
+    const users = await usersQuery.execute();
+    const invites = readOnly ? [] : await db.selectFrom('user_invite')
         .selectAll()
         .execute();
     const tags = await db.selectFrom('user_tag')
@@ -108,13 +117,14 @@ export const loader = async (args: LoaderFunctionArgs) => {
         tags: userTagsMap.get(u.uid) || [],
     }));
 
-    const inviteTagsMap = await getInviteTagsMap(db);
+    const inviteTagsMap = readOnly ? new Map<string, UserTag[]>() : await getInviteTagsMap(db);
     const invitesWithTags = invites.map((inv) => ({
         ...inv,
         tags: inviteTagsMap.get(inv.email.trim().toLowerCase()) || [],
     }));
 
     return {
+        readOnly,
         users: usersWithTags,
         invites: invitesWithTags,
         tags: tags.map((t) => ({
@@ -312,7 +322,8 @@ export const action = async (args: ActionFunctionArgs) => {
 };
 
 export default function UsersIndex() {
-    const { users, invites, tags, error } = useLoaderData<{
+    const { readOnly, users, invites, tags, error } = useLoaderData<{
+        readOnly?: boolean;
         users: UserWithTags[];
         invites: UserInvite[];
         tags: UserTag[];
@@ -492,16 +503,18 @@ export default function UsersIndex() {
         <Container size="xl" p="md">
             <Stack>
                 <Group justify="space-between" align="center">
-                    <Title order={2}>Users</Title>
-                    <Button
-                        component={Link}
-                        to="/admin/tags"
-                        variant="light"
-                        color="teal"
-                        leftSection={<IconTags size={16} />}
-                    >
-                        Manage Tag Definitions
-                    </Button>
+                    <Title order={2}>{readOnly ? 'Supporters' : 'Users'}</Title>
+                    {!readOnly && (
+                        <Button
+                            component={Link}
+                            to="/admin/tags"
+                            variant="light"
+                            color="teal"
+                            leftSection={<IconTags size={16} />}
+                        >
+                            Manage Tag Definitions
+                        </Button>
+                    )}
                 </Group>
                 <DataTable<UserWithTags>
                     withTableBorder
@@ -564,10 +577,12 @@ export default function UsersIndex() {
                             accessor: "actions",
                             title: (<Center><IconClick size={16} /></Center>),
                             width: '0%',
+                            hidden: readOnly,
                             render: renderActions,
                         },
                     ]}
                 />
+                {!readOnly && (<>
                 <Title order={2}>Invite New Users</Title>
                 <Form method="post">
                     <input type="hidden" name="action" value="create_invite" />
@@ -630,6 +645,7 @@ export default function UsersIndex() {
                         </List.Item>
                     ))}
                 </List>
+                </>)}
             </Stack>
 
             {/* Manage User Tags Modal */}
