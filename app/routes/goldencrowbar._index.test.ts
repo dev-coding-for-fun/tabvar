@@ -58,8 +58,9 @@ describe("2026 Golden Crowbar ballot", () => {
     expect(response.ready).toBe(true);
     expect(response.isOpen).toBe(true);
     expect(response.vote).toBe(1);
-    expect(response.nominees).toHaveLength(15);
+    expect(response.nominees).toHaveLength(14);
     expect(response.nominees[0].name).toBe("Ethan Woodside");
+    expect(response.nominees.map((nominee) => nominee.name)).not.toContain("Taylor Hertzsprung");
   });
 
   it("records one vote per user and does not replace it on a second request", async () => {

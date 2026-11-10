@@ -26,10 +26,6 @@ Steve put up [It's Not Over Until You Bleed](https://app.tabvar.org/topos/old-go
 
 At the Coliseum's [Saddle Up Wall](https://app.tabvar.org/topos/echo-canyon#sector-799), Evan finished bolting [Queen Bee Direct](https://app.tabvar.org/topos/echo-canyon#route-4126), a line mostly bolted by Matt Pieterson, and bolted another hard project to its right. That second line was unnamed and awaiting a redpoint at the time.
 
-## Taylor Hertzsprung
-
-Taylor put up three single-pitch sport climbs at [the Back Door in Grotto Canyon](https://app.tabvar.org/topos/grotto-canyon#sector-1259): Underwear?, Two Pump Chump and In the Stripped Club. Taylor also established [First Litter](https://app.tabvar.org/topos/cat-creek-crag#route-4188), a 5.9 at Cat Creek Crag.
-
 ## Daniel Padeanu
 
 Daniel helped build up [Birdwatcher's Crag](https://app.tabvar.org/topos/birdwatchers-crag), putting up 17 single-pitch climbs across the Sandcastle, Old Growth and the Farside.
