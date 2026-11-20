@@ -35,6 +35,8 @@ describe("2026 Golden Crowbar ballot", () => {
     for (const file of ["0053_add_goldencrowbar.sql", "0073_golden_crowbar_2026.sql"]) {
       sqlite.exec(readFileSync(resolve("migrations", file), "utf8"));
     }
+    // Mirrors the nominee rename applied to D1 directly rather than through a migration.
+    sqlite.exec("UPDATE campaign_candidate SET name = 'Sara Lilley & James Walter' WHERE name = 'Sara Lilley'");
     mocks.getDB.mockReturnValue(db);
     mocks.requireUser.mockResolvedValue(user);
     mocks.getSessionUser.mockResolvedValue(null);
@@ -43,9 +45,15 @@ describe("2026 Golden Crowbar ballot", () => {
   afterEach(async () => { await db.destroy(); });
 
   it("seeds the 15 nominees once with the Edmonton deadline", async () => {
-    sqlite.exec(readFileSync(resolve("migrations", "0073_golden_crowbar_2026.sql"), "utf8"));
-    const campaign = await db.selectFrom("campaign").selectAll().execute();
-    const candidates = await db.selectFrom("campaign_candidate").selectAll().execute();
+    // Checked on a fresh database: the shared fixture also carries the direct nominee rename.
+    const fresh = new Sqlite(":memory:");
+    const freshDb = new Kysely<DB>({ dialect: new SqliteDialect({ database: fresh }) });
+    for (const file of ["0053_add_goldencrowbar.sql", "0073_golden_crowbar_2026.sql", "0073_golden_crowbar_2026.sql"]) {
+      fresh.exec(readFileSync(resolve("migrations", file), "utf8"));
+    }
+    const campaign = await freshDb.selectFrom("campaign").selectAll().execute();
+    const candidates = await freshDb.selectFrom("campaign_candidate").selectAll().execute();
+    await freshDb.destroy();
     expect(campaign).toHaveLength(1);
     expect(campaign[0].end_date).toBe("2026-12-05 06:59:59");
     expect(candidates).toHaveLength(15);

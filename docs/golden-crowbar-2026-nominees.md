@@ -30,9 +30,9 @@ At the Coliseum's [Saddle Up Wall](https://app.tabvar.org/topos/echo-canyon#sect
 
 Daniel helped build up [Birdwatcher's Crag](https://app.tabvar.org/topos/birdwatchers-crag), putting up 17 single-pitch climbs across the Sandcastle, Old Growth and the Farside.
 
-## Sara Lilley
+## Sara Lilley & James Walter
 
-Sara replaced 26 aging bolts on [Premature](https://app.tabvar.org/topos/ha-ling-peak#route-3959) on Ha Ling, putting in the work to maintain an existing multipitch route.
+Sara and James replaced 26 aging bolts on [Premature](https://app.tabvar.org/topos/ha-ling-peak#route-3959) on Ha Ling, putting in the work to maintain an existing multipitch route.
 
 ## Chris Perry
 
